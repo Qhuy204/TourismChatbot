@@ -1,4 +1,6 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { DataBrowser } from '@/components/browser/DataBrowser';
@@ -8,10 +10,19 @@ import { CrawlInterface } from '@/components/crawl/CrawlInterface';
 import { ExportInterface } from '@/components/export/ExportInterface';
 import { mockRecords, calculateStats } from '@/lib/mockData';
 import { DatasetRecord } from '@/types/dataset';
+import { Loader2 } from 'lucide-react';
 
 const Index = () => {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
   const [currentView, setCurrentView] = useState('dashboard');
   const [records, setRecords] = useState<DatasetRecord[]>(mockRecords);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/auth');
+    }
+  }, [user, loading, navigate]);
 
   const stats = useMemo(() => calculateStats(records), [records]);
 
@@ -43,6 +54,18 @@ const Index = () => {
         return <Dashboard records={records} stats={stats} />;
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <div className="flex min-h-screen bg-background">
