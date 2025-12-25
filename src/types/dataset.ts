@@ -5,13 +5,16 @@ export interface Location {
 }
 
 export interface GeographicInfo {
-  lat?: string;
-  lon?: string;
+  lat?: string | number;
+  lon?: string | number;
   location_type?: string;
   city?: string;
+  district?: string;
   location_name?: string;
   opening_hours?: string;
   ticket_price?: string;
+  page_url?: string;
+  license_info?: string;
 }
 
 export interface Metadata {
