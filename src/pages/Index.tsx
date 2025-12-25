@@ -9,7 +9,8 @@ import { RandomQACheck } from '@/components/qa-check/RandomQACheck';
 import { CrawlInterface } from '@/components/crawl/CrawlInterface';
 import { ImportInterface } from '@/components/import/ImportInterface';
 import { ExportInterface } from '@/components/export/ExportInterface';
-import { mockRecords, calculateStats } from '@/lib/mockData';
+import { SettingsInterface } from '@/components/settings/SettingsInterface';
+import { calculateStats } from '@/lib/mockData';
 import { DatasetRecord } from '@/types/dataset';
 import { Loader2 } from 'lucide-react';
 
@@ -17,7 +18,7 @@ const Index = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [currentView, setCurrentView] = useState('dashboard');
-  const [records, setRecords] = useState<DatasetRecord[]>(mockRecords);
+  const [records, setRecords] = useState<DatasetRecord[]>([]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -33,6 +34,10 @@ const Index = () => {
     );
   }, []);
 
+  const handleRecordsUpdate = useCallback((updatedRecords: DatasetRecord[]) => {
+    setRecords(updatedRecords);
+  }, []);
+
   const handleAddRecords = useCallback((newRecords: DatasetRecord[]) => {
     setRecords(prev => [...prev, ...newRecords]);
   }, []);
@@ -42,7 +47,7 @@ const Index = () => {
       case 'dashboard':
         return <Dashboard records={records} stats={stats} />;
       case 'browser':
-        return <DataBrowser records={records} onRecordUpdate={handleRecordUpdate} />;
+        return <DataBrowser records={records} onRecordUpdate={handleRecordUpdate} onRecordsUpdate={handleRecordsUpdate} />;
       case 'annotate':
         return <AnnotationInterface records={records} onRecordUpdate={handleRecordUpdate} />;
       case 'random-check':
@@ -53,6 +58,8 @@ const Index = () => {
         return <CrawlInterface onAddRecords={handleAddRecords} />;
       case 'export':
         return <ExportInterface records={records} stats={stats} />;
+      case 'settings':
+        return <SettingsInterface />;
       default:
         return <Dashboard records={records} stats={stats} />;
     }
@@ -71,7 +78,7 @@ const Index = () => {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen h-screen bg-background overflow-hidden">
       <Sidebar currentView={currentView} onViewChange={setCurrentView} />
       <main className="flex-1 overflow-auto">
         {renderContent()}

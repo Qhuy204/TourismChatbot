@@ -1,3 +1,4 @@
+import { useEffect, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,9 @@ import {
   Clock,
   Tag,
   Info,
-  BookOpen
+  BookOpen,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { DatasetRecord } from '@/types/dataset';
 import { toast } from 'sonner';
@@ -28,14 +31,144 @@ interface RecordDetailModalProps {
   record: DatasetRecord | null;
   onClose: () => void;
   onUpdate?: (record: DatasetRecord) => void;
+  onNavigate?: (direction: 'prev' | 'next') => void;
+  currentIndex?: number;
+  totalRecords?: number;
 }
 
-export function RecordDetailModal({ record, onClose, onUpdate }: RecordDetailModalProps) {
+// Convert internal record to export format for JSON display
+function toExportFormat(record: DatasetRecord, recordIndex: number = 0) {
+  const landmarkName = record.metadata?.geographic_info?.location_name || 
+                       record.metadata?.entity_name || 
+                       'Unknown';
+  
+  const city = record.metadata?.geographic_info?.city || 
+               record.metadata?.location?.city || 
+               '';
+  
+  const district = record.metadata?.geographic_info?.district || 
+                   record.metadata?.location?.district || 
+                   '';
+  
+  const geoInfo = record.metadata?.geographic_info;
+  const lat = geoInfo?.lat 
+    ? (typeof geoInfo.lat === 'number' ? geoInfo.lat : parseFloat(geoInfo.lat))
+    : record.metadata?.location?.lat_long?.[0] || 0;
+  
+  const lng = geoInfo?.lon 
+    ? (typeof geoInfo.lon === 'number' ? geoInfo.lon : parseFloat(geoInfo.lon))
+    : record.metadata?.location?.lat_long?.[1] || 0;
+
+  const sourceUrl = geoInfo?.page_url || record.assets?.image_url || undefined;
+  const license = geoInfo?.license_info || 'CC BY-SA 4.0';
+
+  const folderName = landmarkName.toLowerCase().replace(/\s+/g, '_').replace(/[()]/g, '');
+  const idNumber = String(recordIndex + 1).padStart(3, '0');
+  const recordId = `VN_LM_2025_${idNumber}_00`;
+  
+  const qaPairs = record.qa_items.map((item, index) => {
+    let type: 'ask_image' | 'ask_audio' | 'ask_both' = 'ask_image';
+    if (item.scenario?.includes('audio') && item.scenario?.includes('image')) {
+      type = 'ask_both';
+    } else if (item.scenario?.includes('audio') || item.target?.evidence_source === 'audio') {
+      type = 'ask_audio';
+    }
+
+    const qaIndex = String(index + 1).padStart(2, '0');
+    
+    return {
+      q: item.query?.text || item.query?.audio_query_transcript || '',
+      a: item.target?.answer || '',
+      type,
+      paths: {
+        question_audio: `audio_queries/${folderName}/q_${recordId}_qa_${qaIndex}.wav`,
+        answer_audio: `audio_answers/${folderName}/a_${recordId}_qa_${qaIndex}.wav`
+      },
+      audio_meta: {
+        q_voice: {
+          id: 'vi-VN-HoaiMyNeural',
+          rate: '-10%',
+          pitch: '+0Hz'
+        },
+        a_voice: {
+          id: 'vi-VN-HoaiMyNeural',
+          type: 'fixed_target'
+        }
+      }
+    };
+  });
+
+  const exported: any = {
+    id: recordId,
+    timestamp: record.createdAt || new Date().toISOString(),
+    paths: {
+      image: `images/${folderName}/${recordId}.jpg`,
+    },
+    metadata: {
+      landmark_name: landmarkName,
+      location: {
+        city,
+        district,
+        gps: { lat, lng }
+      },
+      image_spec: {
+        source_url: sourceUrl,
+        license
+      }
+    },
+    qa_pairs: qaPairs
+  };
+
+  if (record.assets?.audio_evidence) {
+    exported.paths.audio_evidence = `audio_evidence/${folderName}/evid_${recordId}.wav`;
+    exported.metadata.audio_spec = {
+      transcript: record.assets.audio_evidence.transcript,
+      voice_id: 'vi-VN-NamMinhNeural'
+    };
+  }
+
+  return exported;
+}
+
+export function RecordDetailModal({ 
+  record, 
+  onClose, 
+  onUpdate, 
+  onNavigate,
+  currentIndex = -1,
+  totalRecords = 0 
+}: RecordDetailModalProps) {
+  
+  // Keyboard navigation
+  useEffect(() => {
+    if (!record || !onNavigate) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        onNavigate('prev');
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        onNavigate('next');
+      } else if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [record, onNavigate, onClose]);
+
+  const exportFormatJson = useMemo(() => {
+    if (!record) return '';
+    return JSON.stringify(toExportFormat(record, currentIndex), null, 2);
+  }, [record, currentIndex]);
+
   if (!record) return null;
 
   const handleCopyJson = () => {
-    navigator.clipboard.writeText(JSON.stringify(record, null, 2));
-    toast.success('Đã copy JSON vào clipboard');
+    navigator.clipboard.writeText(exportFormatJson);
+    toast.success('Đã copy JSON (export format) vào clipboard');
   };
 
   const handleApprove = () => {
@@ -77,9 +210,35 @@ export function RecordDetailModal({ record, onClose, onUpdate }: RecordDetailMod
           {/* Header */}
           <DialogHeader className="px-6 py-4 border-b shrink-0">
             <div className="flex items-start justify-between">
-              <div>
-                <DialogTitle className="text-xl">{record.metadata.entity_name}</DialogTitle>
-                <p className="text-sm text-muted-foreground font-mono mt-1">{record.record_id}</p>
+              <div className="flex items-center gap-4">
+                {/* Navigation buttons */}
+                {onNavigate && (
+                  <div className="flex items-center gap-1">
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => onNavigate('prev')}
+                      disabled={currentIndex <= 0}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground px-2">
+                      {currentIndex + 1} / {totalRecords}
+                    </span>
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => onNavigate('next')}
+                      disabled={currentIndex >= totalRecords - 1}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+                <div>
+                  <DialogTitle className="text-xl">{record.metadata.entity_name}</DialogTitle>
+                  <p className="text-sm text-muted-foreground font-mono mt-1">{record.record_id}</p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Badge className={
@@ -97,13 +256,16 @@ export function RecordDetailModal({ record, onClose, onUpdate }: RecordDetailMod
                 </Button>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Sử dụng phím ← → để chuyển record
+            </p>
           </DialogHeader>
 
-          {/* Main Content */}
-          <div className="flex-1 overflow-hidden">
-            <div className="grid grid-cols-1 lg:grid-cols-3 h-full">
+          {/* Main Content with ScrollArea */}
+          <ScrollArea className="flex-1">
+            <div className="grid grid-cols-1 lg:grid-cols-3 min-h-full">
               {/* Left Column - Image & Assets */}
-              <div className="lg:col-span-1 border-r overflow-y-auto p-4 space-y-4">
+              <div className="lg:col-span-1 border-r p-4 space-y-4">
                 {/* Image Preview */}
                 <Card>
                   <CardHeader className="pb-2">
@@ -263,8 +425,8 @@ export function RecordDetailModal({ record, onClose, onUpdate }: RecordDetailMod
                 )}
               </div>
 
-              {/* Middle Column - Descriptions */}
-              <div className="lg:col-span-1 border-r overflow-y-auto p-4 space-y-4">
+              {/* Middle Column - Descriptions & JSON */}
+              <div className="lg:col-span-1 border-r p-4 space-y-4">
                 {/* Image Description */}
                 {record.metadata.image_description && (
                   <Card>
@@ -295,26 +457,26 @@ export function RecordDetailModal({ record, onClose, onUpdate }: RecordDetailMod
                   </Card>
                 )}
 
-                {/* JSON Preview */}
+                {/* JSON Preview - Export Format */}
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <FileJson className="h-4 w-4" />
-                      JSON Data
+                      JSON Data (Export Format)
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ScrollArea className="h-60">
-                      <pre className="text-xs font-mono bg-muted p-3 rounded-lg overflow-auto">
-                        {JSON.stringify(record, null, 2)}
+                    <div className="h-80 overflow-auto">
+                      <pre className="text-xs font-mono bg-muted p-3 rounded-lg whitespace-pre-wrap break-all">
+                        {exportFormatJson}
                       </pre>
-                    </ScrollArea>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
 
               {/* Right Column - QA Items */}
-              <div className="lg:col-span-1 overflow-y-auto p-4 space-y-4">
+              <div className="lg:col-span-1 p-4 space-y-4">
                 <h3 className="font-semibold flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
                   QA Items ({record.qa_items.length})
@@ -388,7 +550,7 @@ export function RecordDetailModal({ record, onClose, onUpdate }: RecordDetailMod
                 </div>
               </div>
             </div>
-          </div>
+          </ScrollArea>
 
           {/* Footer Actions */}
           <div className="px-6 py-4 border-t shrink-0 flex justify-end gap-3">
@@ -397,7 +559,7 @@ export function RecordDetailModal({ record, onClose, onUpdate }: RecordDetailMod
             </Button>
             <Button variant="outline" onClick={handleWarning}>
               <AlertTriangle className="h-4 w-4 mr-2" />
-              Cần xem xét
+              Cảnh báo
             </Button>
             <Button variant="destructive" onClick={handleReject}>
               <XCircle className="h-4 w-4 mr-2" />
