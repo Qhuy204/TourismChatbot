@@ -4,12 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { AudioPlayer } from '@/components/ui/audio-player';
 import { 
   MapPin, 
   Image, 
   Volume2, 
   MessageSquare, 
-  Tag,
   FileJson,
   Copy,
   CheckCircle2,
@@ -149,10 +149,11 @@ export function RecordDetailModal({ record, onClose, onUpdate }: RecordDetailMod
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {record.assets.audio_evidence ? (
+                {record.assets.audio_evidence ? (
                     <div className="space-y-3">
-                      <div className="p-4 bg-muted rounded-lg">
-                        <p className="text-xs font-mono break-all">
+                      <AudioPlayer src={record.assets.audio_evidence.path} />
+                      <div className="p-3 bg-muted/50 rounded-lg">
+                        <p className="text-xs font-mono break-all text-muted-foreground">
                           {record.assets.audio_evidence.path}
                         </p>
                       </div>
@@ -208,10 +209,12 @@ export function RecordDetailModal({ record, onClose, onUpdate }: RecordDetailMod
                       <p className="text-sm bg-muted p-3 rounded-lg">{qa.query.text}</p>
                     )}
                     {qa.query.audio_query_path && (
-                      <div className="text-xs font-mono text-muted-foreground mt-2">
-                        Audio: {qa.query.audio_query_path}
+                      <div className="mt-2 space-y-2">
+                        <AudioPlayer src={qa.query.audio_query_path} />
                         {qa.query.audio_query_transcript && (
-                          <p className="mt-1 text-foreground">{qa.query.audio_query_transcript}</p>
+                          <p className="text-sm text-muted-foreground italic">
+                            "{qa.query.audio_query_transcript}"
+                          </p>
                         )}
                       </div>
                     )}

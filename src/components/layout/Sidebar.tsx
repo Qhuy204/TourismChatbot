@@ -3,17 +3,16 @@ import {
   LayoutDashboard, 
   Database, 
   Tags, 
-  Settings,
   FolderOpen,
   Shuffle,
   Download,
-  LogOut,
-  User
+  LogOut
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface SidebarProps {
   currentView: string;
@@ -41,7 +40,7 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
   const initials = displayName.slice(0, 2).toUpperCase();
 
   return (
-    <aside className="w-64 bg-card border-r border-border h-screen flex flex-col">
+    <aside className="w-64 bg-card border-r border-border h-screen flex flex-col shrink-0">
       <div className="p-6 border-b border-border">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <Database className="h-6 w-6 text-primary" />
@@ -50,26 +49,28 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
         <p className="text-sm text-muted-foreground mt-1">Data Annotation Platform</p>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
-        {navItems.map((item) => (
-          <Button
-            key={item.id}
-            variant={currentView === item.id ? 'default' : 'ghost'}
-            className={cn(
-              'w-full justify-start gap-3 h-11',
-              currentView === item.id && 'bg-primary text-primary-foreground'
-            )}
-            onClick={() => onViewChange(item.id)}
-          >
-            <item.icon className="h-5 w-5" />
-            {item.label}
-          </Button>
-        ))}
-      </nav>
+      <ScrollArea className="flex-1">
+        <nav className="p-4 space-y-1">
+          {navItems.map((item) => (
+            <Button
+              key={item.id}
+              variant={currentView === item.id ? 'default' : 'ghost'}
+              className={cn(
+                'w-full justify-start gap-3 h-11',
+                currentView === item.id && 'bg-primary text-primary-foreground'
+              )}
+              onClick={() => onViewChange(item.id)}
+            >
+              <item.icon className="h-5 w-5 shrink-0" />
+              <span className="truncate">{item.label}</span>
+            </Button>
+          ))}
+        </nav>
+      </ScrollArea>
 
-      <div className="p-4 border-t border-border space-y-2">
-        <div className="flex items-center gap-3 px-3 py-2">
-          <Avatar className="h-8 w-8">
+      <div className="p-4 border-t border-border bg-card">
+        <div className="flex items-center gap-3 px-3 py-2 mb-2">
+          <Avatar className="h-8 w-8 shrink-0">
             <AvatarFallback className="bg-primary/10 text-primary text-sm">
               {initials}
             </AvatarFallback>
@@ -84,7 +85,7 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
           className="w-full justify-start gap-3 h-11 text-muted-foreground hover:text-foreground"
           onClick={handleSignOut}
         >
-          <LogOut className="h-5 w-5" />
+          <LogOut className="h-5 w-5 shrink-0" />
           Sign Out
         </Button>
       </div>

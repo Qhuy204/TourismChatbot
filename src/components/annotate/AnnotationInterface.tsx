@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import { AudioPlayer } from '@/components/ui/audio-player';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -20,7 +21,7 @@ import {
   MessageSquare,
   Edit3
 } from 'lucide-react';
-import { DatasetRecord, QAItem, Scenario } from '@/types/dataset';
+import { DatasetRecord } from '@/types/dataset';
 import { toast } from 'sonner';
 
 interface AnnotationInterfaceProps {
@@ -166,8 +167,9 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
             <CardContent>
               {record.assets.audio_evidence ? (
                 <div className="space-y-3">
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-xs font-mono break-all">
+                  <AudioPlayer src={record.assets.audio_evidence.path} />
+                  <div className="p-2 bg-muted/50 rounded">
+                    <p className="text-xs font-mono break-all text-muted-foreground">
                       {record.assets.audio_evidence.path}
                     </p>
                   </div>
@@ -290,14 +292,20 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
                 </div>
 
                 {qa.query.audio_query_path && (
-                  <div>
-                    <Label>Audio Query Transcript</Label>
-                    <Textarea
-                      value={qa.query.audio_query_transcript || ''}
-                      onChange={(e) => handleFieldChange(`qa_items[${qaIndex}].query.audio_query_transcript`, e.target.value || null)}
-                      className="mt-1"
-                      rows={2}
-                    />
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Audio Query</Label>
+                      <AudioPlayer src={qa.query.audio_query_path} className="mt-1" />
+                    </div>
+                    <div>
+                      <Label>Audio Query Transcript</Label>
+                      <Textarea
+                        value={qa.query.audio_query_transcript || ''}
+                        onChange={(e) => handleFieldChange(`qa_items[${qaIndex}].query.audio_query_transcript`, e.target.value || null)}
+                        className="mt-1"
+                        rows={2}
+                      />
+                    </div>
                   </div>
                 )}
 
