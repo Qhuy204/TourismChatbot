@@ -96,27 +96,42 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
   }, [records, statusFilters]);
 
   const exportData = useMemo(() => {
-    return filteredRecords.map(record => {
+    return filteredRecords.map((record, recordIndex) => {
+      // Priority: geographic_info.location_name > entity_name
       const landmarkName = record.metadata?.geographic_info?.location_name || 
                            record.metadata?.entity_name || 
                            'Unknown';
       
+      // Priority: geographic_info.city > location.city
       const city = record.metadata?.geographic_info?.city || 
                    record.metadata?.location?.city || 
                    '';
       
-      const district = record.metadata?.location?.district || 
-                       `${landmarkName}, ${city}`;
+      // Priority: geographic_info.district > location.district (if exists, else null)
+      const district = record.metadata?.geographic_info?.district || 
+                       record.metadata?.location?.district || 
+                       '';
       
-      const lat = record.metadata?.geographic_info?.lat 
-        ? parseFloat(record.metadata.geographic_info.lat) 
+      // GPS: lat = lat, lng = lon (mapping lon to lng)
+      const geoInfo = record.metadata?.geographic_info;
+      const lat = geoInfo?.lat 
+        ? (typeof geoInfo.lat === 'number' ? geoInfo.lat : parseFloat(geoInfo.lat))
         : record.metadata?.location?.lat_long?.[0] || 0;
       
-      const lng = record.metadata?.geographic_info?.lon 
-        ? parseFloat(record.metadata.geographic_info.lon) 
+      const lng = geoInfo?.lon 
+        ? (typeof geoInfo.lon === 'number' ? geoInfo.lon : parseFloat(geoInfo.lon))
         : record.metadata?.location?.lat_long?.[1] || 0;
 
+      // source_url = page_url, license = license_info
+      const sourceUrl = geoInfo?.page_url || record.assets?.image_url || undefined;
+      const license = geoInfo?.license_info || 'CC BY-SA 4.0';
+
       const imagePath = record.assets?.image_path || record.assets?.image_url || '';
+      const folderName = landmarkName.toLowerCase().replace(/\s+/g, '_').replace(/[()]/g, '');
+      
+      // Generate proper ID: VN_LM_2025_XXX_YY
+      const idNumber = String(recordIndex + 1).padStart(3, '0');
+      const recordId = `VN_LM_2025_${idNumber}_00`;
       
       // Convert qa_items to new format
       const qaPairs: ExportedQAPair[] = record.qa_items.map((item, index) => {
@@ -128,7 +143,6 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
           type = 'ask_audio';
         }
 
-        const baseName = record.record_id.replace('IMG', 'VN_LM_2025_');
         const qaIndex = String(index + 1).padStart(2, '0');
         
         const qaPair: ExportedQAPair = {
@@ -138,10 +152,9 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
         };
 
         if (includeFields.paths) {
-          const folderName = landmarkName.toLowerCase().replace(/\s+/g, '_').replace(/[()]/g, '');
           qaPair.paths = {
-            question_audio: `audio_queries/${folderName}/q_${baseName}_qa_${qaIndex}.wav`,
-            answer_audio: `audio_answers/${folderName}/a_${baseName}_qa_${qaIndex}.wav`
+            question_audio: `audio_queries/${folderName}/q_${recordId}_qa_${qaIndex}.wav`,
+            answer_audio: `audio_answers/${folderName}/a_${recordId}_qa_${qaIndex}.wav`
           };
         }
 
@@ -163,10 +176,10 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
       });
 
       const exported: ExportedRecord = {
-        id: record.record_id.replace('IMG', 'VN_LM_2025_').replace(/(\d+)$/, (m) => m.padStart(3, '0') + '_00'),
+        id: recordId,
         timestamp: record.createdAt || new Date().toISOString(),
         paths: {
-          image: imagePath,
+          image: `images/${folderName}/${recordId}.jpg`,
         },
         metadata: {
           landmark_name: landmarkName,
@@ -176,8 +189,8 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
             gps: { lat, lng }
           },
           image_spec: {
-            source_url: record.assets?.image_url || undefined,
-            license: 'CC BY-SA 4.0'
+            source_url: sourceUrl,
+            license
           }
         },
         qa_pairs: qaPairs
@@ -185,19 +198,11 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
 
       // Add audio evidence if available
       if (record.assets?.audio_evidence) {
-        exported.paths.audio_evidence = record.assets.audio_evidence.path;
+        exported.paths.audio_evidence = `audio_evidence/${folderName}/evid_${recordId}.wav`;
         exported.metadata.audio_spec = {
           transcript: record.assets.audio_evidence.transcript,
           voice_id: 'vi-VN-NamMinhNeural'
         };
-      }
-
-      // Add image/knowledge descriptions if available
-      if (record.metadata?.image_description) {
-        (exported.metadata as any).image_description = record.metadata.image_description;
-      }
-      if (record.metadata?.knowledge_description) {
-        (exported.metadata as any).knowledge_description = record.metadata.knowledge_description;
       }
 
       return exported;

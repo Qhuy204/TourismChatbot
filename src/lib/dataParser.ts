@@ -34,13 +34,16 @@ interface GeographicFormat {
   image_id: string;
   image_url?: string;
   geographic_info?: {
-    lat?: string;
-    lon?: string;
+    lat?: string | number;
+    lon?: string | number;
     location_type?: string;
     city?: string;
+    district?: string;
     location_name?: string;
     opening_hours?: string;
     ticket_price?: string;
+    page_url?: string;
+    license_info?: string;
   };
   image_description?: string;
   knowledge_description?: string;
@@ -273,8 +276,10 @@ export function convertMergedDataToRecords(mergedMap: Map<string, MergedData>): 
     // Parse coordinates from geographic_info
     let lat = 0, lon = 0;
     if (data.geographic_info) {
-      lat = parseFloat(data.geographic_info.lat || '0') || 0;
-      lon = parseFloat(data.geographic_info.lon || '0') || 0;
+      const geoLat = data.geographic_info.lat;
+      const geoLon = data.geographic_info.lon;
+      lat = typeof geoLat === 'number' ? geoLat : parseFloat(geoLat || '0') || 0;
+      lon = typeof geoLon === 'number' ? geoLon : parseFloat(geoLon || '0') || 0;
     }
 
     const record: DatasetRecord = {
@@ -284,13 +289,18 @@ export function convertMergedDataToRecords(mergedMap: Map<string, MergedData>): 
         entity_name: data.geographic_info?.location_name || data.metadata?.keyword?.replace(/-/g, ' ') || imageId,
         location: {
           city: data.geographic_info?.city || 'Unknown',
-          district: 'Unknown',
+          district: data.geographic_info?.district || '',
           lat_long: [lat, lon],
         },
         tags: data.metadata?.source ? [data.metadata.source] : (data.geographic_info?.location_type?.split(', ') || ['imported']),
         image_description: data.image_description,
         knowledge_description: data.knowledge_description,
-        geographic_info: data.geographic_info,
+        geographic_info: {
+          ...data.geographic_info,
+          // Auto-map fields from different input formats
+          page_url: data.geographic_info?.page_url || data.metadata?.page_url,
+          license_info: data.geographic_info?.license_info || data.metadata?.license_info,
+        },
       },
       assets: {
         image_path: data.file_path || null,
