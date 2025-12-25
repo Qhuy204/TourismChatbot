@@ -1,4 +1,4 @@
-import { DatasetRecord, QAItem, Scenario } from '@/types/dataset';
+import { DatasetRecord, QAItem, Scenario, GeographicInfo } from '@/types/dataset';
 
 // Types for different import formats
 interface ConversationMessage {
@@ -30,6 +30,24 @@ interface VQAPair {
   answer_type?: string;
 }
 
+interface GeographicFormat {
+  image_id: string;
+  image_url?: string;
+  geographic_info?: {
+    lat?: string;
+    lon?: string;
+    location_type?: string;
+    city?: string;
+    location_name?: string;
+    opening_hours?: string;
+    ticket_price?: string;
+  };
+  image_description?: string;
+  knowledge_description?: string;
+  vqa_pairs?: VQAPair[];
+  __source_file_path?: string;
+}
+
 interface JSONLFormat {
   image_id: string;
   file_path?: string;
@@ -50,6 +68,9 @@ interface MergedData {
   metadata?: Partial<MetadataFormat>;
   conversations?: ConversationMessage[];
   vqa_pairs?: VQAPair[];
+  geographic_info?: GeographicInfo;
+  image_description?: string;
+  knowledge_description?: string;
 }
 
 export function parseConversationToQAItems(conversations: ConversationMessage[]): QAItem[] {
@@ -93,7 +114,9 @@ export function parseVQAPairsToQAItems(vqaPairs: VQAPair[]): QAItem[] {
       answer: pair.answers[0] || '',
       evidence_source: 'image' as const,
       answer_format: (pair.answers[0]?.length || 0) > 100 ? 'free' as const : 'one_sentence' as const,
+      alternative_answers: pair.answers.slice(1),
     },
+    answer_type: pair.answer_type,
   }));
 }
 
@@ -133,13 +156,20 @@ export function detectAndParseFile(content: string, filename: string): { type: s
     const parsed = parseJSON(content);
     // Detect format type
     if (parsed.length > 0) {
-      if (parsed[0].vqa_pairs) {
+      const firstItem = parsed[0];
+      
+      // Check for geographic format (has geographic_info or image_description or knowledge_description)
+      if (firstItem.geographic_info || firstItem.image_description || firstItem.knowledge_description) {
+        return { type: 'geographic', data: parsed };
+      }
+      
+      if (firstItem.vqa_pairs) {
         return { type: 'vqa', data: parsed };
       }
-      if (parsed[0].conversations || (Array.isArray(parsed) && parsed[0]?.role)) {
+      if (firstItem.conversations || (Array.isArray(parsed) && firstItem?.role)) {
         return { type: 'conversation', data: parsed };
       }
-      if (parsed[0].image_id && parsed[0].file_path && !parsed[0].vqa_pairs) {
+      if (firstItem.image_id && firstItem.file_path && !firstItem.vqa_pairs) {
         return { type: 'metadata', data: parsed };
       }
     }
@@ -163,13 +193,23 @@ export function mergeDataByImageId(dataArrays: { type: string; data: any[]; file
       
       if (!imageId) continue;
 
-      const existing = mergedMap.get(imageId) || { image_id: imageId };
+      const existing: MergedData = mergedMap.get(imageId) || { image_id: imageId };
 
       switch (type) {
         case 'metadata':
           existing.metadata = { ...existing.metadata, ...item };
           existing.file_path = existing.file_path || item.file_path;
           existing.image_url = existing.image_url || item.image_url;
+          break;
+        case 'geographic':
+          existing.file_path = existing.file_path || item.__source_file_path || item.file_path;
+          existing.image_url = existing.image_url || item.image_url;
+          existing.geographic_info = { ...existing.geographic_info, ...item.geographic_info };
+          existing.image_description = existing.image_description || item.image_description;
+          existing.knowledge_description = existing.knowledge_description || item.knowledge_description;
+          if (item.vqa_pairs) {
+            existing.vqa_pairs = [...(existing.vqa_pairs || []), ...item.vqa_pairs];
+          }
           break;
         case 'vqa':
         case 'jsonl':
@@ -211,9 +251,8 @@ export function convertMergedDataToRecords(mergedMap: Map<string, MergedData>): 
       qaItems.push(...parseConversationToQAItems(data.conversations));
     }
 
-    // Skip if no QA items
+    // Skip if no QA items - create placeholder
     if (qaItems.length === 0) {
-      // Create a placeholder QA item
       qaItems.push({
         qa_id: `qa_${imageId}_0`,
         scenario: 'text_ask_image',
@@ -224,31 +263,43 @@ export function convertMergedDataToRecords(mergedMap: Map<string, MergedData>): 
           audio_query_transcript: null,
         },
         target: {
-          answer: '',
+          answer: data.image_description || '',
           evidence_source: 'image',
           answer_format: 'free',
         },
       });
     }
 
+    // Parse coordinates from geographic_info
+    let lat = 0, lon = 0;
+    if (data.geographic_info) {
+      lat = parseFloat(data.geographic_info.lat || '0') || 0;
+      lon = parseFloat(data.geographic_info.lon || '0') || 0;
+    }
+
     const record: DatasetRecord = {
       record_id: imageId,
       metadata: {
-        topic: data.metadata?.keyword || 'imported_data',
-        entity_name: data.metadata?.keyword?.replace(/-/g, ' ') || imageId,
+        topic: data.metadata?.keyword || data.geographic_info?.location_type || 'imported_data',
+        entity_name: data.geographic_info?.location_name || data.metadata?.keyword?.replace(/-/g, ' ') || imageId,
         location: {
-          city: 'Unknown',
+          city: data.geographic_info?.city || 'Unknown',
           district: 'Unknown',
-          lat_long: [0, 0],
+          lat_long: [lat, lon],
         },
-        tags: data.metadata?.source ? [data.metadata.source] : ['imported'],
+        tags: data.metadata?.source ? [data.metadata.source] : (data.geographic_info?.location_type?.split(', ') || ['imported']),
+        image_description: data.image_description,
+        knowledge_description: data.knowledge_description,
+        geographic_info: data.geographic_info,
       },
       assets: {
-        image_path: data.file_path || data.image_url || null,
+        image_path: data.file_path || null,
+        image_url: data.image_url || null,
         audio_evidence: null,
       },
       qa_items: qaItems,
       status: 'pending',
+      createdAt: new Date().toISOString(),
     };
 
     records.push(record);
@@ -268,6 +319,18 @@ export function parseHuggingFaceDataset(repoContent: any[]): DatasetRecord[] {
     
     existing.file_path = existing.file_path || item.file_path || item.image_path;
     existing.image_url = existing.image_url || item.image_url || item.image;
+    
+    if (item.geographic_info) {
+      existing.geographic_info = { ...existing.geographic_info, ...item.geographic_info };
+    }
+    
+    if (item.image_description) {
+      existing.image_description = item.image_description;
+    }
+    
+    if (item.knowledge_description) {
+      existing.knowledge_description = item.knowledge_description;
+    }
     
     if (item.vqa_pairs) {
       existing.vqa_pairs = [...(existing.vqa_pairs || []), ...item.vqa_pairs];
