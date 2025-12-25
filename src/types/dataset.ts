@@ -4,11 +4,24 @@ export interface Location {
   lat_long: [number, number];
 }
 
+export interface GeographicInfo {
+  lat?: string;
+  lon?: string;
+  location_type?: string;
+  city?: string;
+  location_name?: string;
+  opening_hours?: string;
+  ticket_price?: string;
+}
+
 export interface Metadata {
   topic: string;
   entity_name: string;
   location: Location;
   tags: string[];
+  image_description?: string;
+  knowledge_description?: string;
+  geographic_info?: GeographicInfo;
 }
 
 export interface AudioEvidence {
@@ -21,6 +34,7 @@ export interface AudioEvidence {
 
 export interface Assets {
   image_path: string | null;
+  image_url?: string | null;
   audio_evidence: AudioEvidence | null;
 }
 
@@ -34,6 +48,7 @@ export interface Target {
   answer: string;
   evidence_source: 'image' | 'audio';
   answer_format: 'short_phrase' | 'one_sentence' | 'free';
+  alternative_answers?: string[];
 }
 
 export type Scenario = 'text_ask_image' | 'audio_ask_image' | 'text_ask_audio' | 'audio_ask_audio';
@@ -45,6 +60,7 @@ export interface QAItem {
   modality_in: Modality[];
   query: Query;
   target: Target;
+  answer_type?: string;
 }
 
 export interface DatasetRecord {
@@ -52,9 +68,11 @@ export interface DatasetRecord {
   metadata: Metadata;
   assets: Assets;
   qa_items: QAItem[];
-  status?: 'pending' | 'reviewed' | 'approved' | 'rejected';
+  status?: 'pending' | 'reviewed' | 'approved' | 'rejected' | 'warning';
   reviewedAt?: string;
   reviewedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface DatasetStats {
@@ -63,5 +81,6 @@ export interface DatasetStats {
   reviewed: number;
   approved: number;
   rejected: number;
+  warning: number;
   scenarios: Record<Scenario, number>;
 }

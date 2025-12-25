@@ -84,6 +84,7 @@ export const calculateStats = (records: DatasetRecord[]): DatasetStats => {
     reviewed: 0,
     approved: 0,
     rejected: 0,
+    warning: 0,
     scenarios: {
       text_ask_image: 0,
       audio_ask_image: 0,
@@ -97,6 +98,7 @@ export const calculateStats = (records: DatasetRecord[]): DatasetStats => {
     else if (record.status === 'reviewed') stats.reviewed++;
     else if (record.status === 'approved') stats.approved++;
     else if (record.status === 'rejected') stats.rejected++;
+    else if (record.status === 'warning') stats.warning++;
 
     record.qa_items.forEach(qa => {
       stats.scenarios[qa.scenario]++;
