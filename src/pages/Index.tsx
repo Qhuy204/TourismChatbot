@@ -7,6 +7,7 @@ import { DataBrowser } from '@/components/browser/DataBrowser';
 import { AnnotationInterface } from '@/components/annotate/AnnotationInterface';
 import { RandomQACheck } from '@/components/qa-check/RandomQACheck';
 import { CrawlInterface } from '@/components/crawl/CrawlInterface';
+import { ImportInterface } from '@/components/import/ImportInterface';
 import { ExportInterface } from '@/components/export/ExportInterface';
 import { mockRecords, calculateStats } from '@/lib/mockData';
 import { DatasetRecord } from '@/types/dataset';
@@ -46,6 +47,8 @@ const Index = () => {
         return <AnnotationInterface records={records} onRecordUpdate={handleRecordUpdate} />;
       case 'random-check':
         return <RandomQACheck records={records} onRecordUpdate={handleRecordUpdate} />;
+      case 'import':
+        return <ImportInterface onAddRecords={handleAddRecords} />;
       case 'crawl':
         return <CrawlInterface onAddRecords={handleAddRecords} />;
       case 'export':

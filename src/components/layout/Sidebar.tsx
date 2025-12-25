@@ -6,7 +6,9 @@ import {
   FolderOpen,
   Shuffle,
   Download,
-  LogOut
+  LogOut,
+  Upload,
+  Globe
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,8 +26,9 @@ const navItems = [
   { id: 'browser', label: 'Data Browser', icon: FolderOpen },
   { id: 'annotate', label: 'Annotate', icon: Tags },
   { id: 'random-check', label: 'QA Check (10%)', icon: Shuffle },
-  { id: 'crawl', label: 'Crawl Data', icon: Download },
-  { id: 'export', label: 'Export', icon: Database },
+  { id: 'import', label: 'Import Data', icon: Upload },
+  { id: 'crawl', label: 'Crawl Data', icon: Globe },
+  { id: 'export', label: 'Export', icon: Download },
 ];
 
 export function Sidebar({ currentView, onViewChange }: SidebarProps) {
