@@ -10,7 +10,6 @@ import {
   Download, 
   FileJson, 
   FileSpreadsheet,
-  CheckCircle2,
   Filter,
   Copy
 } from 'lucide-react';
@@ -22,40 +21,185 @@ interface ExportInterfaceProps {
   stats: DatasetStats;
 }
 
+interface ExportedQAPair {
+  q: string;
+  a: string;
+  type: 'ask_image' | 'ask_audio' | 'ask_both';
+  paths?: {
+    question_audio?: string;
+    answer_audio?: string;
+  };
+  audio_meta?: {
+    q_voice?: {
+      id: string;
+      rate?: string;
+      pitch?: string;
+    };
+    a_voice?: {
+      id: string;
+      type?: string;
+    };
+  };
+}
+
+interface ExportedRecord {
+  id: string;
+  timestamp: string;
+  paths: {
+    image: string;
+    audio_evidence?: string;
+  };
+  metadata: {
+    landmark_name: string;
+    location: {
+      city: string;
+      district: string;
+      gps: {
+        lat: number;
+        lng: number;
+      };
+    };
+    image_spec: {
+      resolution?: string;
+      license?: string;
+      source_url?: string;
+    };
+    audio_spec?: {
+      transcript?: string;
+      voice_id?: string;
+    };
+  };
+  qa_pairs: ExportedQAPair[];
+}
+
 export function ExportInterface({ records, stats }: ExportInterfaceProps) {
   const [exportFormat, setExportFormat] = useState<'json' | 'jsonl' | 'csv'>('json');
   const [statusFilters, setStatusFilters] = useState({
     pending: false,
     reviewed: true,
     approved: true,
-    rejected: false
+    rejected: false,
+    warning: false
   });
   const [includeFields, setIncludeFields] = useState({
+    paths: true,
     metadata: true,
-    assets: true,
-    qa_items: true,
-    status: true
+    qa_pairs: true,
+    audio_meta: true
   });
 
   const filteredRecords = useMemo(() => {
     return records.filter(record => {
       const status = record.status || 'pending';
-      return statusFilters[status];
+      return statusFilters[status as keyof typeof statusFilters];
     });
   }, [records, statusFilters]);
 
   const exportData = useMemo(() => {
     return filteredRecords.map(record => {
-      const exported: any = { record_id: record.record_id };
+      const landmarkName = record.metadata?.geographic_info?.location_name || 
+                           record.metadata?.entity_name || 
+                           'Unknown';
       
-      if (includeFields.metadata) exported.metadata = record.metadata;
-      if (includeFields.assets) exported.assets = record.assets;
-      if (includeFields.qa_items) exported.qa_items = record.qa_items;
-      if (includeFields.status) {
-        exported.status = record.status;
-        exported.reviewedAt = record.reviewedAt;
+      const city = record.metadata?.geographic_info?.city || 
+                   record.metadata?.location?.city || 
+                   '';
+      
+      const district = record.metadata?.location?.district || 
+                       `${landmarkName}, ${city}`;
+      
+      const lat = record.metadata?.geographic_info?.lat 
+        ? parseFloat(record.metadata.geographic_info.lat) 
+        : record.metadata?.location?.lat_long?.[0] || 0;
+      
+      const lng = record.metadata?.geographic_info?.lon 
+        ? parseFloat(record.metadata.geographic_info.lon) 
+        : record.metadata?.location?.lat_long?.[1] || 0;
+
+      const imagePath = record.assets?.image_path || record.assets?.image_url || '';
+      
+      // Convert qa_items to new format
+      const qaPairs: ExportedQAPair[] = record.qa_items.map((item, index) => {
+        // Determine type based on scenario or evidence_source
+        let type: 'ask_image' | 'ask_audio' | 'ask_both' = 'ask_image';
+        if (item.scenario?.includes('audio') && item.scenario?.includes('image')) {
+          type = 'ask_both';
+        } else if (item.scenario?.includes('audio') || item.target?.evidence_source === 'audio') {
+          type = 'ask_audio';
+        }
+
+        const baseName = record.record_id.replace('IMG', 'VN_LM_2025_');
+        const qaIndex = String(index + 1).padStart(2, '0');
+        
+        const qaPair: ExportedQAPair = {
+          q: item.query?.text || item.query?.audio_query_transcript || '',
+          a: item.target?.answer || (item.target?.alternative_answers?.[0]) || '',
+          type
+        };
+
+        if (includeFields.paths) {
+          const folderName = landmarkName.toLowerCase().replace(/\s+/g, '_').replace(/[()]/g, '');
+          qaPair.paths = {
+            question_audio: `audio_queries/${folderName}/q_${baseName}_qa_${qaIndex}.wav`,
+            answer_audio: `audio_answers/${folderName}/a_${baseName}_qa_${qaIndex}.wav`
+          };
+        }
+
+        if (includeFields.audio_meta) {
+          qaPair.audio_meta = {
+            q_voice: {
+              id: 'vi-VN-HoaiMyNeural',
+              rate: '-10%',
+              pitch: '+0Hz'
+            },
+            a_voice: {
+              id: 'vi-VN-HoaiMyNeural',
+              type: 'fixed_target'
+            }
+          };
+        }
+
+        return qaPair;
+      });
+
+      const exported: ExportedRecord = {
+        id: record.record_id.replace('IMG', 'VN_LM_2025_').replace(/(\d+)$/, (m) => m.padStart(3, '0') + '_00'),
+        timestamp: record.createdAt || new Date().toISOString(),
+        paths: {
+          image: imagePath,
+        },
+        metadata: {
+          landmark_name: landmarkName,
+          location: {
+            city,
+            district,
+            gps: { lat, lng }
+          },
+          image_spec: {
+            source_url: record.assets?.image_url || undefined,
+            license: 'CC BY-SA 4.0'
+          }
+        },
+        qa_pairs: qaPairs
+      };
+
+      // Add audio evidence if available
+      if (record.assets?.audio_evidence) {
+        exported.paths.audio_evidence = record.assets.audio_evidence.path;
+        exported.metadata.audio_spec = {
+          transcript: record.assets.audio_evidence.transcript,
+          voice_id: 'vi-VN-NamMinhNeural'
+        };
       }
-      
+
+      // Add image/knowledge descriptions if available
+      if (record.metadata?.image_description) {
+        (exported.metadata as any).image_description = record.metadata.image_description;
+      }
+      if (record.metadata?.knowledge_description) {
+        (exported.metadata as any).knowledge_description = record.metadata.knowledge_description;
+      }
+
       return exported;
     });
   }, [filteredRecords, includeFields]);
@@ -67,26 +211,35 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
 
     if (exportFormat === 'json') {
       content = JSON.stringify(exportData, null, 2);
-      filename = `svlm_dataset_${Date.now()}.json`;
+      filename = `vn_landmark_dataset_${Date.now()}.json`;
       mimeType = 'application/json';
     } else if (exportFormat === 'jsonl') {
       content = exportData.map(r => JSON.stringify(r)).join('\n');
-      filename = `svlm_dataset_${Date.now()}.jsonl`;
+      filename = `vn_landmark_dataset_${Date.now()}.jsonl`;
       mimeType = 'application/x-jsonlines';
     } else {
       // CSV export - flatten the data
-      const headers = ['record_id', 'entity_name', 'city', 'scenario', 'question', 'answer', 'status'];
-      const rows = exportData.map(r => [
-        r.record_id,
-        r.metadata?.entity_name || '',
-        r.metadata?.location?.city || '',
-        r.qa_items?.[0]?.scenario || '',
-        r.qa_items?.[0]?.query?.text || r.qa_items?.[0]?.query?.audio_query_transcript || '',
-        r.qa_items?.[0]?.target?.answer || '',
-        r.status || ''
-      ]);
-      content = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
-      filename = `svlm_dataset_${Date.now()}.csv`;
+      const headers = ['id', 'timestamp', 'landmark_name', 'city', 'lat', 'lng', 'question', 'answer', 'type'];
+      const rows: string[][] = [];
+      
+      exportData.forEach(record => {
+        record.qa_pairs.forEach(qa => {
+          rows.push([
+            record.id,
+            record.timestamp,
+            record.metadata.landmark_name,
+            record.metadata.location.city,
+            String(record.metadata.location.gps.lat),
+            String(record.metadata.location.gps.lng),
+            qa.q,
+            qa.a,
+            qa.type
+          ]);
+        });
+      });
+      
+      content = [headers.join(','), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
+      filename = `vn_landmark_dataset_${Date.now()}.csv`;
       mimeType = 'text/csv';
     }
 
@@ -118,7 +271,7 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
     <div className="p-6 space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground">Export Dataset</h2>
-        <p className="text-muted-foreground">Xuất dataset theo các định dạng khác nhau</p>
+        <p className="text-muted-foreground">Xuất dataset theo định dạng VN Landmark chuẩn</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -143,6 +296,10 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
             <div className="flex justify-between">
               <span className="text-muted-foreground">Approved</span>
               <Badge className="bg-accent text-accent-foreground">{stats.approved}</Badge>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Warning</span>
+              <Badge className="bg-chart-4/10 text-chart-4">{stats.warning}</Badge>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Rejected</span>
@@ -240,12 +397,12 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
             <CardTitle className="text-sm">Preview & Export</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="bg-muted rounded-lg p-4 max-h-64 overflow-auto">
-              <pre className="text-xs font-mono">
+            <div className="bg-muted rounded-lg p-4 max-h-80 overflow-auto">
+              <pre className="text-xs font-mono whitespace-pre-wrap break-all">
                 {exportFormat === 'csv' 
-                  ? 'record_id,entity_name,city,scenario,question,answer,status\n...'
-                  : JSON.stringify(exportData.slice(0, 2), null, 2)}
-                {exportData.length > 2 && '\n... và ' + (exportData.length - 2) + ' records nữa'}
+                  ? 'id,timestamp,landmark_name,city,lat,lng,question,answer,type\n...'
+                  : JSON.stringify(exportData.slice(0, 1), null, 2)}
+                {exportData.length > 1 && '\n\n... và ' + (exportData.length - 1) + ' records nữa'}
               </pre>
             </div>
 
@@ -261,7 +418,7 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
             </div>
 
             <p className="text-xs text-muted-foreground text-center">
-              {filteredRecords.length} records sẽ được export
+              {filteredRecords.length} records sẽ được export theo format VN Landmark
             </p>
           </CardContent>
         </Card>
