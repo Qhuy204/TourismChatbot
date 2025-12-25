@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,15 @@ export function SettingsInterface({}: SettingsInterfaceProps) {
   const [huggingFaceToken, setHuggingFaceToken] = useState('');
   const [isTokenSaved, setIsTokenSaved] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
+
+  // Check if token exists on mount
+  useEffect(() => {
+    const savedToken = localStorage.getItem('HUGGING_FACE_ACCESS_TOKEN');
+    if (savedToken) {
+      setHuggingFaceToken(savedToken);
+      setIsTokenSaved(true);
+    }
+  }, []);
 
   const handleSaveHuggingFaceToken = async () => {
     if (!huggingFaceToken.trim()) {
@@ -61,15 +70,6 @@ export function SettingsInterface({}: SettingsInterfaceProps) {
     setIsTokenSaved(false);
     toast.success('Đã xóa token');
   };
-
-  // Check if token exists on mount
-  useState(() => {
-    const savedToken = localStorage.getItem('HUGGING_FACE_ACCESS_TOKEN');
-    if (savedToken) {
-      setHuggingFaceToken(savedToken);
-      setIsTokenSaved(true);
-    }
-  });
 
   return (
     <div className="p-6 space-y-6">

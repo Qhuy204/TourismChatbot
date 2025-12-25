@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,7 @@ import {
   Eye,
   Loader2,
   FolderOpen,
+  Key,
 } from 'lucide-react';
 import { DatasetRecord } from '@/types/dataset';
 import { toast } from 'sonner';
@@ -53,17 +54,120 @@ interface HuggingFaceRepo {
   error?: string;
 }
 
+// Helper to convert internal record to export format for preview
+function convertToExportFormat(record: DatasetRecord, index: number): any {
+  const landmarkSlug = (record.metadata.geographic_info?.location_name || record.metadata.entity_name || 'unknown')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+
+  const groupIndex = Math.floor(index / 100);
+  const itemIndex = index % 100;
+  const id = `VN_LM_2025_${String(groupIndex + 1).padStart(3, '0')}_${String(itemIndex).padStart(2, '0')}`;
+
+  // Determine image path
+  let imagePath = record.assets?.image_path || record.assets?.image_url || '';
+  if (imagePath && !imagePath.startsWith('images/')) {
+    const ext = imagePath.split('.').pop() || 'jpg';
+    imagePath = `images/${landmarkSlug}/${id}.${ext}`;
+  }
+
+  // Determine audio evidence path
+  let audioEvidencePath = record.assets?.audio_evidence?.path || '';
+  if (audioEvidencePath && !audioEvidencePath.startsWith('audio_evidence/')) {
+    audioEvidencePath = `audio_evidence/${landmarkSlug}/evid_${id}.wav`;
+  }
+
+  // Build metadata
+  const geo = record.metadata.geographic_info;
+  const lat = geo?.lat ? Number(geo.lat) : 0;
+  const lng = geo?.lon ? Number(geo.lon) : 0;
+
+  const exportRecord: any = {
+    id,
+    timestamp: new Date().toISOString(),
+    paths: {
+      image: imagePath,
+      ...(audioEvidencePath && { audio_evidence: audioEvidencePath })
+    },
+    metadata: {
+      landmark_name: geo?.location_name || record.metadata.entity_name || '',
+      location: {
+        city: geo?.city || record.metadata.location.city || '',
+        district: geo?.district || record.metadata.location.district || '',
+        gps: {
+          lat,
+          lng
+        }
+      },
+      image_spec: {
+        resolution: '1920x1080',
+        license: geo?.license_info || 'CC BY-SA 4.0',
+        source_url: geo?.page_url || ''
+      },
+      ...(record.assets?.audio_evidence && {
+        audio_spec: {
+          transcript: record.assets.audio_evidence.transcript || '',
+          voice_id: 'vi-VN-NamMinhNeural'
+        }
+      })
+    },
+    qa_pairs: record.qa_items.map((qa, qaIndex) => {
+      const qaNum = String(qaIndex + 1).padStart(2, '0');
+      
+      // Determine QA type based on scenario
+      let qaType = 'ask_image';
+      if (qa.scenario === 'text_ask_audio' || qa.scenario === 'audio_ask_audio') {
+        qaType = 'ask_audio';
+      } else if (qa.target.evidence_source === 'audio') {
+        qaType = 'ask_both';
+      }
+
+      return {
+        q: qa.query.text || qa.query.audio_query_transcript || '',
+        a: qa.target.answer || '',
+        type: qaType,
+        paths: {
+          question_audio: `audio_queries/${landmarkSlug}/q_${id}_qa_${qaNum}.wav`,
+          answer_audio: `audio_answers/${landmarkSlug}/a_${id}_qa_${qaNum}.wav`
+        },
+        audio_meta: {
+          q_voice: {
+            id: 'vi-VN-HoaiMyNeural',
+            rate: '0%',
+            pitch: '0Hz'
+          },
+          a_voice: {
+            id: 'vi-VN-HoaiMyNeural',
+            type: 'fixed_target'
+          }
+        }
+      };
+    })
+  };
+
+  return exportRecord;
+}
+
 export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedRecords, setProcessedRecords] = useState<DatasetRecord[]>([]);
   const [previewRecord, setPreviewRecord] = useState<DatasetRecord | null>(null);
+  const [previewIndex, setPreviewIndex] = useState(0);
 
   // Hugging Face state
   const [hfRepoUrl, setHfRepoUrl] = useState('');
   const [hfRepos, setHfRepos] = useState<HuggingFaceRepo[]>([]);
   const [hfRecords, setHfRecords] = useState<DatasetRecord[]>([]);
   const [isLoadingHf, setIsLoadingHf] = useState(false);
+  const [hasHfToken, setHasHfToken] = useState(false);
+
+  // Check for HF token on mount
+  useEffect(() => {
+    const token = localStorage.getItem('HUGGING_FACE_ACCESS_TOKEN');
+    setHasHfToken(!!token);
+  }, []);
 
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -168,6 +272,12 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
   };
 
   const loadHuggingFaceData = async () => {
+    const token = localStorage.getItem('HUGGING_FACE_ACCESS_TOKEN');
+    if (!token) {
+      toast.error('Vui lòng cấu hình Hugging Face Access Token trong Settings');
+      return;
+    }
+
     if (hfRepos.length === 0) {
       toast.error('Chưa có repo nào được thêm');
       return;
@@ -176,23 +286,45 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
     setIsLoadingHf(true);
     setHfRecords([]);
 
-    // Simulate loading from Hugging Face (in real implementation, you'd use HF API)
     for (const repo of hfRepos) {
       setHfRepos(prev => prev.map(r =>
         r.id === repo.id ? { ...r, status: 'loading' } : r
       ));
 
-      await new Promise(r => setTimeout(r, 1500));
+      try {
+        // Use real Hugging Face API
+        const response = await fetch(
+          `https://datasets-server.huggingface.co/rows?dataset=${encodeURIComponent(repo.name)}&config=default&split=train&offset=0&length=100`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          }
+        );
 
-      // Generate mock data based on the repo name
-      const mockData = generateMockHuggingFaceData(repo.name, 10);
-      const records = parseHuggingFaceDataset(mockData);
+        if (response.ok) {
+          const data = await response.json();
+          const rows = data.rows?.map((row: any) => row.row) || [];
+          const records = parseHuggingFaceDataset(rows);
 
-      setHfRecords(prev => [...prev, ...records]);
+          setHfRecords(prev => [...prev, ...records]);
 
-      setHfRepos(prev => prev.map(r =>
-        r.id === repo.id ? { ...r, status: 'done', recordsCount: records.length } : r
-      ));
+          setHfRepos(prev => prev.map(r =>
+            r.id === repo.id ? { ...r, status: 'done', recordsCount: records.length } : r
+          ));
+        } else {
+          const errorText = await response.text();
+          console.error('HF API Error:', errorText);
+          setHfRepos(prev => prev.map(r =>
+            r.id === repo.id ? { ...r, status: 'error', error: 'Không thể load data từ repo' } : r
+          ));
+        }
+      } catch (error) {
+        console.error('HF Load Error:', error);
+        setHfRepos(prev => prev.map(r =>
+          r.id === repo.id ? { ...r, status: 'error', error: 'Lỗi kết nối' } : r
+        ));
+      }
     }
 
     setIsLoadingHf(false);
@@ -214,6 +346,11 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const openPreview = (record: DatasetRecord, index: number) => {
+    setPreviewRecord(record);
+    setPreviewIndex(index);
   };
 
   return (
@@ -359,7 +496,7 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
 
                     <ScrollArea className="h-[200px]">
                       <div className="space-y-2">
-                        {processedRecords.slice(0, 20).map(record => (
+                        {processedRecords.slice(0, 20).map((record, idx) => (
                           <div
                             key={record.record_id}
                             className="flex items-center justify-between p-2 bg-muted/30 rounded"
@@ -375,7 +512,7 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => setPreviewRecord(record)}
+                              onClick={() => openPreview(record, idx)}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -431,6 +568,16 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
 
         {/* Hugging Face Tab */}
         <TabsContent value="huggingface" className="space-y-6">
+          {!hasHfToken && (
+            <Alert>
+              <Key className="h-4 w-4" />
+              <AlertTitle>Cần cấu hình Access Token</AlertTitle>
+              <AlertDescription>
+                Vui lòng vào Settings và nhập Hugging Face Access Token để sử dụng tính năng này.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* HF Repo Input */}
             <Card>
@@ -489,7 +636,7 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                             </Badge>
                           )}
                           {repo.status === 'error' && (
-                            <Badge variant="destructive">Error</Badge>
+                            <Badge variant="destructive">{repo.error || 'Error'}</Badge>
                           )}
                           <Button
                             variant="ghost"
@@ -508,7 +655,7 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                 {hfRepos.length > 0 && (
                   <Button
                     onClick={loadHuggingFaceData}
-                    disabled={isLoadingHf}
+                    disabled={isLoadingHf || !hasHfToken}
                     className="w-full"
                   >
                     {isLoadingHf ? (
@@ -556,7 +703,7 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
 
                     <ScrollArea className="h-[200px]">
                       <div className="space-y-2">
-                        {hfRecords.slice(0, 20).map(record => (
+                        {hfRecords.slice(0, 20).map((record, idx) => (
                           <div
                             key={record.record_id}
                             className="flex items-center justify-between p-2 bg-muted/30 rounded"
@@ -572,7 +719,7 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => setPreviewRecord(record)}
+                              onClick={() => openPreview(record, idx)}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -591,31 +738,32 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
             </Card>
           </div>
 
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Lưu ý</AlertTitle>
-            <AlertDescription>
-              Hiện tại đang sử dụng mock data. Để kết nối thực sự với Hugging Face API, 
-              cần cấu hình access token.
-            </AlertDescription>
-          </Alert>
+          {hasHfToken && (
+            <Alert className="bg-accent/50">
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertTitle>Token đã được cấu hình</AlertTitle>
+              <AlertDescription>
+                Hugging Face Access Token đã sẵn sàng. Bạn có thể load data từ các dataset.
+              </AlertDescription>
+            </Alert>
+          )}
         </TabsContent>
       </Tabs>
 
-      {/* Preview Modal */}
+      {/* Preview Modal - Export Format */}
       {previewRecord && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="w-full max-w-2xl max-h-[80vh] overflow-hidden">
+          <Card className="w-full max-w-3xl max-h-[85vh] overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Preview: {previewRecord.record_id}</CardTitle>
+              <CardTitle>Preview (Export Format): {previewRecord.record_id}</CardTitle>
               <Button variant="ghost" size="sm" onClick={() => setPreviewRecord(null)}>
                 ✕
               </Button>
             </CardHeader>
             <CardContent>
-              <ScrollArea className="h-[60vh]">
-                <pre className="text-xs bg-muted p-4 rounded-lg overflow-auto">
-                  {JSON.stringify(previewRecord, null, 2)}
+              <ScrollArea className="h-[65vh]">
+                <pre className="text-xs bg-muted p-4 rounded-lg overflow-auto whitespace-pre-wrap">
+                  {JSON.stringify(convertToExportFormat(previewRecord, previewIndex), null, 2)}
                 </pre>
               </ScrollArea>
             </CardContent>
@@ -624,31 +772,4 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
       )}
     </div>
   );
-}
-
-// Helper function to generate mock HF data
-function generateMockHuggingFaceData(repoName: string, count: number): any[] {
-  const data = [];
-  for (let i = 0; i < count; i++) {
-    data.push({
-      image_id: `HF_${repoName.replace('/', '_')}_${String(i + 1).padStart(4, '0')}`,
-      file_path: `data/images/${repoName.split('/')[1] || 'dataset'}_${i + 1}.jpg`,
-      image_url: `https://example.com/images/${i + 1}.jpg`,
-      vqa_pairs: [
-        {
-          question_id: `Q_${i + 1}_1`,
-          question: 'Mô tả nội dung hình ảnh này',
-          answers: ['Đây là mô tả mẫu từ Hugging Face dataset'],
-          answer_type: 'description',
-        },
-        {
-          question_id: `Q_${i + 1}_2`,
-          question: 'Địa điểm này nằm ở đâu?',
-          answers: ['Việt Nam'],
-          answer_type: 'location',
-        },
-      ],
-    });
-  }
-  return data;
 }

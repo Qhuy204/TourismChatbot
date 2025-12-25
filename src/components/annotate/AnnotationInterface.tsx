@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { AudioPlayer } from '@/components/ui/audio-player';
 import { 
   ChevronLeft, 
@@ -19,9 +20,10 @@ import {
   Image,
   Volume2,
   MessageSquare,
-  Edit3
+  Edit3,
+  MapPin
 } from 'lucide-react';
-import { DatasetRecord } from '@/types/dataset';
+import { DatasetRecord, QAItem } from '@/types/dataset';
 import { toast } from 'sonner';
 
 interface AnnotationInterfaceProps {
@@ -40,6 +42,20 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
 
   const currentRecord = pendingRecords[currentIndex];
   const record = editedRecord || currentRecord;
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        goPrev();
+      } else if (e.key === 'ArrowRight') {
+        goNext();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentIndex, pendingRecords.length]);
 
   if (!record) {
     return (
@@ -70,6 +86,9 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
         const index = parseInt(indexStr.replace(']', ''));
         obj = obj[key][index];
       } else {
+        if (!obj[keys[i]]) {
+          obj[keys[i]] = {};
+        }
         obj = obj[keys[i]];
       }
     }
@@ -116,12 +135,22 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
     }
   };
 
+  // Get geographic info with fallbacks
+  const geo = record.metadata.geographic_info || {};
+  const landmarkName = geo.location_name || record.metadata.entity_name || '';
+  const city = geo.city || record.metadata.location?.city || '';
+  const district = geo.district || record.metadata.location?.district || '';
+  const lat = geo.lat || record.metadata.location?.lat_long?.[0] || '';
+  const lng = geo.lon || record.metadata.location?.lat_long?.[1] || '';
+  const sourceUrl = geo.page_url || '';
+  const license = geo.license_info || '';
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Annotation Interface</h2>
-          <p className="text-muted-foreground">Chỉnh sửa và xác thực dữ liệu dataset</p>
+          <p className="text-muted-foreground">Chỉnh sửa và xác thực dữ liệu dataset (← → để chuyển)</p>
         </div>
         <div className="text-right">
           <p className="text-sm text-muted-foreground">Record {currentIndex + 1} / {pendingRecords.length}</p>
@@ -129,236 +158,235 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Panel - Assets Preview */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Image className="h-4 w-4" />
-                Image Preview
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {record.assets.image_path ? (
-                <div className="aspect-video bg-muted rounded-lg flex items-center justify-center border-2 border-dashed">
-                  <div className="text-center">
-                    <Image className="h-12 w-12 mx-auto text-muted-foreground" />
-                    <p className="text-xs text-muted-foreground mt-2 px-4 break-all">
-                      {record.assets.image_path}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="aspect-video bg-muted/50 rounded-lg flex items-center justify-center">
-                  <p className="text-muted-foreground">No image</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Volume2 className="h-4 w-4" />
-                Audio Evidence
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {record.assets.audio_evidence ? (
-                <div className="space-y-3">
-                  <AudioPlayer src={record.assets.audio_evidence.path} />
-                  <div className="p-2 bg-muted/50 rounded">
-                    <p className="text-xs font-mono break-all text-muted-foreground">
-                      {record.assets.audio_evidence.path}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <Badge variant="outline">{record.assets.audio_evidence.type}</Badge>
-                    <Badge variant="outline">{record.assets.audio_evidence.duration_sec}s</Badge>
-                  </div>
-                  <div>
-                    <Label className="text-xs">Transcript</Label>
-                    <Textarea
-                      value={record.assets.audio_evidence.transcript}
-                      onChange={(e) => handleFieldChange('assets.audio_evidence.transcript', e.target.value)}
-                      className="mt-1 text-sm"
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-sm">No audio</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Middle Panel - Metadata & QA */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Metadata */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Edit3 className="h-4 w-4" />
-                Metadata
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Entity Name</Label>
-                <Input
-                  value={record.metadata.entity_name}
-                  onChange={(e) => handleFieldChange('metadata.entity_name', e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label>Topic</Label>
-                <Input
-                  value={record.metadata.topic}
-                  onChange={(e) => handleFieldChange('metadata.topic', e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label>City</Label>
-                <Input
-                  value={record.metadata.location.city}
-                  onChange={(e) => handleFieldChange('metadata.location.city', e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label>District</Label>
-                <Input
-                  value={record.metadata.location.district}
-                  onChange={(e) => handleFieldChange('metadata.location.district', e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* QA Items */}
-          {record.qa_items.map((qa, qaIndex) => (
-            <Card key={qa.qa_id}>
+      <ScrollArea className="h-[calc(100vh-250px)]">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pr-4">
+          {/* Left Panel - Assets Preview */}
+          <div className="space-y-4">
+            <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4" />
-                    {qa.qa_id}
-                  </CardTitle>
-                  <div className="flex gap-2">
-                    <Badge variant="outline">{qa.scenario}</Badge>
-                    {qa.modality_in.map(m => (
-                      <Badge key={m} className="bg-primary/10 text-primary text-xs">
-                        {m}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Image className="h-4 w-4" />
+                  Image Preview
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Scenario</Label>
-                  <Select
-                    value={qa.scenario}
-                    onValueChange={(v) => handleFieldChange(`qa_items[${qaIndex}].scenario`, v)}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="text_ask_image">Text → Image</SelectItem>
-                      <SelectItem value="audio_ask_image">Audio → Image</SelectItem>
-                      <SelectItem value="text_ask_audio">Text → Audio</SelectItem>
-                      <SelectItem value="audio_ask_audio">Audio → Audio</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <CardContent>
+                {record.assets?.image_path || record.assets?.image_url ? (
+                  <div className="aspect-video bg-muted rounded-lg flex items-center justify-center border-2 border-dashed">
+                    <div className="text-center">
+                      <Image className="h-12 w-12 mx-auto text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground mt-2 px-4 break-all">
+                        {record.assets.image_path || record.assets.image_url}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="aspect-video bg-muted/50 rounded-lg flex items-center justify-center">
+                    <p className="text-muted-foreground">No image</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-                <Separator />
-
-                <div>
-                  <Label>Query Text</Label>
-                  <Textarea
-                    value={qa.query.text || ''}
-                    onChange={(e) => handleFieldChange(`qa_items[${qaIndex}].query.text`, e.target.value || null)}
-                    className="mt-1"
-                    rows={2}
-                    placeholder="Nhập câu hỏi..."
-                  />
-                </div>
-
-                {qa.query.audio_query_path && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Volume2 className="h-4 w-4" />
+                  Audio Evidence
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {record.assets?.audio_evidence ? (
                   <div className="space-y-3">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Audio Query</Label>
-                      <AudioPlayer src={qa.query.audio_query_path} className="mt-1" />
+                    <AudioPlayer src={record.assets.audio_evidence.path} />
+                    <div className="p-2 bg-muted/50 rounded">
+                      <p className="text-xs font-mono break-all text-muted-foreground">
+                        {record.assets.audio_evidence.path}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <Badge variant="outline">{record.assets.audio_evidence.type}</Badge>
+                      <Badge variant="outline">{record.assets.audio_evidence.duration_sec}s</Badge>
                     </div>
                     <div>
-                      <Label>Audio Query Transcript</Label>
+                      <Label className="text-xs">Transcript</Label>
                       <Textarea
-                        value={qa.query.audio_query_transcript || ''}
-                        onChange={(e) => handleFieldChange(`qa_items[${qaIndex}].query.audio_query_transcript`, e.target.value || null)}
-                        className="mt-1"
-                        rows={2}
+                        value={record.assets.audio_evidence.transcript || ''}
+                        onChange={(e) => handleFieldChange('assets.audio_evidence.transcript', e.target.value)}
+                        className="mt-1 text-sm"
+                        rows={3}
                       />
                     </div>
                   </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">No audio</p>
                 )}
+              </CardContent>
+            </Card>
+          </div>
 
-                <Separator />
-
-                <div>
-                  <Label>Target Answer</Label>
-                  <Textarea
-                    value={qa.target.answer}
-                    onChange={(e) => handleFieldChange(`qa_items[${qaIndex}].target.answer`, e.target.value)}
-                    className="mt-1"
-                    rows={3}
-                  />
-                </div>
-
+          {/* Middle Panel - Metadata & QA */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Metadata - New Format */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  Landmark Metadata
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Evidence Source</Label>
-                    <Select
-                      value={qa.target.evidence_source}
-                      onValueChange={(v) => handleFieldChange(`qa_items[${qaIndex}].target.evidence_source`, v)}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="image">Image</SelectItem>
-                        <SelectItem value="audio">Audio</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="col-span-2">
+                    <Label>Landmark Name (location_name)</Label>
+                    <Input
+                      value={landmarkName}
+                      onChange={(e) => handleFieldChange('metadata.geographic_info.location_name', e.target.value)}
+                      className="mt-1"
+                      placeholder="Tên địa danh..."
+                    />
                   </div>
                   <div>
-                    <Label>Answer Format</Label>
-                    <Select
-                      value={qa.target.answer_format}
-                      onValueChange={(v) => handleFieldChange(`qa_items[${qaIndex}].target.answer_format`, v)}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="short_phrase">Short Phrase</SelectItem>
-                        <SelectItem value="one_sentence">One Sentence</SelectItem>
-                        <SelectItem value="free">Free</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>City</Label>
+                    <Input
+                      value={city}
+                      onChange={(e) => handleFieldChange('metadata.geographic_info.city', e.target.value)}
+                      className="mt-1"
+                      placeholder="Thành phố..."
+                    />
+                  </div>
+                  <div>
+                    <Label>District</Label>
+                    <Input
+                      value={district}
+                      onChange={(e) => handleFieldChange('metadata.geographic_info.district', e.target.value)}
+                      className="mt-1"
+                      placeholder="Quận/Huyện..."
+                    />
+                  </div>
+                  <div>
+                    <Label>Latitude (lat)</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={lat}
+                      onChange={(e) => handleFieldChange('metadata.geographic_info.lat', e.target.value)}
+                      className="mt-1"
+                      placeholder="10.123456"
+                    />
+                  </div>
+                  <div>
+                    <Label>Longitude (lon → lng)</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={lng}
+                      onChange={(e) => handleFieldChange('metadata.geographic_info.lon', e.target.value)}
+                      className="mt-1"
+                      placeholder="106.123456"
+                    />
+                  </div>
+                  <div>
+                    <Label>Source URL (page_url)</Label>
+                    <Input
+                      value={sourceUrl}
+                      onChange={(e) => handleFieldChange('metadata.geographic_info.page_url', e.target.value)}
+                      className="mt-1"
+                      placeholder="https://..."
+                    />
+                  </div>
+                  <div>
+                    <Label>License (license_info)</Label>
+                    <Input
+                      value={license}
+                      onChange={(e) => handleFieldChange('metadata.geographic_info.license_info', e.target.value)}
+                      className="mt-1"
+                      placeholder="CC BY-SA 4.0"
+                    />
                   </div>
                 </div>
               </CardContent>
             </Card>
-          ))}
+
+            {/* QA Items */}
+            {record.qa_items.map((qa, qaIndex) => (
+              <Card key={qa.qa_id}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" />
+                      QA #{qaIndex + 1}
+                    </CardTitle>
+                    <div className="flex gap-2">
+                      <Badge variant="outline">{getQAType(qa)}</Badge>
+                      {qa.modality_in?.map(m => (
+                        <Badge key={m} className="bg-primary/10 text-primary text-xs">
+                          {m}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label>Type</Label>
+                    <Select
+                      value={getQAType(qa)}
+                      onValueChange={(v) => {
+                        // Update scenario based on type
+                        let scenario = qa.scenario;
+                        if (v === 'ask_image') scenario = 'text_ask_image';
+                        else if (v === 'ask_audio') scenario = 'text_ask_audio';
+                        else scenario = 'text_ask_image'; // ask_both defaults to image
+                        handleFieldChange(`qa_items[${qaIndex}].scenario`, scenario);
+                      }}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ask_image">ask_image</SelectItem>
+                        <SelectItem value="ask_audio">ask_audio</SelectItem>
+                        <SelectItem value="ask_both">ask_both</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <Label>Question (q)</Label>
+                    <Textarea
+                      value={qa.query?.text || qa.query?.audio_query_transcript || ''}
+                      onChange={(e) => handleFieldChange(`qa_items[${qaIndex}].query.text`, e.target.value)}
+                      className="mt-1"
+                      rows={2}
+                      placeholder="Nhập câu hỏi..."
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Answer (a)</Label>
+                    <Textarea
+                      value={qa.target?.answer || ''}
+                      onChange={(e) => handleFieldChange(`qa_items[${qaIndex}].target.answer`, e.target.value)}
+                      className="mt-1"
+                      rows={3}
+                      placeholder="Nhập câu trả lời..."
+                    />
+                  </div>
+
+                  {qa.query?.audio_query_path && (
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Audio Query</Label>
+                      <AudioPlayer src={qa.query.audio_query_path} className="mt-1" />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
-      </div>
+      </ScrollArea>
 
       {/* Action Bar */}
       <Card className="sticky bottom-6">
@@ -400,4 +428,14 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
       </Card>
     </div>
   );
+}
+
+function getQAType(qa: QAItem): string {
+  if (qa.scenario === 'text_ask_audio' || qa.scenario === 'audio_ask_audio') {
+    return 'ask_audio';
+  }
+  if (qa.target?.evidence_source === 'audio' && qa.scenario?.includes('image')) {
+    return 'ask_both';
+  }
+  return 'ask_image';
 }
