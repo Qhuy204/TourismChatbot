@@ -1,10 +1,12 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   Shuffle, 
   Play, 
@@ -13,7 +15,8 @@ import {
   AlertTriangle,
   RefreshCw,
   BarChart3,
-  ChevronRight
+  ChevronRight,
+  ChevronLeft
 } from 'lucide-react';
 import { DatasetRecord } from '@/types/dataset';
 import { toast } from 'sonner';
@@ -38,6 +41,24 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
   const [currentCheckIndex, setCurrentCheckIndex] = useState(0);
 
   const sampleSize = Math.ceil(records.length * 0.1);
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (!isRunning) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        goToPrev();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handlePass();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRunning, currentCheckIndex, sampledRecords]);
 
   const generateSample = useCallback(() => {
     const shuffled = [...records].sort(() => Math.random() - 0.5);
@@ -98,6 +119,8 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
   };
 
   const handlePass = () => {
+    if (!currentRecord) return;
+    
     const issues = validateRecord(currentRecord);
     const result: QACheckResult = {
       recordId: currentRecord.record_id,
@@ -120,6 +143,8 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
   };
 
   const handleFail = () => {
+    if (!currentRecord) return;
+    
     const result: QACheckResult = {
       recordId: currentRecord.record_id,
       entityName: currentRecord.metadata.entity_name,
@@ -140,6 +165,12 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
     } else {
       setIsRunning(false);
       toast.success('QA Check completed!');
+    }
+  };
+
+  const goToPrev = () => {
+    if (currentCheckIndex > 0) {
+      setCurrentCheckIndex(currentCheckIndex - 1);
     }
   };
 
@@ -199,6 +230,8 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
               <AlertDescription>
                 Hệ thống sẽ tự động validate format và consistency của dữ liệu. 
                 Bạn sẽ review kết quả và quyết định pass/fail cho từng record.
+                <br />
+                <strong>Phím tắt:</strong> ← Quay lại | → Pass & Next
               </AlertDescription>
             </Alert>
 
@@ -207,11 +240,21 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Lấy mẫu mới
               </Button>
-              <Button onClick={startCheck} className="flex-1">
+              <Button onClick={startCheck} className="flex-1" disabled={records.length === 0}>
                 <Play className="h-4 w-4 mr-2" />
                 Bắt đầu kiểm tra ({sampledRecords.length || sampleSize} records)
               </Button>
             </div>
+
+            {records.length === 0 && (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Chưa có data</AlertTitle>
+                <AlertDescription>
+                  Vui lòng import data trước khi chạy QA Check.
+                </AlertDescription>
+              </Alert>
+            )}
 
             {sampledRecords.length > 0 && (
               <div className="mt-4">
@@ -240,33 +283,35 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
               <CardTitle>Kết quả kiểm tra</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {checkResults.map((result) => (
-                  <div 
-                    key={result.recordId} 
-                    className={`p-3 rounded-lg border flex items-center justify-between ${
-                      result.passed ? 'bg-accent/50 border-accent-foreground/20' : 'bg-destructive/10 border-destructive/20'
-                    }`}
-                  >
-                    <div>
-                      <p className="font-medium text-sm">{result.entityName}</p>
-                      <p className="text-xs text-muted-foreground">{result.recordId}</p>
+              <ScrollArea className="h-64">
+                <div className="space-y-2">
+                  {checkResults.map((result) => (
+                    <div 
+                      key={result.recordId} 
+                      className={`p-3 rounded-lg border flex items-center justify-between ${
+                        result.passed ? 'bg-accent/50 border-accent-foreground/20' : 'bg-destructive/10 border-destructive/20'
+                      }`}
+                    >
+                      <div>
+                        <p className="font-medium text-sm">{result.entityName}</p>
+                        <p className="text-xs text-muted-foreground">{result.recordId}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {result.issues.length > 0 && (
+                          <Badge variant="outline" className="text-xs">
+                            {result.issues.length} issue(s)
+                          </Badge>
+                        )}
+                        {result.passed ? (
+                          <CheckCircle2 className="h-5 w-5 text-accent-foreground" />
+                        ) : (
+                          <XCircle className="h-5 w-5 text-destructive" />
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {result.issues.length > 0 && (
-                        <Badge variant="outline" className="text-xs">
-                          {result.issues.length} issue(s)
-                        </Badge>
-                      )}
-                      {result.passed ? (
-                        <CheckCircle2 className="h-5 w-5 text-accent-foreground" />
-                      ) : (
-                        <XCircle className="h-5 w-5 text-destructive" />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </ScrollArea>
             </CardContent>
           </Card>
         )}
@@ -274,124 +319,153 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
     );
   }
 
-  // Running mode - show current record for review
+  // Running mode - show current record for review in a dialog
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">QA Check - Record {currentCheckIndex + 1}/{sampledRecords.length}</h2>
-          <p className="text-muted-foreground">{currentRecord.metadata.entity_name}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-sm text-muted-foreground">Progress</p>
-          <Progress value={(currentCheckIndex / sampledRecords.length) * 100} className="w-48 h-2 mt-1" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Record Info */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Record Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Record ID</p>
-              <p className="font-mono text-sm">{currentRecord.record_id}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Entity</p>
-              <p className="font-medium">{currentRecord.metadata.entity_name}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Location</p>
-              <p>{currentRecord.metadata.location.city}, {currentRecord.metadata.location.district}</p>
-            </div>
-            <Separator />
-            <div>
-              <p className="text-xs text-muted-foreground mb-2">Assets</p>
-              <div className="flex gap-2">
-                <Badge variant={currentRecord.assets.image_path ? 'default' : 'outline'}>
-                  Image: {currentRecord.assets.image_path ? '✓' : '✗'}
-                </Badge>
-                <Badge variant={currentRecord.assets.audio_evidence ? 'default' : 'outline'}>
-                  Audio: {currentRecord.assets.audio_evidence ? '✓' : '✗'}
-                </Badge>
+    <Dialog open={isRunning} onOpenChange={(open) => !open && setIsRunning(false)}>
+      <DialogContent className="max-w-4xl max-h-[90vh] p-0 overflow-hidden">
+        <DialogHeader className="px-6 py-4 border-b shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {/* Navigation */}
+              <div className="flex items-center gap-1">
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={goToPrev}
+                  disabled={currentCheckIndex <= 0}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm text-muted-foreground px-2">
+                  {currentCheckIndex + 1} / {sampledRecords.length}
+                </span>
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={goNext}
+                  disabled={currentCheckIndex >= sampledRecords.length - 1}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <div>
+                <DialogTitle>QA Check - {currentRecord?.metadata.entity_name}</DialogTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Phím tắt: ← Quay lại | → Pass & Next
+                </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+            <Progress value={(currentCheckIndex / sampledRecords.length) * 100} className="w-32 h-2" />
+          </div>
+        </DialogHeader>
 
-        {/* Validation Results */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Auto Validation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const issues = validateRecord(currentRecord);
-              if (issues.length === 0) {
-                return (
-                  <Alert className="bg-accent/50 border-accent-foreground/20">
-                    <CheckCircle2 className="h-4 w-4 text-accent-foreground" />
-                    <AlertTitle>Passed</AlertTitle>
-                    <AlertDescription>
-                      Không tìm thấy lỗi format hoặc consistency
-                    </AlertDescription>
-                  </Alert>
-                );
-              }
-              return (
-                <div className="space-y-2">
-                  <Alert className="bg-destructive/10 border-destructive/20">
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
-                    <AlertTitle>Found {issues.length} issue(s)</AlertTitle>
-                  </Alert>
-                  <ul className="space-y-1">
-                    {issues.map((issue, i) => (
-                      <li key={i} className="text-sm text-destructive flex items-start gap-2">
-                        <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                        {issue}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
-      </div>
+        <ScrollArea className="flex-1 max-h-[60vh]">
+          <div className="p-6 space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Record Info */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Record Details</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Record ID</p>
+                    <p className="font-mono text-sm">{currentRecord?.record_id}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Entity</p>
+                    <p className="font-medium">{currentRecord?.metadata.entity_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Location</p>
+                    <p>{currentRecord?.metadata.location.city}, {currentRecord?.metadata.location.district}</p>
+                  </div>
+                  <Separator />
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-2">Assets</p>
+                    <div className="flex gap-2">
+                      <Badge variant={currentRecord?.assets.image_path ? 'default' : 'outline'}>
+                        Image: {currentRecord?.assets.image_path ? '✓' : '✗'}
+                      </Badge>
+                      <Badge variant={currentRecord?.assets.audio_evidence ? 'default' : 'outline'}>
+                        Audio: {currentRecord?.assets.audio_evidence ? '✓' : '✗'}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-      {/* QA Items */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">QA Items ({currentRecord.qa_items.length})</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {currentRecord.qa_items.map((qa, index) => (
-            <div key={qa.qa_id} className="p-4 bg-muted/50 rounded-lg">
-              <div className="flex items-center justify-between mb-3">
-                <Badge variant="outline">{qa.qa_id}</Badge>
-                <Badge>{qa.scenario}</Badge>
-              </div>
-              <div className="space-y-2">
-                <div>
-                  <p className="text-xs text-muted-foreground">Query</p>
-                  <p className="text-sm">{qa.query.text || qa.query.audio_query_transcript || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Answer</p>
-                  <p className="text-sm font-medium">{qa.target.answer}</p>
-                </div>
-              </div>
+              {/* Validation Results */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Auto Validation</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {currentRecord && (() => {
+                    const issues = validateRecord(currentRecord);
+                    if (issues.length === 0) {
+                      return (
+                        <Alert className="bg-accent/50 border-accent-foreground/20">
+                          <CheckCircle2 className="h-4 w-4 text-accent-foreground" />
+                          <AlertTitle>Passed</AlertTitle>
+                          <AlertDescription>
+                            Không tìm thấy lỗi format hoặc consistency
+                          </AlertDescription>
+                        </Alert>
+                      );
+                    }
+                    return (
+                      <div className="space-y-2">
+                        <Alert className="bg-destructive/10 border-destructive/20">
+                          <AlertTriangle className="h-4 w-4 text-destructive" />
+                          <AlertTitle>Found {issues.length} issue(s)</AlertTitle>
+                        </Alert>
+                        <ul className="space-y-1">
+                          {issues.map((issue, i) => (
+                            <li key={i} className="text-sm text-destructive flex items-start gap-2">
+                              <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                              {issue}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
             </div>
-          ))}
-        </CardContent>
-      </Card>
 
-      {/* Action Bar */}
-      <Card className="sticky bottom-6">
-        <CardContent className="p-4">
+            {/* QA Items */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">QA Items ({currentRecord?.qa_items.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {currentRecord?.qa_items.map((qa, index) => (
+                  <div key={qa.qa_id} className="p-4 bg-muted/50 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <Badge variant="outline">{qa.qa_id}</Badge>
+                      <Badge>{qa.scenario}</Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Query</p>
+                        <p className="text-sm">{qa.query.text || qa.query.audio_query_transcript || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Answer</p>
+                        <p className="text-sm font-medium">{qa.target.answer}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </ScrollArea>
+
+        {/* Action Bar */}
+        <div className="px-6 py-4 border-t shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
@@ -414,8 +488,8 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

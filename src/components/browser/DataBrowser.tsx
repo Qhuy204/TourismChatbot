@@ -1,26 +1,31 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { 
   Search, 
   ChevronLeft, 
   ChevronRight,
-  Image,
-  Volume2,
-  MapPin,
-  LayoutGrid,
-  List,
   CheckCircle2,
   XCircle,
   AlertTriangle,
   Trash2,
-  ArrowUpDown
+  ArrowUpDown,
+  Eye
 } from 'lucide-react';
-import { DatasetRecord, Scenario } from '@/types/dataset';
+import { DatasetRecord } from '@/types/dataset';
 import { RecordDetailModal } from './RecordDetailModal';
 import { toast } from 'sonner';
 
@@ -30,9 +35,9 @@ interface DataBrowserProps {
   onRecordsUpdate?: (records: DatasetRecord[]) => void;
 }
 
-const ITEMS_PER_PAGE = 12;
+const ITEMS_PER_PAGE = 100;
+const MAX_LINES = 10000;
 
-type ViewMode = 'grid' | 'list';
 type SortBy = 'id' | 'created' | 'updated' | 'status' | 'name';
 type SortOrder = 'asc' | 'desc';
 
@@ -42,7 +47,6 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
   const [scenarioFilter, setScenarioFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedRecord, setSelectedRecord] = useState<DatasetRecord | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<SortBy>('id');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -84,7 +88,8 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
       return sortOrder === 'asc' ? comparison : -comparison;
     });
 
-    return filtered;
+    // Limit to MAX_LINES
+    return filtered.slice(0, MAX_LINES);
   }, [records, searchQuery, statusFilter, scenarioFilter, sortBy, sortOrder]);
 
   const totalPages = Math.ceil(filteredAndSortedRecords.length / ITEMS_PER_PAGE);
@@ -148,45 +153,30 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
     setSelectedIds(new Set());
   };
 
-  const getImageSrc = (record: DatasetRecord) => {
-    // Prefer image_url over image_path for display
-    if (record.assets.image_url) {
-      return record.assets.image_url;
+  // Navigate to adjacent record
+  const handleNavigateRecord = useCallback((direction: 'prev' | 'next') => {
+    if (!selectedRecord) return;
+    
+    const currentIndex = filteredAndSortedRecords.findIndex(r => r.record_id === selectedRecord.record_id);
+    if (currentIndex === -1) return;
+    
+    const newIndex = direction === 'prev' ? currentIndex - 1 : currentIndex + 1;
+    if (newIndex >= 0 && newIndex < filteredAndSortedRecords.length) {
+      setSelectedRecord(filteredAndSortedRecords[newIndex]);
     }
-    // If image_path is a URL, use it directly
-    if (record.assets.image_path?.startsWith('http')) {
-      return record.assets.image_path;
-    }
-    return null;
-  };
+  }, [selectedRecord, filteredAndSortedRecords]);
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-6 space-y-4 h-full flex flex-col">
+      <div className="flex items-center justify-between shrink-0">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Data Browser</h2>
-          <p className="text-muted-foreground">Duyệt và quản lý dataset theo path và metadata</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant={viewMode === 'grid' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('grid')}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'list' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setViewMode('list')}
-          >
-            <List className="h-4 w-4" />
-          </Button>
+          <p className="text-muted-foreground">Duyệt và quản lý dataset (max {MAX_LINES.toLocaleString()} records)</p>
         </div>
       </div>
 
       {/* Filters */}
-      <Card>
+      <Card className="shrink-0">
         <CardContent className="p-4">
           <div className="flex flex-wrap gap-4">
             <div className="flex-1 min-w-64">
@@ -252,6 +242,7 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
           <div className="mt-3 flex items-center justify-between">
             <span className="text-sm text-muted-foreground">
               Hiển thị {paginatedRecords.length} / {filteredAndSortedRecords.length} records
+              {filteredAndSortedRecords.length >= MAX_LINES && ` (limited to ${MAX_LINES.toLocaleString()})`}
             </span>
             {selectedIds.size > 0 && (
               <div className="flex items-center gap-2">
@@ -278,177 +269,103 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
         </CardContent>
       </Card>
 
-      {/* Select All */}
-      {paginatedRecords.length > 0 && (
-        <div className="flex items-center gap-2">
-          <Checkbox
-            checked={selectedIds.size === paginatedRecords.length && paginatedRecords.length > 0}
-            onCheckedChange={toggleSelectAll}
-          />
-          <span className="text-sm text-muted-foreground">Chọn tất cả trang này</span>
-        </div>
-      )}
-
-      {/* Records Display */}
-      {viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {paginatedRecords.map((record) => {
-            const imageSrc = getImageSrc(record);
-            return (
-              <Card 
-                key={record.record_id} 
-                className={`cursor-pointer hover:shadow-lg transition-all hover:border-primary/50 ${selectedIds.has(record.record_id) ? 'ring-2 ring-primary' : ''}`}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start gap-2">
-                    <Checkbox
-                      checked={selectedIds.has(record.record_id)}
-                      onCheckedChange={() => toggleSelection(record.record_id)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <div className="flex-1 min-w-0" onClick={() => setSelectedRecord(record)}>
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1 min-w-0">
-                          <CardTitle className="text-sm font-medium line-clamp-1">
-                            {record.metadata.entity_name}
-                          </CardTitle>
-                          <p className="text-xs text-muted-foreground font-mono">
-                            {record.record_id}
-                          </p>
-                        </div>
-                        <Badge className={getStatusColor(record.status)}>
-                          {record.status || 'pending'}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0" onClick={() => setSelectedRecord(record)}>
-                  {/* Image Preview */}
-                  {imageSrc && (
-                    <div className="aspect-video mb-3 rounded-lg overflow-hidden bg-muted">
-                      <img 
-                        src={imageSrc} 
-                        alt={record.metadata.entity_name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
+      {/* Dataframe Table */}
+      <Card className="flex-1 min-h-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <Table>
+            <TableHeader className="sticky top-0 bg-background z-10">
+              <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={selectedIds.size === paginatedRecords.length && paginatedRecords.length > 0}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                </TableHead>
+                <TableHead className="w-12">#</TableHead>
+                <TableHead className="min-w-[200px]">ID</TableHead>
+                <TableHead className="min-w-[200px]">Landmark Name</TableHead>
+                <TableHead className="min-w-[120px]">City</TableHead>
+                <TableHead className="min-w-[100px]">Status</TableHead>
+                <TableHead className="min-w-[80px]">QA</TableHead>
+                <TableHead className="min-w-[80px]">Image</TableHead>
+                <TableHead className="min-w-[80px]">Audio</TableHead>
+                <TableHead className="w-20">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedRecords.map((record, index) => {
+                const rowNumber = (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
+                const hasImage = !!(record.assets.image_path || record.assets.image_url);
+                const hasAudio = !!record.assets.audio_evidence;
+                
+                return (
+                  <TableRow 
+                    key={record.record_id}
+                    className={selectedIds.has(record.record_id) ? 'bg-primary/5' : ''}
+                  >
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(record.record_id)}
+                        onCheckedChange={() => toggleSelection(record.record_id)}
                       />
-                    </div>
-                  )}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <MapPin className="h-3 w-3" />
-                      <span>{record.metadata.location.city}, {record.metadata.location.district}</span>
-                    </div>
-
-                    <div className="flex gap-2">
-                      {record.assets.image_path && (
-                        <div className="flex items-center gap-1 text-xs bg-chart-1/10 text-chart-1 px-2 py-1 rounded">
-                          <Image className="h-3 w-3" />
-                          Image
-                        </div>
-                      )}
-                      {record.assets.audio_evidence && (
-                        <div className="flex items-center gap-1 text-xs bg-chart-3/10 text-chart-3 px-2 py-1 rounded">
-                          <Volume2 className="h-3 w-3" />
-                          Audio
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-1">
-                      {record.metadata.tags.slice(0, 3).map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-
-                    <div className="text-xs text-muted-foreground">
-                      {record.qa_items.length} QA items
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {paginatedRecords.map((record) => {
-            const imageSrc = getImageSrc(record);
-            return (
-              <Card 
-                key={record.record_id} 
-                className={`cursor-pointer hover:shadow-md transition-all ${selectedIds.has(record.record_id) ? 'ring-2 ring-primary' : ''}`}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-4">
-                    <Checkbox
-                      checked={selectedIds.has(record.record_id)}
-                      onCheckedChange={() => toggleSelection(record.record_id)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    
-                    {/* Thumbnail */}
-                    <div 
-                      className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0 flex items-center justify-center"
-                      onClick={() => setSelectedRecord(record)}
-                    >
-                      {imageSrc ? (
-                        <img 
-                          src={imageSrc} 
-                          alt={record.metadata.entity_name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {rowNumber}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {record.record_id}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {record.metadata.entity_name}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {record.metadata.location.city}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getStatusColor(record.status)}>
+                        {record.status || 'pending'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center text-sm">
+                      {record.qa_items.length}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {hasImage ? (
+                        <span className="text-accent-foreground">✓</span>
                       ) : (
-                        <Image className="h-6 w-6 text-muted-foreground" />
+                        <span className="text-muted-foreground">-</span>
                       )}
-                    </div>
-
-                    <div className="flex-1 min-w-0" onClick={() => setSelectedRecord(record)}>
-                      <div className="flex items-center gap-3">
-                        <h4 className="font-medium truncate">{record.metadata.entity_name}</h4>
-                        <Badge className={getStatusColor(record.status)}>
-                          {record.status || 'pending'}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground font-mono">{record.record_id}</p>
-                      <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {record.metadata.location.city}
-                        </span>
-                        <span>{record.qa_items.length} QA items</span>
-                        {record.createdAt && (
-                          <span>Tạo: {new Date(record.createdAt).toLocaleDateString('vi-VN')}</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      {record.metadata.tags.slice(0, 2).map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {hasAudio ? (
+                        <span className="text-accent-foreground">✓</span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button 
+                        size="sm" 
+                        variant="ghost"
+                        onClick={() => setSelectedRecord(record)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </ScrollArea>
+      </Card>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
+      <div className="flex items-center justify-between shrink-0">
+        <p className="text-sm text-muted-foreground">
+          Trang {currentPage} / {totalPages || 1}
+        </p>
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -456,26 +373,28 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
             disabled={currentPage === 1}
           >
             <ChevronLeft className="h-4 w-4" />
+            Trước
           </Button>
-          <span className="text-sm text-muted-foreground px-4">
-            Trang {currentPage} / {totalPages}
-          </span>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
+            disabled={currentPage === totalPages || totalPages === 0}
           >
+            Sau
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-      )}
+      </div>
 
       {/* Detail Modal */}
       <RecordDetailModal
         record={selectedRecord}
         onClose={() => setSelectedRecord(null)}
         onUpdate={onRecordUpdate}
+        onNavigate={handleNavigateRecord}
+        currentIndex={selectedRecord ? filteredAndSortedRecords.findIndex(r => r.record_id === selectedRecord.record_id) : -1}
+        totalRecords={filteredAndSortedRecords.length}
       />
     </div>
   );
