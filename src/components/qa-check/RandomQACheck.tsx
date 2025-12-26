@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 
 interface RandomQACheckProps {
   records: DatasetRecord[];
+  totalCount?: number;
   onRecordUpdate: (record: DatasetRecord) => void;
   onStartAnnotation?: (recordIds: string[]) => void;
 }
@@ -31,11 +32,12 @@ interface QACheckResult {
   checkedAt: string;
 }
 
-export function RandomQACheck({ records, onRecordUpdate, onStartAnnotation }: RandomQACheckProps) {
+export function RandomQACheck({ records, totalCount, onRecordUpdate, onStartAnnotation }: RandomQACheckProps) {
   const [sampledRecords, setSampledRecords] = useState<DatasetRecord[]>([]);
   const [checkResults, setCheckResults] = useState<QACheckResult[]>([]);
 
-  const sampleSize = Math.ceil(records.length * 0.1);
+  const actualTotal = totalCount || records.length;
+  const sampleSize = Math.ceil(actualTotal * 0.1);
 
   const generateSample = useCallback(() => {
     const shuffled = [...records].sort(() => Math.random() - 0.5);
@@ -87,7 +89,7 @@ export function RandomQACheck({ records, onRecordUpdate, onStartAnnotation }: Ra
           <CardContent className="p-6 text-center">
             <BarChart3 className="h-12 w-12 mx-auto text-chart-1 mb-4" />
             <h3 className="text-lg font-semibold">Total Dataset</h3>
-            <p className="text-3xl font-bold text-chart-1 mt-2">{records.length}</p>
+            <p className="text-3xl font-bold text-chart-1 mt-2">{actualTotal.toLocaleString()}</p>
             <p className="text-sm text-muted-foreground">total records</p>
           </CardContent>
         </Card>

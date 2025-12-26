@@ -10,6 +10,7 @@ import { AdminDashboard } from '@/components/dashboard/AdminDashboard';
 import { UserDashboard } from '@/components/dashboard/UserDashboard';
 import { DataBrowser } from '@/components/browser/DataBrowser';
 import { AnnotationInterface } from '@/components/annotate/AnnotationInterface';
+import { TaskAnnotation } from '@/components/annotate/TaskAnnotation';
 import { RandomQACheck } from '@/components/qa-check/RandomQACheck';
 import { CrawlInterface } from '@/components/crawl/CrawlInterface';
 import { ImportInterface } from '@/components/import/ImportInterface';
@@ -27,9 +28,9 @@ const Index = () => {
   const [currentView, setCurrentView] = useState('dashboard');
   
   // Use database-synced data
-  const { records, loading: dataLoading, addRecords, updateRecord, deleteRecords, refetch, calculateStats } = useDataset();
+  const { records, loading: dataLoading, totalCount, addRecords, updateRecord, deleteRecords, refetch, calculateStats } = useDataset();
   const { users } = useUsers();
-  const { tasks, createTask } = useTasks();
+  const { tasks, createTask, refetch: refetchTasks } = useTasks();
   
   // Annotation navigation state
   const [annotateRecordId, setAnnotateRecordId] = useState<string | undefined>();
@@ -127,13 +128,22 @@ const Index = () => {
           <UserDashboard 
             records={records}
             tasks={userTasks}
-            onNavigateToAnnotate={() => setCurrentView('annotate')}
+            onNavigateToAnnotate={() => setCurrentView('task-annotate')}
+          />
+        );
+      case 'task-annotate':
+        return (
+          <TaskAnnotation 
+            tasks={isAdmin ? tasks : userTasks}
+            onBack={() => setCurrentView('dashboard')}
+            onTaskUpdate={refetchTasks}
           />
         );
       case 'browser':
         return (
           <DataBrowser 
             records={records} 
+            totalCount={totalCount}
             onRecordUpdate={handleRecordUpdate} 
             onRecordsUpdate={handleRecordsUpdate}
             onNavigateToAnnotate={handleNavigateToAnnotate}
@@ -152,6 +162,7 @@ const Index = () => {
         return (
           <RandomQACheck 
             records={records} 
+            totalCount={totalCount}
             onRecordUpdate={handleRecordUpdate}
             onStartAnnotation={handleStartQAAnnotation}
           />

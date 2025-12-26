@@ -18,10 +18,7 @@ export function useTasks() {
     try {
       let query = supabase
         .from('annotation_tasks')
-        .select(`
-          *,
-          profiles:assigned_to(display_name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       // Non-admins only see their own tasks
@@ -44,6 +41,17 @@ export function useTasks() {
             .select('status')
             .eq('task_id', task.id);
 
+          // Fetch assignee name separately
+          let assignee_name = undefined;
+          if (task.assigned_to) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('display_name')
+              .eq('user_id', task.assigned_to)
+              .single();
+            assignee_name = profile?.display_name || 'Unknown';
+          }
+
           const progress: TaskProgress = {
             total: taskRecords?.length || 0,
             completed: taskRecords?.filter(r => r.status === 'completed').length || 0,
@@ -54,7 +62,7 @@ export function useTasks() {
 
           return {
             ...task,
-            assignee_name: task.profiles?.display_name,
+            assignee_name,
             progress,
           };
         })
