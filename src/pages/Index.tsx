@@ -10,6 +10,7 @@ import { CrawlInterface } from '@/components/crawl/CrawlInterface';
 import { ImportInterface } from '@/components/import/ImportInterface';
 import { ExportInterface } from '@/components/export/ExportInterface';
 import { SettingsInterface } from '@/components/settings/SettingsInterface';
+import { UserSettingsDialog } from '@/components/settings/UserSettingsDialog';
 import { calculateStats } from '@/lib/mockData';
 import { DatasetRecord } from '@/types/dataset';
 import { Loader2 } from 'lucide-react';
@@ -23,6 +24,9 @@ const Index = () => {
   // Annotation navigation state
   const [annotateRecordId, setAnnotateRecordId] = useState<string | undefined>();
   const [annotateFilteredIds, setAnnotateFilteredIds] = useState<string[] | undefined>();
+  
+  // User settings dialog
+  const [showUserSettings, setShowUserSettings] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -127,10 +131,19 @@ const Index = () => {
 
   return (
     <div className="flex min-h-screen h-screen bg-background overflow-hidden">
-      <Sidebar currentView={currentView} onViewChange={handleViewChange} />
+      <Sidebar 
+        currentView={currentView} 
+        onViewChange={handleViewChange}
+        onOpenSettings={() => setShowUserSettings(true)}
+      />
       <main className="flex-1 overflow-auto">
         {renderContent()}
       </main>
+      
+      <UserSettingsDialog 
+        open={showUserSettings} 
+        onOpenChange={setShowUserSettings} 
+      />
     </div>
   );
 };
