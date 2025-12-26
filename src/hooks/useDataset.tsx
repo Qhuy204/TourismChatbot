@@ -4,6 +4,8 @@ import { DatasetRecord, DatasetStats } from '@/types/dataset';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { toast } from 'sonner';
+import { validateDatasetRecords } from '@/lib/validation';
+import { mapErrorToUserMessage } from '@/lib/errorMessages';
 
 // Global cache to persist data across component mounts
 let globalRecordsCache: DatasetRecord[] | null = null;
@@ -163,12 +165,35 @@ export function useDataset() {
     }
 
     try {
+      // Validate all records before insertion
+      const validationResult = validateDatasetRecords(newRecords);
+      
+      if (validationResult.invalidCount > 0) {
+        const errorSummary = validationResult.errors
+          .slice(0, 3)
+          .map(e => `Record ${e.index + 1}: ${e.errors[0]}`)
+          .join('; ');
+        
+        if (validationResult.validRecords.length === 0) {
+          toast.error(`Không có record hợp lệ. ${errorSummary}`);
+          return false;
+        }
+        
+        toast.warning(`${validationResult.invalidCount} records không hợp lệ sẽ bị bỏ qua. ${errorSummary}`);
+      }
+
+      const recordsToInsert = validationResult.validRecords;
+      if (recordsToInsert.length === 0) {
+        toast.error('Không có dữ liệu hợp lệ để thêm');
+        return false;
+      }
+
       const BATCH_SIZE = 500;
       let successCount = 0;
       let errorCount = 0;
 
-      for (let i = 0; i < newRecords.length; i += BATCH_SIZE) {
-        const batch = newRecords.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < recordsToInsert.length; i += BATCH_SIZE) {
+        const batch = recordsToInsert.slice(i, i + BATCH_SIZE);
         
         const inserts = batch.map(record => ({
           record_id: record.id,
@@ -188,9 +213,9 @@ export function useDataset() {
           successCount += batch.length;
         }
 
-        if (newRecords.length > BATCH_SIZE) {
-          const progress = Math.min(100, Math.round((i + batch.length) / newRecords.length * 100));
-          toast.info(`Đang import: ${progress}% (${successCount}/${newRecords.length})`, {
+        if (recordsToInsert.length > BATCH_SIZE) {
+          const progress = Math.min(100, Math.round((i + batch.length) / recordsToInsert.length * 100));
+          toast.info(`Đang import: ${progress}% (${successCount}/${recordsToInsert.length})`, {
             id: 'import-progress',
           });
         }
@@ -210,7 +235,7 @@ export function useDataset() {
       return successCount > 0;
     } catch (error) {
       console.error('Error adding records:', error);
-      toast.error('Lỗi khi thêm dữ liệu');
+      toast.error(mapErrorToUserMessage(error, 'Lỗi khi thêm dữ liệu'));
       return false;
     }
   }, [user, isAdmin, fetchInitialRecords]);

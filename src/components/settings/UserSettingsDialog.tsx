@@ -10,6 +10,7 @@ import { Loader2, User, Lock, Mail } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { mapErrorToUserMessage } from '@/lib/errorMessages';
 
 interface UserSettingsDialogProps {
   open: boolean;
@@ -54,8 +55,8 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
       setNewPassword('');
       setConfirmPassword('');
       onOpenChange(false);
-    } catch (error: any) {
-      toast.error(error.message || 'Không thể đổi mật khẩu');
+    } catch (error: unknown) {
+      toast.error(mapErrorToUserMessage(error, 'Không thể đổi mật khẩu'));
     } finally {
       setIsLoading(false);
     }
