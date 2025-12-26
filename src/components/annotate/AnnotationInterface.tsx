@@ -36,6 +36,7 @@ import {
 import { DatasetRecord, QAPair } from '@/types/dataset';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AnnotationInterfaceProps {
   records: DatasetRecord[];
@@ -59,32 +60,121 @@ export function AnnotationInterface({
   filteredRecordIds 
 }: AnnotationInterfaceProps) {
   // Get working records - only IDs for sidebar, load full data on demand
+  // filteredRecordIds are UUIDs (db_id), records.id is record_id (string from data)
   const workingRecordIds = useMemo(() => {
     if (filteredRecordIds && filteredRecordIds.length > 0) {
+      // filteredRecordIds are database UUIDs (db_id), so use db_id for matching
       return filteredRecordIds;
     }
-    return records.map(r => r.id);
+    // When no filter, use db_id for consistency
+    return records.map(r => r.db_id || r.id);
   }, [records, filteredRecordIds]);
 
   // Cache for loaded records
   const [recordCache, setRecordCache] = useState<Map<string, DatasetRecord>>(new Map());
+  const [loadingRecordIds, setLoadingRecordIds] = useState<Set<string>>(new Set());
 
-  // Load record data when needed
-  const loadRecord = useCallback((recordId: string) => {
-    if (recordCache.has(recordId)) return;
-    const record = records.find(r => r.id === recordId);
+  // Load record data when needed (recordId could be db_id or record.id)
+  const loadRecord = useCallback(async (recordId: string) => {
+    if (recordCache.has(recordId) || loadingRecordIds.has(recordId)) return;
+    
+    // Try to find by db_id first (for task-based annotation), then by id
+    const record = records.find(r => r.db_id === recordId || r.id === recordId);
     if (record) {
       setRecordCache(prev => new Map(prev).set(recordId, record));
+      return;
     }
-  }, [records, recordCache]);
+    
+    // If not found in local records, fetch from database (for task-based annotation)
+    setLoadingRecordIds(prev => new Set(prev).add(recordId));
+    try {
+      const { data, error } = await supabase
+        .from('dataset_records')
+        .select('*')
+        .eq('id', recordId)
+        .single();
+      
+      if (!error && data) {
+        const recordData = data.data as unknown as DatasetRecord;
+        const mapped: DatasetRecord = {
+          ...recordData,
+          status: data.status as DatasetRecord['status'],
+          db_id: data.id,
+        };
+        setRecordCache(prev => new Map(prev).set(recordId, mapped));
+      }
+    } catch (err) {
+      console.error('Error loading record:', err);
+    } finally {
+      setLoadingRecordIds(prev => {
+        const next = new Set(prev);
+        next.delete(recordId);
+        return next;
+      });
+    }
+  }, [records, recordCache, loadingRecordIds]);
+
+  // Batch load records when filteredRecordIds is provided (task-based annotation)
+  const hasLoadedFilteredRecords = useRef(false);
+  useEffect(() => {
+    if (!filteredRecordIds || filteredRecordIds.length === 0 || hasLoadedFilteredRecords.current) return;
+    
+    // Check which IDs need to be fetched from DB
+    const idsToFetch = filteredRecordIds.filter(id => 
+      !recordCache.has(id) && !records.find(r => r.db_id === id)
+    );
+    
+    if (idsToFetch.length === 0) {
+      hasLoadedFilteredRecords.current = true;
+      return;
+    }
+    
+    // Batch fetch records from database
+    const fetchRecords = async () => {
+      setLoadingRecordIds(prev => new Set([...prev, ...idsToFetch]));
+      try {
+        // Fetch in batches of 100
+        const batchSize = 100;
+        for (let i = 0; i < idsToFetch.length; i += batchSize) {
+          const batch = idsToFetch.slice(i, i + batchSize);
+          const { data, error } = await supabase
+            .from('dataset_records')
+            .select('*')
+            .in('id', batch);
+          
+          if (!error && data) {
+            const mappedRecords = new Map<string, DatasetRecord>();
+            for (const row of data) {
+              const recordData = row.data as unknown as DatasetRecord;
+              mappedRecords.set(row.id, {
+                ...recordData,
+                status: row.status as DatasetRecord['status'],
+                db_id: row.id,
+              });
+            }
+            setRecordCache(prev => new Map([...prev, ...mappedRecords]));
+          }
+        }
+      } catch (err) {
+        console.error('Error batch loading records:', err);
+      } finally {
+        setLoadingRecordIds(new Set());
+        hasLoadedFilteredRecords.current = true;
+      }
+    };
+    
+    fetchRecords();
+  }, [filteredRecordIds, records, recordCache]);
 
   // Get sidebar items (minimal data) - create from records directly for efficiency
   const allSidebarItems = useMemo(() => {
-    return workingRecordIds.map(id => {
-      const cached = recordCache.get(id);
-      const original = records.find(r => r.id === id);
+    return workingRecordIds.map(workingId => {
+      const cached = recordCache.get(workingId);
+      // workingId could be db_id (UUID) or record.id depending on filter mode
+      const original = records.find(r => r.db_id === workingId || r.id === workingId);
       return {
-        id,
+        id: workingId,
+        record_id: original?.id || cached?.id || workingId, // for display
         status: cached?.status || original?.status,
         landmark_name: cached?.metadata?.landmark_name || original?.metadata?.landmark_name || 'Loading...',
       };
@@ -186,7 +276,7 @@ export function AnnotationInterface({
     if (currentRecordId) loadRecord(currentRecordId);
   }, [currentRecordId, loadRecord]);
 
-  const currentRecord = currentRecordId ? (recordCache.get(currentRecordId) || records.find(r => r.id === currentRecordId)) : undefined;
+  const currentRecord = currentRecordId ? (recordCache.get(currentRecordId) || records.find(r => r.db_id === currentRecordId || r.id === currentRecordId)) : undefined;
   const record = editedRecord || currentRecord;
 
   // Keyboard navigation
@@ -425,7 +515,7 @@ export function AnnotationInterface({
                     onClick={() => selectRecord(item.id)}
                     className={cn(
                       "w-full text-left p-3 rounded-lg transition-colors",
-                      item.id === displayRecord?.id 
+                      item.id === (displayRecord?.db_id || displayRecord?.id)
                         ? "bg-primary/10 border border-primary/20" 
                         : "hover:bg-muted/50"
                     )}
@@ -433,7 +523,7 @@ export function AnnotationInterface({
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="font-mono text-xs truncate">{item.id}</span>
+                        <span className="font-mono text-xs truncate">{item.record_id}</span>
                       </div>
                       {getStatusIcon(item.status)}
                     </div>
