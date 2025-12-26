@@ -203,11 +203,12 @@ export function SettingsInterface() {
             <Alert>
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Yêu cầu Access Token</AlertTitle>
-              <AlertDescription>
-                Bạn cần có Hugging Face Access Token để sử dụng các tính năng AI. 
-                Token này sẽ được lưu trữ an toàn trên thiết bị của bạn.
-              </AlertDescription>
-            </Alert>
+            <AlertDescription>
+              Bạn cần có Hugging Face Access Token để sử dụng các tính năng AI. 
+              Token này được lưu trong trình duyệt và có thể bị xóa khi bạn xóa dữ liệu duyệt web.
+              Bạn có thể tạo lại token mới bất cứ lúc nào từ Hugging Face.
+            </AlertDescription>
+          </Alert>
 
             <div className="space-y-2">
               <Label htmlFor="hf-token">Access Token</Label>
@@ -322,7 +323,7 @@ export function SettingsInterface() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">API Keys</span>
-                <span>LocalStorage (Encrypted)</span>
+                <span>LocalStorage (Browser)</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">User Preferences</span>

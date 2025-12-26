@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { Database, Loader2, ArrowLeft } from 'lucide-react';
 import { z } from 'zod';
 import { supabase } from '@/integrations/supabase/client';
+import { mapErrorToUserMessage } from '@/lib/errorMessages';
 
 const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
@@ -54,11 +55,7 @@ export default function Auth() {
     setIsLoading(false);
 
     if (error) {
-      if (error.message.includes('Invalid login credentials')) {
-        toast.error('Email hoặc mật khẩu không đúng');
-      } else {
-        toast.error(error.message);
-      }
+      toast.error(mapErrorToUserMessage(error, 'Đăng nhập thất bại'));
     } else {
       toast.success('Đăng nhập thành công!');
       navigate('/');
@@ -88,11 +85,7 @@ export default function Auth() {
     setIsLoading(false);
 
     if (error) {
-      if (error.message.includes('already registered')) {
-        toast.error('Email này đã được đăng ký. Vui lòng đăng nhập.');
-      } else {
-        toast.error(error.message);
-      }
+      toast.error(mapErrorToUserMessage(error, 'Đăng ký thất bại'));
     } else {
       toast.success('Tạo tài khoản thành công! Vui lòng kiểm tra email để xác nhận.');
     }
@@ -117,7 +110,7 @@ export default function Auth() {
     setIsLoading(false);
 
     if (error) {
-      toast.error(error.message);
+      toast.error(mapErrorToUserMessage(error, 'Không thể gửi email đặt lại mật khẩu'));
     } else {
       toast.success('Đã gửi email hướng dẫn đặt lại mật khẩu!');
       setShowForgotPassword(false);
