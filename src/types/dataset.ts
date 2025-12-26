@@ -1,89 +1,130 @@
+// New format aligned with export JSON structure
+
+export interface GPS {
+  lat: number;
+  lon: number;
+}
+
 export interface Location {
   city: string;
   district: string;
-  lat_long: [number, number];
+  gps: GPS;
 }
 
-export interface GeographicInfo {
-  lat?: string | number;
-  lon?: string | number;
-  location_type?: string;
-  city?: string;
-  district?: string;
-  location_name?: string;
-  opening_hours?: string;
-  ticket_price?: string;
-  page_url?: string;
-  license_info?: string;
+export interface ImageSpec {
+  source?: string;
+  original_url?: string;
+  description?: string;
+  license?: string;
+  match_info?: string;
+  resolution?: string;
+}
+
+export interface AudioSpec {
+  transcript: string;
+  voice_id: string;
 }
 
 export interface Metadata {
-  topic: string;
-  entity_name: string;
+  landmark_name: string;
   location: Location;
-  tags: string[];
-  image_description?: string;
-  knowledge_description?: string;
-  geographic_info?: GeographicInfo;
+  image_spec?: ImageSpec;
+  audio_spec?: AudioSpec;
 }
 
-export interface AudioEvidence {
-  path: string;
-  type: 'environment' | 'speech' | 'music';
-  transcript: string;
-  duration_sec: number;
-  sr: number;
+export interface QAVoice {
+  id: string;
+  rate?: string;
+  pitch?: string;
+  type?: string;
 }
 
-export interface Assets {
-  image_path: string | null;
-  image_url?: string | null;
-  audio_evidence: AudioEvidence | null;
+export interface QAAudioMeta {
+  q_voice: QAVoice;
+  a_voice: QAVoice;
 }
 
-export interface Query {
-  text: string | null;
-  audio_query_path: string | null;
-  audio_query_transcript: string | null;
+export interface QAPaths {
+  question_audio: string;
+  answer_audio: string;
 }
 
-export interface Target {
-  answer: string;
-  evidence_source: 'image' | 'audio';
-  answer_format: 'short_phrase' | 'one_sentence' | 'free';
-  alternative_answers?: string[];
+export interface QAPair {
+  q: string;
+  a: string;
+  type: 'ask_image' | 'ask_audio' | 'ask_both';
+  paths: QAPaths;
+  audio_meta: QAAudioMeta;
 }
 
-export type Scenario = 'text_ask_image' | 'audio_ask_image' | 'text_ask_audio' | 'audio_ask_audio';
-export type Modality = 'image' | 'audio' | 'text';
-
-export interface QAItem {
-  qa_id: string;
-  scenario: Scenario;
-  modality_in: Modality[];
-  query: Query;
-  target: Target;
-  answer_type?: string;
+export interface RecordPaths {
+  image: string;
+  audio_evidence?: string;
 }
 
 export interface DatasetRecord {
-  record_id: string;
+  id: string;
+  timestamp: string;
+  paths: RecordPaths;
   metadata: Metadata;
-  assets: Assets;
-  qa_items: QAItem[];
-  status?: 'pending' | 'reviewed' | 'approved' | 'rejected' | 'warning';
+  qa_pairs: QAPair[];
+  // Internal tracking
+  status?: 'pending' | 'approved' | 'rejected' | 'needs_review';
   reviewedAt?: string;
   reviewedBy?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  db_id?: string; // Supabase UUID
 }
 
 export interface DatasetStats {
   total: number;
   pending: number;
-  reviewed: number;
   approved: number;
   rejected: number;
-  warning: number;
-  scenarios: Record<Scenario, number>;
+  needs_review: number;
+  qa_types: {
+    ask_image: number;
+    ask_audio: number;
+    ask_both: number;
+  };
+}
+
+export type AppRole = 'admin' | 'user';
+
+export interface UserWithRole {
+  id: string;
+  email: string;
+  display_name?: string;
+  role: AppRole;
+}
+
+export interface AnnotationTask {
+  id: string;
+  name: string;
+  description?: string;
+  assigned_to?: string;
+  assigned_by?: string;
+  percentage: number;
+  status: 'pending' | 'in_progress' | 'completed';
+  created_at: string;
+  updated_at: string;
+  // Computed
+  assignee_name?: string;
+  progress?: TaskProgress;
+}
+
+export interface TaskProgress {
+  total: number;
+  completed: number;
+  pending: number;
+  needs_review: number;
+  rejected: number;
+}
+
+export interface TaskRecord {
+  id: string;
+  task_id: string;
+  record_id: string;
+  status: 'pending' | 'completed' | 'needs_review' | 'rejected';
+  annotated_by?: string;
+  annotated_at?: string;
 }

@@ -14,6 +14,72 @@ export type Database = {
   }
   public: {
     Tables: {
+      annotation_tasks: {
+        Row: {
+          assigned_by: string | null
+          assigned_to: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          percentage: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          assigned_to?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          percentage: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_by?: string | null
+          assigned_to?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          percentage?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      dataset_records: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          data: Json
+          id: string
+          record_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          data: Json
+          id?: string
+          record_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          id?: string
+          record_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           annotations_count: number | null
@@ -47,15 +113,87 @@ export type Database = {
         }
         Relationships: []
       }
+      task_records: {
+        Row: {
+          annotated_at: string | null
+          annotated_by: string | null
+          created_at: string
+          id: string
+          record_id: string
+          status: string
+          task_id: string
+        }
+        Insert: {
+          annotated_at?: string | null
+          annotated_by?: string | null
+          created_at?: string
+          id?: string
+          record_id: string
+          status?: string
+          task_id: string
+        }
+        Update: {
+          annotated_at?: string | null
+          annotated_by?: string | null
+          created_at?: string
+          id?: string
+          record_id?: string
+          status?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_records_record_id_fkey"
+            columns: ["record_id"]
+            isOneToOne: false
+            referencedRelation: "dataset_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_records_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "annotation_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -182,6 +320,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const

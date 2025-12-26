@@ -20,10 +20,9 @@ import {
   Image,
   Volume2,
   MessageSquare,
-  Edit3,
   MapPin
 } from 'lucide-react';
-import { DatasetRecord, QAItem } from '@/types/dataset';
+import { DatasetRecord, QAPair } from '@/types/dataset';
 import { toast } from 'sonner';
 
 interface AnnotationInterfaceProps {
@@ -33,7 +32,7 @@ interface AnnotationInterfaceProps {
 
 export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInterfaceProps) {
   const pendingRecords = useMemo(() => 
-    records.filter(r => r.status === 'pending' || r.status === 'reviewed'), 
+    records.filter(r => r.status === 'pending' || r.status === 'needs_review'), 
     [records]
   );
 
@@ -76,7 +75,7 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
       setEditedRecord({ ...record });
     }
     
-    const updated = { ...(editedRecord || record) };
+    const updated = JSON.parse(JSON.stringify(editedRecord || record));
     const keys = path.split('.');
     let obj: any = updated;
     
@@ -99,7 +98,7 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
 
   const handleSave = () => {
     if (editedRecord) {
-      onRecordUpdate({ ...editedRecord, status: 'reviewed', reviewedAt: new Date().toISOString() });
+      onRecordUpdate({ ...editedRecord, status: 'needs_review', reviewedAt: new Date().toISOString() });
       toast.success('Đã lưu thay đổi');
     }
     setEditedRecord(null);
@@ -135,15 +134,13 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
     }
   };
 
-  // Get geographic info with fallbacks
-  const geo = record.metadata.geographic_info || {};
-  const landmarkName = geo.location_name || record.metadata.entity_name || '';
-  const city = geo.city || record.metadata.location?.city || '';
-  const district = geo.district || record.metadata.location?.district || '';
-  const lat = geo.lat || record.metadata.location?.lat_long?.[0] || '';
-  const lng = geo.lon || record.metadata.location?.lat_long?.[1] || '';
-  const sourceUrl = geo.page_url || '';
-  const license = geo.license_info || '';
+  // Get image source
+  const getImageSrc = () => {
+    const imagePath = record.paths?.image;
+    if (imagePath?.startsWith('http')) return imagePath;
+    if (record.metadata.image_spec?.original_url) return record.metadata.image_spec.original_url;
+    return null;
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -170,18 +167,25 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {record.assets?.image_path || record.assets?.image_url ? (
-                  <div className="aspect-video bg-muted rounded-lg flex items-center justify-center border-2 border-dashed">
-                    <div className="text-center">
-                      <Image className="h-12 w-12 mx-auto text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground mt-2 px-4 break-all">
-                        {record.assets.image_path || record.assets.image_url}
-                      </p>
-                    </div>
+                {getImageSrc() ? (
+                  <div className="rounded-lg overflow-hidden bg-muted">
+                    <img 
+                      src={getImageSrc()!} 
+                      alt={record.metadata.landmark_name}
+                      className="w-full h-auto object-contain max-h-64"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/placeholder.svg';
+                      }}
+                    />
                   </div>
                 ) : (
                   <div className="aspect-video bg-muted/50 rounded-lg flex items-center justify-center">
-                    <p className="text-muted-foreground">No image</p>
+                    <div className="text-center">
+                      <Image className="h-12 w-12 mx-auto text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground mt-2 px-4 break-all">
+                        {record.paths?.image}
+                      </p>
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -195,27 +199,20 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {record.assets?.audio_evidence ? (
+                {record.paths?.audio_evidence ? (
                   <div className="space-y-3">
-                    <AudioPlayer src={record.assets.audio_evidence.path} />
-                    <div className="p-2 bg-muted/50 rounded">
-                      <p className="text-xs font-mono break-all text-muted-foreground">
-                        {record.assets.audio_evidence.path}
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <Badge variant="outline">{record.assets.audio_evidence.type}</Badge>
-                      <Badge variant="outline">{record.assets.audio_evidence.duration_sec}s</Badge>
-                    </div>
-                    <div>
-                      <Label className="text-xs">Transcript</Label>
-                      <Textarea
-                        value={record.assets.audio_evidence.transcript || ''}
-                        onChange={(e) => handleFieldChange('assets.audio_evidence.transcript', e.target.value)}
-                        className="mt-1 text-sm"
-                        rows={3}
-                      />
-                    </div>
+                    <AudioPlayer src={record.paths.audio_evidence} />
+                    {record.metadata.audio_spec && (
+                      <div>
+                        <Label className="text-xs">Transcript</Label>
+                        <Textarea
+                          value={record.metadata.audio_spec.transcript || ''}
+                          onChange={(e) => handleFieldChange('metadata.audio_spec.transcript', e.target.value)}
+                          className="mt-1 text-sm"
+                          rows={3}
+                        />
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <p className="text-muted-foreground text-sm">No audio</p>
@@ -226,7 +223,7 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
 
           {/* Middle Panel - Metadata & QA */}
           <div className="lg:col-span-2 space-y-4">
-            {/* Metadata - New Format */}
+            {/* Metadata */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -237,10 +234,10 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
-                    <Label>Landmark Name (location_name)</Label>
+                    <Label>Landmark Name</Label>
                     <Input
-                      value={landmarkName}
-                      onChange={(e) => handleFieldChange('metadata.geographic_info.location_name', e.target.value)}
+                      value={record.metadata.landmark_name}
+                      onChange={(e) => handleFieldChange('metadata.landmark_name', e.target.value)}
                       className="mt-1"
                       placeholder="Tên địa danh..."
                     />
@@ -248,8 +245,8 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
                   <div>
                     <Label>City</Label>
                     <Input
-                      value={city}
-                      onChange={(e) => handleFieldChange('metadata.geographic_info.city', e.target.value)}
+                      value={record.metadata.location.city}
+                      onChange={(e) => handleFieldChange('metadata.location.city', e.target.value)}
                       className="mt-1"
                       placeholder="Thành phố..."
                     />
@@ -257,8 +254,8 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
                   <div>
                     <Label>District</Label>
                     <Input
-                      value={district}
-                      onChange={(e) => handleFieldChange('metadata.geographic_info.district', e.target.value)}
+                      value={record.metadata.location.district}
+                      onChange={(e) => handleFieldChange('metadata.location.district', e.target.value)}
                       className="mt-1"
                       placeholder="Quận/Huyện..."
                     />
@@ -268,37 +265,37 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
                     <Input
                       type="number"
                       step="any"
-                      value={lat}
-                      onChange={(e) => handleFieldChange('metadata.geographic_info.lat', e.target.value)}
+                      value={record.metadata.location.gps?.lat || ''}
+                      onChange={(e) => handleFieldChange('metadata.location.gps.lat', parseFloat(e.target.value) || 0)}
                       className="mt-1"
                       placeholder="10.123456"
                     />
                   </div>
                   <div>
-                    <Label>Longitude (lon → lng)</Label>
+                    <Label>Longitude (lon)</Label>
                     <Input
                       type="number"
                       step="any"
-                      value={lng}
-                      onChange={(e) => handleFieldChange('metadata.geographic_info.lon', e.target.value)}
+                      value={record.metadata.location.gps?.lon || ''}
+                      onChange={(e) => handleFieldChange('metadata.location.gps.lon', parseFloat(e.target.value) || 0)}
                       className="mt-1"
                       placeholder="106.123456"
                     />
                   </div>
                   <div>
-                    <Label>Source URL (page_url)</Label>
+                    <Label>Source URL</Label>
                     <Input
-                      value={sourceUrl}
-                      onChange={(e) => handleFieldChange('metadata.geographic_info.page_url', e.target.value)}
+                      value={record.metadata.image_spec?.original_url || ''}
+                      onChange={(e) => handleFieldChange('metadata.image_spec.original_url', e.target.value)}
                       className="mt-1"
                       placeholder="https://..."
                     />
                   </div>
                   <div>
-                    <Label>License (license_info)</Label>
+                    <Label>License</Label>
                     <Input
-                      value={license}
-                      onChange={(e) => handleFieldChange('metadata.geographic_info.license_info', e.target.value)}
+                      value={record.metadata.image_spec?.license || ''}
+                      onChange={(e) => handleFieldChange('metadata.image_spec.license', e.target.value)}
                       className="mt-1"
                       placeholder="CC BY-SA 4.0"
                     />
@@ -307,38 +304,24 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
               </CardContent>
             </Card>
 
-            {/* QA Items */}
-            {record.qa_items.map((qa, qaIndex) => (
-              <Card key={qa.qa_id}>
+            {/* QA Pairs */}
+            {record.qa_pairs?.map((qa, qaIndex) => (
+              <Card key={qaIndex}>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <MessageSquare className="h-4 w-4" />
                       QA #{qaIndex + 1}
                     </CardTitle>
-                    <div className="flex gap-2">
-                      <Badge variant="outline">{getQAType(qa)}</Badge>
-                      {qa.modality_in?.map(m => (
-                        <Badge key={m} className="bg-primary/10 text-primary text-xs">
-                          {m}
-                        </Badge>
-                      ))}
-                    </div>
+                    <Badge variant="outline">{qa.type}</Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
                     <Label>Type</Label>
                     <Select
-                      value={getQAType(qa)}
-                      onValueChange={(v) => {
-                        // Update scenario based on type
-                        let scenario = qa.scenario;
-                        if (v === 'ask_image') scenario = 'text_ask_image';
-                        else if (v === 'ask_audio') scenario = 'text_ask_audio';
-                        else scenario = 'text_ask_image'; // ask_both defaults to image
-                        handleFieldChange(`qa_items[${qaIndex}].scenario`, scenario);
-                      }}
+                      value={qa.type}
+                      onValueChange={(v) => handleFieldChange(`qa_pairs[${qaIndex}].type`, v)}
                     >
                       <SelectTrigger className="mt-1">
                         <SelectValue />
@@ -356,8 +339,8 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
                   <div>
                     <Label>Question (q)</Label>
                     <Textarea
-                      value={qa.query?.text || qa.query?.audio_query_transcript || ''}
-                      onChange={(e) => handleFieldChange(`qa_items[${qaIndex}].query.text`, e.target.value)}
+                      value={qa.q || ''}
+                      onChange={(e) => handleFieldChange(`qa_pairs[${qaIndex}].q`, e.target.value)}
                       className="mt-1"
                       rows={2}
                       placeholder="Nhập câu hỏi..."
@@ -367,18 +350,18 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
                   <div>
                     <Label>Answer (a)</Label>
                     <Textarea
-                      value={qa.target?.answer || ''}
-                      onChange={(e) => handleFieldChange(`qa_items[${qaIndex}].target.answer`, e.target.value)}
+                      value={qa.a || ''}
+                      onChange={(e) => handleFieldChange(`qa_pairs[${qaIndex}].a`, e.target.value)}
                       className="mt-1"
                       rows={3}
                       placeholder="Nhập câu trả lời..."
                     />
                   </div>
 
-                  {qa.query?.audio_query_path && (
+                  {qa.paths?.question_audio && (
                     <div className="space-y-2">
                       <Label className="text-xs text-muted-foreground">Audio Query</Label>
-                      <AudioPlayer src={qa.query.audio_query_path} className="mt-1" />
+                      <AudioPlayer src={qa.paths.question_audio} className="mt-1" />
                     </div>
                   )}
                 </CardContent>
@@ -428,14 +411,4 @@ export function AnnotationInterface({ records, onRecordUpdate }: AnnotationInter
       </Card>
     </div>
   );
-}
-
-function getQAType(qa: QAItem): string {
-  if (qa.scenario === 'text_ask_audio' || qa.scenario === 'audio_ask_audio') {
-    return 'ask_audio';
-  }
-  if (qa.target?.evidence_source === 'audio' && qa.scenario?.includes('image')) {
-    return 'ask_both';
-  }
-  return 'ask_image';
 }

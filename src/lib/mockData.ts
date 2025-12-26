@@ -9,30 +9,35 @@ export const calculateStats = (records: DatasetRecord[]): DatasetStats => {
   const stats: DatasetStats = {
     total: records.length,
     pending: 0,
-    reviewed: 0,
     approved: 0,
     rejected: 0,
-    warning: 0,
-    scenarios: {
-      text_ask_image: 0,
-      audio_ask_image: 0,
-      text_ask_audio: 0,
-      audio_ask_audio: 0
+    needs_review: 0,
+    qa_types: {
+      ask_image: 0,
+      ask_audio: 0,
+      ask_both: 0
     }
   };
 
   records.forEach(record => {
-    if (record.status === 'pending') stats.pending++;
-    else if (record.status === 'reviewed') stats.reviewed++;
-    else if (record.status === 'approved') stats.approved++;
-    else if (record.status === 'rejected') stats.rejected++;
-    else if (record.status === 'warning') stats.warning++;
-    else stats.pending++; // default to pending if no status
+    switch (record.status) {
+      case 'approved':
+        stats.approved++;
+        break;
+      case 'rejected':
+        stats.rejected++;
+        break;
+      case 'needs_review':
+        stats.needs_review++;
+        break;
+      default:
+        stats.pending++;
+    }
 
-    record.qa_items.forEach(qa => {
-      if (qa.scenario && stats.scenarios[qa.scenario]) {
-        stats.scenarios[qa.scenario]++;
-      }
+    record.qa_pairs?.forEach(qa => {
+      if (qa.type === 'ask_image') stats.qa_types.ask_image++;
+      else if (qa.type === 'ask_audio') stats.qa_types.ask_audio++;
+      else if (qa.type === 'ask_both') stats.qa_types.ask_both++;
     });
   });
 
