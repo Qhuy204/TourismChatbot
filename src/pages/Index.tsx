@@ -1,6 +1,7 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useDataset } from '@/hooks/useDataset';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { DataBrowser } from '@/components/browser/DataBrowser';
@@ -11,15 +12,16 @@ import { ImportInterface } from '@/components/import/ImportInterface';
 import { ExportInterface } from '@/components/export/ExportInterface';
 import { SettingsInterface } from '@/components/settings/SettingsInterface';
 import { UserSettingsDialog } from '@/components/settings/UserSettingsDialog';
-import { calculateStats } from '@/lib/mockData';
 import { DatasetRecord } from '@/types/dataset';
 import { Loader2 } from 'lucide-react';
 
 const Index = () => {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [currentView, setCurrentView] = useState('dashboard');
-  const [records, setRecords] = useState<DatasetRecord[]>([]);
+  
+  // Use database-synced data
+  const { records, loading: dataLoading, addRecords, updateRecord, deleteRecords, refetch, calculateStats } = useDataset();
   
   // Annotation navigation state
   const [annotateRecordId, setAnnotateRecordId] = useState<string | undefined>();
@@ -29,26 +31,27 @@ const Index = () => {
   const [showUserSettings, setShowUserSettings] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!authLoading && !user) {
       navigate('/auth');
     }
-  }, [user, loading, navigate]);
+  }, [user, authLoading, navigate]);
 
-  const stats = useMemo(() => calculateStats(records), [records]);
+  const stats = calculateStats();
 
-  const handleRecordUpdate = useCallback((updatedRecord: DatasetRecord) => {
-    setRecords(prev => 
-      prev.map(r => r.id === updatedRecord.id ? updatedRecord : r)
-    );
-  }, []);
+  const handleRecordUpdate = useCallback(async (updatedRecord: DatasetRecord) => {
+    await updateRecord(updatedRecord);
+  }, [updateRecord]);
 
-  const handleRecordsUpdate = useCallback((updatedRecords: DatasetRecord[]) => {
-    setRecords(updatedRecords);
-  }, []);
+  const handleRecordsUpdate = useCallback(async (updatedRecords: DatasetRecord[]) => {
+    // For bulk updates, update each record
+    for (const record of updatedRecords) {
+      await updateRecord(record);
+    }
+  }, [updateRecord]);
 
-  const handleAddRecords = useCallback((newRecords: DatasetRecord[]) => {
-    setRecords(prev => [...prev, ...newRecords]);
-  }, []);
+  const handleAddRecords = useCallback(async (newRecords: DatasetRecord[]) => {
+    await addRecords(newRecords);
+  }, [addRecords]);
 
   // Navigate to annotate from DataBrowser
   const handleNavigateToAnnotate = useCallback((recordId: string) => {
@@ -117,10 +120,13 @@ const Index = () => {
     }
   };
 
-  if (loading) {
+  if (authLoading || dataLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Đang tải dữ liệu...</p>
+        </div>
       </div>
     );
   }
