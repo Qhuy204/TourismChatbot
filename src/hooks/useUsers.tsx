@@ -66,6 +66,24 @@ export function useUsers() {
     }
 
     try {
+      // If changing to 'user', check if this is the last admin
+      if (newRole === 'user') {
+        const { data: adminCount, error: countError } = await supabase
+          .from('user_roles')
+          .select('id', { count: 'exact' })
+          .eq('role', 'admin');
+        
+        if (countError) throw countError;
+        
+        // Check if current user being changed is an admin
+        const currentUserRole = users.find(u => u.id === userId)?.role;
+        
+        if (currentUserRole === 'admin' && (adminCount?.length || 0) <= 1) {
+          toast.error('Không thể hạ quyền admin cuối cùng. Hệ thống phải có ít nhất 1 admin.');
+          return false;
+        }
+      }
+
       // Check if role exists
       const { data: existing } = await supabase
         .from('user_roles')
@@ -96,7 +114,7 @@ export function useUsers() {
       toast.error('Không thể cập nhật role');
       return false;
     }
-  }, [isAdmin, fetchUsers]);
+  }, [isAdmin, fetchUsers, users]);
 
   return {
     users,
