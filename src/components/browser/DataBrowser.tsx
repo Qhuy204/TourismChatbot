@@ -1,33 +1,26 @@
-import { useState, useMemo, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { 
-  Search, 
-  ChevronLeft, 
+import { useState, useMemo, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Search,
+  ChevronLeft,
   ChevronRight,
   CheckCircle2,
   XCircle,
   AlertTriangle,
   Trash2,
   ArrowUpDown,
-  Eye
-} from 'lucide-react';
-import { DatasetRecord } from '@/types/dataset';
-import { RecordDetailModal } from './RecordDetailModal';
-import { toast } from 'sonner';
+  Eye,
+} from "lucide-react";
+import { DatasetRecord } from "@/types/dataset";
+import { RecordDetailModal } from "./RecordDetailModal";
+import { toast } from "sonner";
 
 interface DataBrowserProps {
   records: DatasetRecord[];
@@ -36,31 +29,30 @@ interface DataBrowserProps {
 }
 
 const ITEMS_PER_PAGE = 100;
-const MAX_LINES = 10000;
+const MAX_LINES = 100000;
 
-type SortBy = 'id' | 'created' | 'updated' | 'status' | 'name';
-type SortOrder = 'asc' | 'desc';
+type SortBy = "id" | "created" | "updated" | "status" | "name";
+type SortOrder = "asc" | "desc";
 
 export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBrowserProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [scenarioFilter, setScenarioFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [scenarioFilter, setScenarioFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedRecord, setSelectedRecord] = useState<DatasetRecord | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [sortBy, setSortBy] = useState<SortBy>('id');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [sortBy, setSortBy] = useState<SortBy>("id");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
 
   const filteredAndSortedRecords = useMemo(() => {
-    let filtered = records.filter(record => {
-      const matchesSearch = 
+    let filtered = records.filter((record) => {
+      const matchesSearch =
         record.record_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         record.metadata.entity_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         record.metadata.location.city.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesStatus = statusFilter === 'all' || record.status === statusFilter;
-      const matchesScenario = scenarioFilter === 'all' || 
-        record.qa_items.some(qa => qa.scenario === scenarioFilter);
+
+      const matchesStatus = statusFilter === "all" || record.status === statusFilter;
+      const matchesScenario = scenarioFilter === "all" || record.qa_items.some((qa) => qa.scenario === scenarioFilter);
 
       return matchesSearch && matchesStatus && matchesScenario;
     });
@@ -69,23 +61,23 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
     filtered.sort((a, b) => {
       let comparison = 0;
       switch (sortBy) {
-        case 'id':
+        case "id":
           comparison = a.record_id.localeCompare(b.record_id);
           break;
-        case 'name':
+        case "name":
           comparison = a.metadata.entity_name.localeCompare(b.metadata.entity_name);
           break;
-        case 'created':
-          comparison = (a.createdAt || '').localeCompare(b.createdAt || '');
+        case "created":
+          comparison = (a.createdAt || "").localeCompare(b.createdAt || "");
           break;
-        case 'updated':
-          comparison = (a.updatedAt || a.reviewedAt || '').localeCompare(b.updatedAt || b.reviewedAt || '');
+        case "updated":
+          comparison = (a.updatedAt || a.reviewedAt || "").localeCompare(b.updatedAt || b.reviewedAt || "");
           break;
-        case 'status':
-          comparison = (a.status || 'pending').localeCompare(b.status || 'pending');
+        case "status":
+          comparison = (a.status || "pending").localeCompare(b.status || "pending");
           break;
       }
-      return sortOrder === 'asc' ? comparison : -comparison;
+      return sortOrder === "asc" ? comparison : -comparison;
     });
 
     // Limit to MAX_LINES
@@ -95,16 +87,21 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
   const totalPages = Math.ceil(filteredAndSortedRecords.length / ITEMS_PER_PAGE);
   const paginatedRecords = filteredAndSortedRecords.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    currentPage * ITEMS_PER_PAGE,
   );
 
   const getStatusColor = (status?: string) => {
     switch (status) {
-      case 'approved': return 'bg-accent text-accent-foreground';
-      case 'rejected': return 'bg-destructive/10 text-destructive';
-      case 'reviewed': return 'bg-chart-3/10 text-chart-3';
-      case 'warning': return 'bg-chart-4/10 text-chart-4';
-      default: return 'bg-muted text-muted-foreground';
+      case "approved":
+        return "bg-accent text-accent-foreground";
+      case "rejected":
+        return "bg-destructive/10 text-destructive";
+      case "reviewed":
+        return "bg-chart-3/10 text-chart-3";
+      case "warning":
+        return "bg-chart-4/10 text-chart-4";
+      default:
+        return "bg-muted text-muted-foreground";
     }
   };
 
@@ -122,49 +119,56 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
     if (selectedIds.size === paginatedRecords.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(paginatedRecords.map(r => r.record_id)));
+      setSelectedIds(new Set(paginatedRecords.map((r) => r.record_id)));
     }
   };
 
-  const handleBulkAction = (action: 'approve' | 'reject' | 'warning' | 'delete') => {
+  const handleBulkAction = (action: "approve" | "reject" | "warning" | "delete") => {
     if (selectedIds.size === 0) {
-      toast.error('Chưa chọn record nào');
+      toast.error("Chưa chọn record nào");
       return;
     }
 
-    const updatedRecords = records.map(record => {
-      if (!selectedIds.has(record.record_id)) return record;
-      
-      if (action === 'delete') return null;
-      
-      return {
-        ...record,
-        status: action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'warning',
-        reviewedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      } as DatasetRecord;
-    }).filter(Boolean) as DatasetRecord[];
+    const updatedRecords = records
+      .map((record) => {
+        if (!selectedIds.has(record.record_id)) return record;
+
+        if (action === "delete") return null;
+
+        return {
+          ...record,
+          status: action === "approve" ? "approved" : action === "reject" ? "rejected" : "warning",
+          reviewedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        } as DatasetRecord;
+      })
+      .filter(Boolean) as DatasetRecord[];
 
     if (onRecordsUpdate) {
       onRecordsUpdate(updatedRecords);
     }
 
-    toast.success(`Đã ${action === 'approve' ? 'phê duyệt' : action === 'reject' ? 'từ chối' : action === 'warning' ? 'đánh dấu cảnh báo' : 'xóa'} ${selectedIds.size} records`);
+    toast.success(
+      `Đã ${action === "approve" ? "phê duyệt" : action === "reject" ? "từ chối" : action === "warning" ? "đánh dấu cảnh báo" : "xóa"} ${selectedIds.size} records`,
+    );
     setSelectedIds(new Set());
   };
 
   // Navigate to adjacent record
-  const handleNavigateRecord = useCallback((direction: 'prev' | 'next') => {
-    if (!selectedRecord) return;
-    
-    const currentIndex = filteredAndSortedRecords.findIndex(r => r.record_id === selectedRecord.record_id);
-    if (currentIndex === -1) return;
-    
-    const newIndex = direction === 'prev' ? currentIndex - 1 : currentIndex + 1;
-    if (newIndex >= 0 && newIndex < filteredAndSortedRecords.length) {
-      setSelectedRecord(filteredAndSortedRecords[newIndex]);
-    }
-  }, [selectedRecord, filteredAndSortedRecords]);
+  const handleNavigateRecord = useCallback(
+    (direction: "prev" | "next") => {
+      if (!selectedRecord) return;
+
+      const currentIndex = filteredAndSortedRecords.findIndex((r) => r.record_id === selectedRecord.record_id);
+      if (currentIndex === -1) return;
+
+      const newIndex = direction === "prev" ? currentIndex - 1 : currentIndex + 1;
+      if (newIndex >= 0 && newIndex < filteredAndSortedRecords.length) {
+        setSelectedRecord(filteredAndSortedRecords[newIndex]);
+      }
+    },
+    [selectedRecord, filteredAndSortedRecords],
+  );
 
   return (
     <div className="p-6 space-y-4 h-full flex flex-col">
@@ -193,7 +197,13 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
                 />
               </div>
             </div>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
+            <Select
+              value={statusFilter}
+              onValueChange={(v) => {
+                setStatusFilter(v);
+                setCurrentPage(1);
+              }}
+            >
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Trạng thái" />
               </SelectTrigger>
@@ -206,7 +216,13 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
                 <SelectItem value="warning">Warning</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={scenarioFilter} onValueChange={(v) => { setScenarioFilter(v); setCurrentPage(1); }}>
+            <Select
+              value={scenarioFilter}
+              onValueChange={(v) => {
+                setScenarioFilter(v);
+                setCurrentPage(1);
+              }}
+            >
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Scenario" />
               </SelectTrigger>
@@ -231,12 +247,8 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
                 <SelectItem value="status">Trạng thái</SelectItem>
               </SelectContent>
             </Select>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setSortOrder(o => o === 'asc' ? 'desc' : 'asc')}
-            >
-              <ArrowUpDown className={`h-4 w-4 ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />
+            <Button variant="outline" size="icon" onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}>
+              <ArrowUpDown className={`h-4 w-4 ${sortOrder === "desc" ? "rotate-180" : ""}`} />
             </Button>
           </div>
           <div className="mt-3 flex items-center justify-between">
@@ -247,19 +259,19 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
             {selectedIds.size > 0 && (
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">{selectedIds.size} đã chọn</span>
-                <Button size="sm" onClick={() => handleBulkAction('approve')}>
+                <Button size="sm" onClick={() => handleBulkAction("approve")}>
                   <CheckCircle2 className="h-4 w-4 mr-1" />
                   Phê duyệt
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleBulkAction('warning')}>
+                <Button size="sm" variant="outline" onClick={() => handleBulkAction("warning")}>
                   <AlertTriangle className="h-4 w-4 mr-1" />
                   Cảnh báo
                 </Button>
-                <Button size="sm" variant="destructive" onClick={() => handleBulkAction('reject')}>
+                <Button size="sm" variant="destructive" onClick={() => handleBulkAction("reject")}>
                   <XCircle className="h-4 w-4 mr-1" />
                   Từ chối
                 </Button>
-                <Button size="sm" variant="destructive" onClick={() => handleBulkAction('delete')}>
+                <Button size="sm" variant="destructive" onClick={() => handleBulkAction("delete")}>
                   <Trash2 className="h-4 w-4 mr-1" />
                   Xóa
                 </Button>
@@ -297,38 +309,23 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
                 const rowNumber = (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
                 const hasImage = !!(record.assets.image_path || record.assets.image_url);
                 const hasAudio = !!record.assets.audio_evidence;
-                
+
                 return (
-                  <TableRow 
-                    key={record.record_id}
-                    className={selectedIds.has(record.record_id) ? 'bg-primary/5' : ''}
-                  >
+                  <TableRow key={record.record_id} className={selectedIds.has(record.record_id) ? "bg-primary/5" : ""}>
                     <TableCell>
                       <Checkbox
                         checked={selectedIds.has(record.record_id)}
                         onCheckedChange={() => toggleSelection(record.record_id)}
                       />
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-xs">
-                      {rowNumber}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {record.record_id}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {record.metadata.entity_name}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {record.metadata.location.city}
-                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{rowNumber}</TableCell>
+                    <TableCell className="font-mono text-xs">{record.record_id}</TableCell>
+                    <TableCell className="font-medium">{record.metadata.entity_name}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{record.metadata.location.city}</TableCell>
                     <TableCell>
-                      <Badge className={getStatusColor(record.status)}>
-                        {record.status || 'pending'}
-                      </Badge>
+                      <Badge className={getStatusColor(record.status)}>{record.status || "pending"}</Badge>
                     </TableCell>
-                    <TableCell className="text-center text-sm">
-                      {record.qa_items.length}
-                    </TableCell>
+                    <TableCell className="text-center text-sm">{record.qa_items.length}</TableCell>
                     <TableCell className="text-center">
                       {hasImage ? (
                         <span className="text-accent-foreground">✓</span>
@@ -344,11 +341,7 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
                       )}
                     </TableCell>
                     <TableCell>
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={() => setSelectedRecord(record)}
-                      >
+                      <Button size="sm" variant="ghost" onClick={() => setSelectedRecord(record)}>
                         <Eye className="h-4 w-4" />
                       </Button>
                     </TableCell>
@@ -369,7 +362,7 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
           >
             <ChevronLeft className="h-4 w-4" />
@@ -378,7 +371,7 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages || totalPages === 0}
           >
             Sau
@@ -393,7 +386,9 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
         onClose={() => setSelectedRecord(null)}
         onUpdate={onRecordUpdate}
         onNavigate={handleNavigateRecord}
-        currentIndex={selectedRecord ? filteredAndSortedRecords.findIndex(r => r.record_id === selectedRecord.record_id) : -1}
+        currentIndex={
+          selectedRecord ? filteredAndSortedRecords.findIndex((r) => r.record_id === selectedRecord.record_id) : -1
+        }
         totalRecords={filteredAndSortedRecords.length}
       />
     </div>
