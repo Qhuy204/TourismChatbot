@@ -117,6 +117,10 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate, onNaviga
     }
   };
 
+  const selectAllDataset = () => {
+    setSelectedIds(new Set(filteredAndSortedRecords.map((r) => r.id)));
+  };
+
   const handleBulkAction = (action: "approve" | "reject" | "needs_review" | "delete") => {
     if (selectedIds.size === 0) {
       toast.error("Chưa chọn record nào");
@@ -242,9 +246,14 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate, onNaviga
             </Button>
           </div>
           <div className="mt-3 flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              Hiển thị {paginatedRecords.length} / {filteredAndSortedRecords.length} records
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">
+                Hiển thị {paginatedRecords.length} / {filteredAndSortedRecords.length} records
+              </span>
+              <Button size="sm" variant="outline" onClick={selectAllDataset}>
+                Chọn tất cả ({filteredAndSortedRecords.length})
+              </Button>
+            </div>
             {selectedIds.size > 0 && (
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">{selectedIds.size} đã chọn</span>

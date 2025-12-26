@@ -57,9 +57,8 @@ function convertToDatasetRecord(item: any, index: number): DatasetRecord {
     };
   }
 
-  // Generate ID
-  const idNumber = String(index + 1).padStart(3, '0');
-  const id = item.id || `VN_LM_2025_${idNumber}_00`;
+  // Use ID from import file as-is, don't auto-generate
+  const id = item.id || item.record_id || item.image_id || `VN_LM_2025_${String(index + 1).padStart(3, '0')}_00`;
 
   // Extract landmark name
   const landmarkName = item.metadata?.landmark_name ||
@@ -106,10 +105,10 @@ function convertToDatasetRecord(item: any, index: number): DatasetRecord {
     item.audio_evidence_path ||
     '';
 
-  // Extract image spec
+  // Extract image spec - keep license blank if not provided
   const imageSpec = item.metadata?.image_spec || {
     original_url: item.metadata?.geographic_info?.page_url || item.image_url || '',
-    license: item.metadata?.geographic_info?.license_info || 'CC BY-SA 4.0'
+    license: item.metadata?.geographic_info?.license_info || item.license || ''
   };
 
   // Extract audio spec
