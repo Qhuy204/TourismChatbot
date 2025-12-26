@@ -28,7 +28,7 @@ interface RandomQACheckProps {
 
 interface QACheckResult {
   recordId: string;
-  entityName: string;
+  landmarkName: string;
   passed: boolean;
   issues: string[];
   checkedAt: string;
@@ -42,7 +42,6 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
 
   const sampleSize = Math.ceil(records.length * 0.1);
 
-  // Keyboard navigation
   useEffect(() => {
     if (!isRunning) return;
     
@@ -81,38 +80,27 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
   const validateRecord = (record: DatasetRecord): string[] => {
     const issues: string[] = [];
 
-    // Check metadata
-    if (!record.metadata.entity_name?.trim()) {
-      issues.push('Entity name is empty');
+    if (!record.metadata.landmark_name?.trim()) {
+      issues.push('Landmark name is empty');
     }
 
-    // Check scenario consistency
-    record.qa_items.forEach((qa, index) => {
-      if (qa.scenario.startsWith('text') && !qa.query.text) {
-        issues.push(`QA ${index + 1}: Text scenario but no text query`);
+    record.qa_pairs?.forEach((qa, index) => {
+      if (!qa.q?.trim()) {
+        issues.push(`QA ${index + 1}: Empty question`);
       }
-      if (qa.scenario.startsWith('audio') && !qa.query.audio_query_path) {
-        issues.push(`QA ${index + 1}: Audio scenario but no audio query`);
-      }
-      if (qa.scenario.includes('image') && !record.assets.image_path) {
-        issues.push(`QA ${index + 1}: Image scenario but no image asset`);
-      }
-      if (qa.scenario.includes('audio') && !record.assets.audio_evidence) {
-        issues.push(`QA ${index + 1}: Audio scenario but no audio evidence`);
-      }
-      if (!qa.target.answer?.trim()) {
+      if (!qa.a?.trim()) {
         issues.push(`QA ${index + 1}: Empty answer`);
+      }
+      if (qa.type === 'ask_image' && !record.paths?.image) {
+        issues.push(`QA ${index + 1}: ask_image but no image path`);
+      }
+      if (qa.type === 'ask_audio' && !record.paths?.audio_evidence) {
+        issues.push(`QA ${index + 1}: ask_audio but no audio path`);
       }
     });
 
-    // Check assets
-    if (record.assets.audio_evidence) {
-      if (!record.assets.audio_evidence.transcript?.trim()) {
-        issues.push('Audio evidence missing transcript');
-      }
-      if (record.assets.audio_evidence.duration_sec <= 0) {
-        issues.push('Invalid audio duration');
-      }
+    if (!record.paths?.image && !record.paths?.audio_evidence) {
+      issues.push('No image or audio assets');
     }
 
     return issues;
@@ -123,8 +111,8 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
     
     const issues = validateRecord(currentRecord);
     const result: QACheckResult = {
-      recordId: currentRecord.record_id,
-      entityName: currentRecord.metadata.entity_name,
+      recordId: currentRecord.id,
+      landmarkName: currentRecord.metadata.landmark_name,
       passed: issues.length === 0,
       issues,
       checkedAt: new Date().toISOString()
@@ -146,8 +134,8 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
     if (!currentRecord) return;
     
     const result: QACheckResult = {
-      recordId: currentRecord.record_id,
-      entityName: currentRecord.metadata.entity_name,
+      recordId: currentRecord.id,
+      landmarkName: currentRecord.metadata.landmark_name,
       passed: false,
       issues: ['Manually marked as failed'],
       checkedAt: new Date().toISOString()
@@ -228,8 +216,7 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Semi-Automatic Check</AlertTitle>
               <AlertDescription>
-                Hệ thống sẽ tự động validate format và consistency của dữ liệu. 
-                Bạn sẽ review kết quả và quyết định pass/fail cho từng record.
+                Hệ thống sẽ tự động validate format và consistency của dữ liệu.
                 <br />
                 <strong>Phím tắt:</strong> ← Quay lại | → Pass & Next
               </AlertDescription>
@@ -250,9 +237,7 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
               <Alert>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Chưa có data</AlertTitle>
-                <AlertDescription>
-                  Vui lòng import data trước khi chạy QA Check.
-                </AlertDescription>
+                <AlertDescription>Vui lòng import data trước khi chạy QA Check.</AlertDescription>
               </Alert>
             )}
 
@@ -261,14 +246,12 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
                 <p className="text-sm text-muted-foreground mb-2">Sample preview:</p>
                 <div className="flex flex-wrap gap-2">
                   {sampledRecords.slice(0, 10).map(r => (
-                    <Badge key={r.record_id} variant="outline" className="text-xs">
-                      {r.metadata.entity_name}
+                    <Badge key={r.id} variant="outline" className="text-xs">
+                      {r.metadata.landmark_name}
                     </Badge>
                   ))}
                   {sampledRecords.length > 10 && (
-                    <Badge variant="outline" className="text-xs">
-                      +{sampledRecords.length - 10} more
-                    </Badge>
+                    <Badge variant="outline" className="text-xs">+{sampledRecords.length - 10} more</Badge>
                   )}
                 </div>
               </div>
@@ -276,7 +259,6 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
           </CardContent>
         </Card>
 
-        {/* Previous Results */}
         {checkResults.length > 0 && (
           <Card>
             <CardHeader>
@@ -293,14 +275,12 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
                       }`}
                     >
                       <div>
-                        <p className="font-medium text-sm">{result.entityName}</p>
+                        <p className="font-medium text-sm">{result.landmarkName}</p>
                         <p className="text-xs text-muted-foreground">{result.recordId}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         {result.issues.length > 0 && (
-                          <Badge variant="outline" className="text-xs">
-                            {result.issues.length} issue(s)
-                          </Badge>
+                          <Badge variant="outline" className="text-xs">{result.issues.length} issue(s)</Badge>
                         )}
                         {result.passed ? (
                           <CheckCircle2 className="h-5 w-5 text-accent-foreground" />
@@ -319,40 +299,26 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
     );
   }
 
-  // Running mode - show current record for review in a dialog
   return (
     <Dialog open={isRunning} onOpenChange={(open) => !open && setIsRunning(false)}>
       <DialogContent className="max-w-4xl max-h-[90vh] p-0 overflow-hidden">
         <DialogHeader className="px-6 py-4 border-b shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              {/* Navigation */}
               <div className="flex items-center gap-1">
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  onClick={goToPrev}
-                  disabled={currentCheckIndex <= 0}
-                >
+                <Button variant="outline" size="icon" onClick={goToPrev} disabled={currentCheckIndex <= 0}>
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <span className="text-sm text-muted-foreground px-2">
                   {currentCheckIndex + 1} / {sampledRecords.length}
                 </span>
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  onClick={goNext}
-                  disabled={currentCheckIndex >= sampledRecords.length - 1}
-                >
+                <Button variant="outline" size="icon" onClick={goNext} disabled={currentCheckIndex >= sampledRecords.length - 1}>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
               <div>
-                <DialogTitle>QA Check - {currentRecord?.metadata.entity_name}</DialogTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Phím tắt: ← Quay lại | → Pass & Next
-                </p>
+                <DialogTitle>QA Check - {currentRecord?.metadata.landmark_name}</DialogTitle>
+                <p className="text-sm text-muted-foreground mt-1">Phím tắt: ← Quay lại | → Pass & Next</p>
               </div>
             </div>
             <Progress value={(currentCheckIndex / sampledRecords.length) * 100} className="w-32 h-2" />
@@ -362,7 +328,6 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
         <ScrollArea className="flex-1 max-h-[60vh]">
           <div className="p-6 space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Record Info */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-sm">Record Details</CardTitle>
@@ -370,11 +335,11 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
                 <CardContent className="space-y-4">
                   <div>
                     <p className="text-xs text-muted-foreground">Record ID</p>
-                    <p className="font-mono text-sm">{currentRecord?.record_id}</p>
+                    <p className="font-mono text-sm">{currentRecord?.id}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Entity</p>
-                    <p className="font-medium">{currentRecord?.metadata.entity_name}</p>
+                    <p className="text-xs text-muted-foreground">Landmark</p>
+                    <p className="font-medium">{currentRecord?.metadata.landmark_name}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Location</p>
@@ -384,18 +349,17 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
                   <div>
                     <p className="text-xs text-muted-foreground mb-2">Assets</p>
                     <div className="flex gap-2">
-                      <Badge variant={currentRecord?.assets.image_path ? 'default' : 'outline'}>
-                        Image: {currentRecord?.assets.image_path ? '✓' : '✗'}
+                      <Badge variant={currentRecord?.paths?.image ? 'default' : 'outline'}>
+                        Image: {currentRecord?.paths?.image ? '✓' : '✗'}
                       </Badge>
-                      <Badge variant={currentRecord?.assets.audio_evidence ? 'default' : 'outline'}>
-                        Audio: {currentRecord?.assets.audio_evidence ? '✓' : '✗'}
+                      <Badge variant={currentRecord?.paths?.audio_evidence ? 'default' : 'outline'}>
+                        Audio: {currentRecord?.paths?.audio_evidence ? '✓' : '✗'}
                       </Badge>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Validation Results */}
               <Card>
                 <CardHeader>
                   <CardTitle className="text-sm">Auto Validation</CardTitle>
@@ -408,9 +372,7 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
                         <Alert className="bg-accent/50 border-accent-foreground/20">
                           <CheckCircle2 className="h-4 w-4 text-accent-foreground" />
                           <AlertTitle>Passed</AlertTitle>
-                          <AlertDescription>
-                            Không tìm thấy lỗi format hoặc consistency
-                          </AlertDescription>
+                          <AlertDescription>Không tìm thấy lỗi format hoặc consistency</AlertDescription>
                         </Alert>
                       );
                     }
@@ -435,26 +397,25 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
               </Card>
             </div>
 
-            {/* QA Items */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">QA Items ({currentRecord?.qa_items.length})</CardTitle>
+                <CardTitle className="text-sm">QA Pairs ({currentRecord?.qa_pairs?.length || 0})</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {currentRecord?.qa_items.map((qa, index) => (
-                  <div key={qa.qa_id} className="p-4 bg-muted/50 rounded-lg">
+                {currentRecord?.qa_pairs?.map((qa, index) => (
+                  <div key={index} className="p-4 bg-muted/50 rounded-lg">
                     <div className="flex items-center justify-between mb-3">
-                      <Badge variant="outline">{qa.qa_id}</Badge>
-                      <Badge>{qa.scenario}</Badge>
+                      <Badge variant="outline">QA #{index + 1}</Badge>
+                      <Badge>{qa.type}</Badge>
                     </div>
                     <div className="space-y-2">
                       <div>
-                        <p className="text-xs text-muted-foreground">Query</p>
-                        <p className="text-sm">{qa.query.text || qa.query.audio_query_transcript || 'N/A'}</p>
+                        <p className="text-xs text-muted-foreground">Question</p>
+                        <p className="text-sm">{qa.q || 'N/A'}</p>
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Answer</p>
-                        <p className="text-sm font-medium">{qa.target.answer}</p>
+                        <p className="text-sm">{qa.a || 'N/A'}</p>
                       </div>
                     </div>
                   </div>
@@ -464,30 +425,15 @@ export function RandomQACheck({ records, onRecordUpdate }: RandomQACheckProps) {
           </div>
         </ScrollArea>
 
-        {/* Action Bar */}
-        <div className="px-6 py-4 border-t shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Badge className="bg-accent text-accent-foreground">{passedCount} Passed</Badge>
-                <Badge variant="destructive">{failedCount} Failed</Badge>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setIsRunning(false)}>
-                Tạm dừng
-              </Button>
-              <Button variant="destructive" onClick={handleFail}>
-                <XCircle className="h-4 w-4 mr-2" />
-                Fail
-              </Button>
-              <Button onClick={handlePass}>
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Pass
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          </div>
+        <div className="border-t px-6 py-4 shrink-0 flex items-center justify-end gap-3">
+          <Button variant="destructive" onClick={handleFail}>
+            <XCircle className="h-4 w-4 mr-2" />
+            Fail
+          </Button>
+          <Button onClick={handlePass}>
+            <CheckCircle2 className="h-4 w-4 mr-2" />
+            Pass & Next
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

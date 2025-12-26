@@ -14,7 +14,6 @@ import {
   FileJson,
   Database,
   CheckCircle2,
-  AlertTriangle,
   Trash2,
   Download,
   Eye,
@@ -22,14 +21,8 @@ import {
   FolderOpen,
   Key,
 } from 'lucide-react';
-import { DatasetRecord } from '@/types/dataset';
+import { DatasetRecord, QAPair } from '@/types/dataset';
 import { toast } from 'sonner';
-import {
-  detectAndParseFile,
-  mergeDataByImageId,
-  convertMergedDataToRecords,
-  parseHuggingFaceDataset,
-} from '@/lib/dataParser';
 
 interface ImportInterfaceProps {
   onAddRecords: (records: DatasetRecord[]) => void;
@@ -54,99 +47,135 @@ interface HuggingFaceRepo {
   error?: string;
 }
 
-// Helper to convert internal record to export format for preview
-function convertToExportFormat(record: DatasetRecord, index: number): any {
-  const landmarkSlug = (record.metadata.geographic_info?.location_name || record.metadata.entity_name || 'unknown')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_|_$/g, '');
-
-  const groupIndex = Math.floor(index / 100);
-  const itemIndex = index % 100;
-  const id = `VN_LM_2025_${String(groupIndex + 1).padStart(3, '0')}_${String(itemIndex).padStart(2, '0')}`;
-
-  // Determine image path
-  let imagePath = record.assets?.image_path || record.assets?.image_url || '';
-  if (imagePath && !imagePath.startsWith('images/')) {
-    const ext = imagePath.split('.').pop() || 'jpg';
-    imagePath = `images/${landmarkSlug}/${id}.${ext}`;
+// Convert any input format to the standard DatasetRecord format
+function convertToDatasetRecord(item: any, index: number): DatasetRecord {
+  // If already in correct format
+  if (item.id && item.paths && item.metadata && item.qa_pairs) {
+    return {
+      ...item,
+      status: item.status || 'pending'
+    };
   }
 
-  // Determine audio evidence path
-  let audioEvidencePath = record.assets?.audio_evidence?.path || '';
-  if (audioEvidencePath && !audioEvidencePath.startsWith('audio_evidence/')) {
-    audioEvidencePath = `audio_evidence/${landmarkSlug}/evid_${id}.wav`;
+  // Generate ID
+  const idNumber = String(index + 1).padStart(3, '0');
+  const id = item.id || `VN_LM_2025_${idNumber}_00`;
+
+  // Extract landmark name
+  const landmarkName = item.metadata?.landmark_name ||
+    item.metadata?.geographic_info?.location_name ||
+    item.metadata?.entity_name ||
+    item.geographic_info?.location_name ||
+    item.entity_name ||
+    item.landmark_name ||
+    'Unknown';
+
+  // Extract location
+  const city = item.metadata?.location?.city ||
+    item.metadata?.geographic_info?.city ||
+    item.geographic_info?.city ||
+    item.city ||
+    '';
+  
+  const district = item.metadata?.location?.district ||
+    item.metadata?.geographic_info?.district ||
+    item.geographic_info?.district ||
+    item.district ||
+    '';
+
+  // Extract GPS
+  const gpsLat = item.metadata?.location?.gps?.lat ||
+    item.metadata?.geographic_info?.lat ||
+    item.geographic_info?.lat ||
+    item.lat ||
+    0;
+  
+  const gpsLon = item.metadata?.location?.gps?.lon ||
+    item.metadata?.geographic_info?.lon ||
+    item.geographic_info?.lon ||
+    item.lon ||
+    0;
+
+  // Extract paths
+  const imagePath = item.paths?.image ||
+    item.image_path ||
+    item.file_path ||
+    '';
+  
+  const audioEvidencePath = item.paths?.audio_evidence ||
+    item.audio_evidence_path ||
+    '';
+
+  // Extract image spec
+  const imageSpec = item.metadata?.image_spec || {
+    original_url: item.metadata?.geographic_info?.page_url || item.image_url || '',
+    license: item.metadata?.geographic_info?.license_info || 'CC BY-SA 4.0'
+  };
+
+  // Extract audio spec
+  const audioSpec = item.metadata?.audio_spec || (item.audio_transcript ? {
+    transcript: item.audio_transcript,
+    voice_id: 'vi-VN-NamMinhNeural'
+  } : undefined);
+
+  // Convert QA pairs
+  let qaPairs: QAPair[] = [];
+  
+  if (item.qa_pairs && Array.isArray(item.qa_pairs)) {
+    qaPairs = item.qa_pairs.map((qa: any, qaIdx: number) => ({
+      q: qa.q || qa.question || '',
+      a: qa.a || qa.answer || qa.answers?.[0] || '',
+      type: qa.type || 'ask_image',
+      paths: qa.paths || {
+        question_audio: '',
+        answer_audio: ''
+      },
+      audio_meta: qa.audio_meta || {
+        q_voice: { id: 'vi-VN-HoaiMyNeural' },
+        a_voice: { id: 'vi-VN-HoaiMyNeural' }
+      }
+    }));
+  } else if (item.vqa_pairs && Array.isArray(item.vqa_pairs)) {
+    qaPairs = item.vqa_pairs.map((qa: any, qaIdx: number) => ({
+      q: qa.question || '',
+      a: qa.answers?.[0] || qa.answer || '',
+      type: 'ask_image' as const,
+      paths: {
+        question_audio: '',
+        answer_audio: ''
+      },
+      audio_meta: {
+        q_voice: { id: 'vi-VN-HoaiMyNeural' },
+        a_voice: { id: 'vi-VN-HoaiMyNeural' }
+      }
+    }));
   }
 
-  // Build metadata
-  const geo = record.metadata.geographic_info;
-  const lat = geo?.lat ? Number(geo.lat) : 0;
-  const lng = geo?.lon ? Number(geo.lon) : 0;
-
-  const exportRecord: any = {
+  const record: DatasetRecord = {
     id,
-    timestamp: new Date().toISOString(),
+    timestamp: item.timestamp || new Date().toISOString(),
     paths: {
       image: imagePath,
       ...(audioEvidencePath && { audio_evidence: audioEvidencePath })
     },
     metadata: {
-      landmark_name: geo?.location_name || record.metadata.entity_name || '',
+      landmark_name: landmarkName,
       location: {
-        city: geo?.city || record.metadata.location.city || '',
-        district: geo?.district || record.metadata.location.district || '',
+        city,
+        district,
         gps: {
-          lat,
-          lng
+          lat: typeof gpsLat === 'number' ? gpsLat : parseFloat(gpsLat) || 0,
+          lon: typeof gpsLon === 'number' ? gpsLon : parseFloat(gpsLon) || 0
         }
       },
-      image_spec: {
-        resolution: '1920x1080',
-        license: geo?.license_info || 'CC BY-SA 4.0',
-        source_url: geo?.page_url || ''
-      },
-      ...(record.assets?.audio_evidence && {
-        audio_spec: {
-          transcript: record.assets.audio_evidence.transcript || '',
-          voice_id: 'vi-VN-NamMinhNeural'
-        }
-      })
+      image_spec: imageSpec,
+      ...(audioSpec && { audio_spec: audioSpec })
     },
-    qa_pairs: record.qa_items.map((qa, qaIndex) => {
-      const qaNum = String(qaIndex + 1).padStart(2, '0');
-      
-      // Determine QA type based on scenario
-      let qaType = 'ask_image';
-      if (qa.scenario === 'text_ask_audio' || qa.scenario === 'audio_ask_audio') {
-        qaType = 'ask_audio';
-      } else if (qa.target.evidence_source === 'audio') {
-        qaType = 'ask_both';
-      }
-
-      return {
-        q: qa.query.text || qa.query.audio_query_transcript || '',
-        a: qa.target.answer || '',
-        type: qaType,
-        paths: {
-          question_audio: `audio_queries/${landmarkSlug}/q_${id}_qa_${qaNum}.wav`,
-          answer_audio: `audio_answers/${landmarkSlug}/a_${id}_qa_${qaNum}.wav`
-        },
-        audio_meta: {
-          q_voice: {
-            id: 'vi-VN-HoaiMyNeural',
-            rate: '0%',
-            pitch: '0Hz'
-          },
-          a_voice: {
-            id: 'vi-VN-HoaiMyNeural',
-            type: 'fixed_target'
-          }
-        }
-      };
-    })
+    qa_pairs: qaPairs,
+    status: 'pending'
   };
 
-  return exportRecord;
+  return record;
 }
 
 export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
@@ -154,7 +183,6 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedRecords, setProcessedRecords] = useState<DatasetRecord[]>([]);
   const [previewRecord, setPreviewRecord] = useState<DatasetRecord | null>(null);
-  const [previewIndex, setPreviewIndex] = useState(0);
 
   // Hugging Face state
   const [hfRepoUrl, setHfRepoUrl] = useState('');
@@ -178,7 +206,19 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
     for (const file of Array.from(files)) {
       try {
         const content = await file.text();
-        const { type, data } = detectAndParseFile(content, file.name);
+        let parsedData: any[] = [];
+        let detectedType = 'unknown';
+
+        if (file.name.endsWith('.jsonl')) {
+          parsedData = content.split('\n').filter(line => line.trim()).map(line => {
+            try { return JSON.parse(line); } catch { return null; }
+          }).filter(Boolean);
+          detectedType = 'jsonl';
+        } else if (file.name.endsWith('.json')) {
+          const parsed = JSON.parse(content);
+          parsedData = Array.isArray(parsed) ? parsed : [parsed];
+          detectedType = 'json';
+        }
 
         newFiles.push({
           id: `${Date.now()}_${file.name}`,
@@ -186,8 +226,8 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
           size: file.size,
           type: file.type,
           content,
-          parsedData: data,
-          detectedType: type,
+          parsedData,
+          detectedType,
         });
       } catch (error) {
         toast.error(`Lỗi đọc file ${file.name}`);
@@ -196,8 +236,6 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
     toast.success(`Đã upload ${newFiles.length} file(s)`);
-
-    // Reset input
     event.target.value = '';
   }, []);
 
@@ -214,15 +252,12 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
     setIsProcessing(true);
 
     try {
-      const dataArrays = uploadedFiles.map(f => ({
-        type: f.detectedType,
-        data: f.parsedData,
-        filename: f.name,
-      }));
+      const allItems: any[] = [];
+      uploadedFiles.forEach(file => {
+        allItems.push(...file.parsedData);
+      });
 
-      const mergedMap = mergeDataByImageId(dataArrays);
-      const records = convertMergedDataToRecords(mergedMap);
-
+      const records = allItems.map((item, idx) => convertToDatasetRecord(item, idx));
       setProcessedRecords(records);
       toast.success(`Đã xử lý ${records.length} records từ ${uploadedFiles.length} files`);
     } catch (error) {
@@ -292,35 +327,28 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
       ));
 
       try {
-        // Use real Hugging Face API
         const response = await fetch(
           `https://datasets-server.huggingface.co/rows?dataset=${encodeURIComponent(repo.name)}&config=default&split=train&offset=0&length=100`,
           {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
+            headers: { Authorization: `Bearer ${token}` }
           }
         );
 
         if (response.ok) {
           const data = await response.json();
           const rows = data.rows?.map((row: any) => row.row) || [];
-          const records = parseHuggingFaceDataset(rows);
+          const records = rows.map((item: any, idx: number) => convertToDatasetRecord(item, idx));
 
           setHfRecords(prev => [...prev, ...records]);
-
           setHfRepos(prev => prev.map(r =>
             r.id === repo.id ? { ...r, status: 'done', recordsCount: records.length } : r
           ));
         } else {
-          const errorText = await response.text();
-          console.error('HF API Error:', errorText);
           setHfRepos(prev => prev.map(r =>
             r.id === repo.id ? { ...r, status: 'error', error: 'Không thể load data từ repo' } : r
           ));
         }
       } catch (error) {
-        console.error('HF Load Error:', error);
         setHfRepos(prev => prev.map(r =>
           r.id === repo.id ? { ...r, status: 'error', error: 'Lỗi kết nối' } : r
         ));
@@ -348,18 +376,11 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const openPreview = (record: DatasetRecord, index: number) => {
-    setPreviewRecord(record);
-    setPreviewIndex(index);
-  };
-
   return (
     <div className="p-6 space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground">Import Data</h2>
-        <p className="text-muted-foreground">
-          Upload local files hoặc import từ Hugging Face datasets
-        </p>
+        <p className="text-muted-foreground">Upload local files hoặc import từ Hugging Face datasets</p>
       </div>
 
       <Tabs defaultValue="local" className="space-y-6">
@@ -395,17 +416,10 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                     className="hidden"
                     id="file-upload"
                   />
-                  <Label
-                    htmlFor="file-upload"
-                    className="cursor-pointer flex flex-col items-center gap-2"
-                  >
+                  <Label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center gap-2">
                     <Upload className="h-10 w-10 text-muted-foreground" />
-                    <span className="text-sm font-medium">
-                      Click để upload hoặc kéo thả files
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Hỗ trợ: JSON, JSONL
-                    </span>
+                    <span className="text-sm font-medium">Click để upload hoặc kéo thả files</span>
+                    <span className="text-xs text-muted-foreground">Hỗ trợ: JSON, JSONL</span>
                   </Label>
                 </div>
 
@@ -415,28 +429,19 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                     <ScrollArea className="h-[200px]">
                       <div className="space-y-2">
                         {uploadedFiles.map(file => (
-                          <div
-                            key={file.id}
-                            className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                          >
+                          <div key={file.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                             <div className="flex items-center gap-3">
                               <FileJson className="h-5 w-5 text-primary" />
                               <div>
                                 <p className="font-medium text-sm">{file.name}</p>
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                   <span>{formatFileSize(file.size)}</span>
-                                  <Badge variant="outline" className="text-xs">
-                                    {file.detectedType}
-                                  </Badge>
+                                  <Badge variant="outline" className="text-xs">{file.detectedType}</Badge>
                                   <span>{file.parsedData.length} items</span>
                                 </div>
                               </div>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeFile(file.id)}
-                            >
+                            <Button variant="ghost" size="icon" onClick={() => removeFile(file.id)}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
@@ -444,11 +449,7 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                       </div>
                     </ScrollArea>
 
-                    <Button
-                      onClick={processFiles}
-                      disabled={isProcessing}
-                      className="w-full"
-                    >
+                    <Button onClick={processFiles} disabled={isProcessing} className="w-full">
                       {isProcessing ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -457,7 +458,7 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                       ) : (
                         <>
                           <CheckCircle2 className="h-4 w-4 mr-2" />
-                          Merge & Process ({uploadedFiles.length} files)
+                          Process ({uploadedFiles.length} files)
                         </>
                       )}
                     </Button>
@@ -479,9 +480,6 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                   <div className="text-center py-8 text-muted-foreground">
                     <FileJson className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     <p>Chưa có dữ liệu được xử lý</p>
-                    <p className="text-xs mt-1">
-                      Upload files và nhấn Process để merge data theo IMG ID
-                    </p>
                   </div>
                 ) : (
                   <>
@@ -489,40 +487,23 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                       <CheckCircle2 className="h-4 w-4" />
                       <AlertTitle>Xử lý hoàn tất</AlertTitle>
                       <AlertDescription>
-                        {processedRecords.length} records đã được merge từ{' '}
-                        {uploadedFiles.length} files
+                        {processedRecords.length} records đã sẵn sàng import
                       </AlertDescription>
                     </Alert>
 
                     <ScrollArea className="h-[200px]">
                       <div className="space-y-2">
                         {processedRecords.slice(0, 20).map((record, idx) => (
-                          <div
-                            key={record.record_id}
-                            className="flex items-center justify-between p-2 bg-muted/30 rounded"
-                          >
+                          <div key={record.id} className="flex items-center justify-between p-2 bg-muted/30 rounded">
                             <div>
-                              <p className="font-medium text-sm">
-                                {record.record_id}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {record.qa_items.length} QA pairs
-                              </p>
+                              <p className="font-medium text-sm">{record.id}</p>
+                              <p className="text-xs text-muted-foreground">{record.qa_pairs?.length || 0} QA pairs</p>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openPreview(record, idx)}
-                            >
+                            <Button variant="ghost" size="sm" onClick={() => setPreviewRecord(record)}>
                               <Eye className="h-4 w-4" />
                             </Button>
                           </div>
                         ))}
-                        {processedRecords.length > 20 && (
-                          <p className="text-xs text-center text-muted-foreground py-2">
-                            ... và {processedRecords.length - 20} records khác
-                          </p>
-                        )}
                       </div>
                     </ScrollArea>
 
@@ -535,35 +516,6 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
               </CardContent>
             </Card>
           </div>
-
-          {/* Format Guide */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Supported Formats</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                <div className="p-3 bg-muted/30 rounded-lg">
-                  <Badge className="mb-2">JSONL (VQA)</Badge>
-                  <p className="text-xs text-muted-foreground">
-                    Mỗi dòng là 1 JSON object với image_id, file_path, vqa_pairs
-                  </p>
-                </div>
-                <div className="p-3 bg-muted/30 rounded-lg">
-                  <Badge className="mb-2">JSON (Metadata)</Badge>
-                  <p className="text-xs text-muted-foreground">
-                    Array hoặc object với image_id, image_url, file_path, keyword...
-                  </p>
-                </div>
-                <div className="p-3 bg-muted/30 rounded-lg">
-                  <Badge className="mb-2">JSON (Conversation)</Badge>
-                  <p className="text-xs text-muted-foreground">
-                    Array role/content pairs được convert thành QA pairs
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* Hugging Face Tab */}
@@ -579,7 +531,6 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* HF Repo Input */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -596,13 +547,8 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                       value={hfRepoUrl}
                       onChange={e => setHfRepoUrl(e.target.value)}
                     />
-                    <Button onClick={addHuggingFaceRepo} variant="outline">
-                      Thêm
-                    </Button>
+                    <Button onClick={addHuggingFaceRepo} variant="outline">Thêm</Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Ví dụ: username/vietnam-landmarks-vqa
-                  </p>
                 </div>
 
                 <Separator />
@@ -610,24 +556,17 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                 {hfRepos.length > 0 && (
                   <div className="space-y-2">
                     {hfRepos.map(repo => (
-                      <div
-                        key={repo.id}
-                        className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                      >
+                      <div key={repo.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                         <div className="flex items-center gap-3">
                           <Database className="h-5 w-5 text-primary" />
                           <div>
                             <p className="font-medium text-sm">{repo.name}</p>
-                            <p className="text-xs text-muted-foreground truncate max-w-48">
-                              {repo.url}
-                            </p>
+                            <p className="text-xs text-muted-foreground truncate max-w-48">{repo.url}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           {repo.status === 'done' && (
-                            <Badge className="bg-accent text-accent-foreground">
-                              {repo.recordsCount} records
-                            </Badge>
+                            <Badge className="bg-accent text-accent-foreground">{repo.recordsCount} records</Badge>
                           )}
                           {repo.status === 'loading' && (
                             <Badge className="bg-chart-3/10 text-chart-3">
@@ -638,12 +577,7 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                           {repo.status === 'error' && (
                             <Badge variant="destructive">{repo.error || 'Error'}</Badge>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeHfRepo(repo.id)}
-                            disabled={isLoadingHf}
-                          >
+                          <Button variant="ghost" size="icon" onClick={() => removeHfRepo(repo.id)} disabled={isLoadingHf}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -653,11 +587,7 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                 )}
 
                 {hfRepos.length > 0 && (
-                  <Button
-                    onClick={loadHuggingFaceData}
-                    disabled={isLoadingHf || !hasHfToken}
-                    className="w-full"
-                  >
+                  <Button onClick={loadHuggingFaceData} disabled={isLoadingHf || !hasHfToken} className="w-full">
                     {isLoadingHf ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -674,7 +604,6 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
               </CardContent>
             </Card>
 
-            {/* HF Results */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -687,9 +616,6 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
                   <div className="text-center py-8 text-muted-foreground">
                     <Database className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     <p>Chưa có dữ liệu từ Hugging Face</p>
-                    <p className="text-xs mt-1">
-                      Thêm repo và nhấn Load để import data
-                    </p>
                   </div>
                 ) : (
                   <>
@@ -703,24 +629,13 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
 
                     <ScrollArea className="h-[200px]">
                       <div className="space-y-2">
-                        {hfRecords.slice(0, 20).map((record, idx) => (
-                          <div
-                            key={record.record_id}
-                            className="flex items-center justify-between p-2 bg-muted/30 rounded"
-                          >
+                        {hfRecords.slice(0, 20).map((record) => (
+                          <div key={record.id} className="flex items-center justify-between p-2 bg-muted/30 rounded">
                             <div>
-                              <p className="font-medium text-sm">
-                                {record.record_id}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {record.qa_items.length} QA pairs
-                              </p>
+                              <p className="font-medium text-sm">{record.id}</p>
+                              <p className="text-xs text-muted-foreground">{record.qa_pairs?.length || 0} QA pairs</p>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openPreview(record, idx)}
-                            >
+                            <Button variant="ghost" size="sm" onClick={() => setPreviewRecord(record)}>
                               <Eye className="h-4 w-4" />
                             </Button>
                           </div>
@@ -737,33 +652,21 @@ export function ImportInterface({ onAddRecords }: ImportInterfaceProps) {
               </CardContent>
             </Card>
           </div>
-
-          {hasHfToken && (
-            <Alert className="bg-accent/50">
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertTitle>Token đã được cấu hình</AlertTitle>
-              <AlertDescription>
-                Hugging Face Access Token đã sẵn sàng. Bạn có thể load data từ các dataset.
-              </AlertDescription>
-            </Alert>
-          )}
         </TabsContent>
       </Tabs>
 
-      {/* Preview Modal - Export Format */}
+      {/* Preview Modal */}
       {previewRecord && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-3xl max-h-[85vh] overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Preview (Export Format): {previewRecord.record_id}</CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => setPreviewRecord(null)}>
-                ✕
-              </Button>
+              <CardTitle>Preview: {previewRecord.id}</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setPreviewRecord(null)}>✕</Button>
             </CardHeader>
             <CardContent>
               <ScrollArea className="h-[65vh]">
                 <pre className="text-xs bg-muted p-4 rounded-lg overflow-auto whitespace-pre-wrap">
-                  {JSON.stringify(convertToExportFormat(previewRecord, previewIndex), null, 2)}
+                  {JSON.stringify(previewRecord, null, 2)}
                 </pre>
               </ScrollArea>
             </CardContent>

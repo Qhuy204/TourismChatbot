@@ -15,13 +15,10 @@ import {
   Play, 
   Square,
   CheckCircle2,
-  AlertTriangle,
-  FileJson,
   Trash2,
-  Copy,
   Globe
 } from 'lucide-react';
-import { DatasetRecord, Scenario } from '@/types/dataset';
+import { DatasetRecord } from '@/types/dataset';
 import { toast } from 'sonner';
 
 interface CrawlInterfaceProps {
@@ -37,6 +34,8 @@ interface CrawlSource {
   recordsCount?: number;
 }
 
+type QAType = 'ask_image' | 'ask_audio' | 'ask_both';
+
 export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
   const [sources, setSources] = useState<CrawlSource[]>([
     { id: '1', name: 'Vietnam Landmarks Wikipedia', url: 'https://vi.wikipedia.org/wiki/Danh_lam_thắng_cảnh', type: 'wikipedia', status: 'pending' },
@@ -46,19 +45,16 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
   const [crawledRecords, setCrawledRecords] = useState<DatasetRecord[]>([]);
 
   const [manualEntry, setManualEntry] = useState({
-    entity_name: '',
+    landmark_name: '',
     city: '',
     district: '',
-    topic: 'vietnam_landmark',
     tags: '',
     image_path: '',
     audio_path: '',
-    audio_type: 'environment' as 'environment' | 'speech' | 'music',
     audio_transcript: '',
     question: '',
     answer: '',
-    scenario: 'text_ask_image' as Scenario,
-    answer_format: 'one_sentence' as 'short_phrase' | 'one_sentence' | 'free'
+    qa_type: 'ask_image' as QAType
   });
 
   const [newSourceUrl, setNewSourceUrl] = useState('');
@@ -101,40 +97,39 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
         idx === i ? { ...s, status: 'crawling' } : s
       ));
 
-      // Simulate crawling delay
       for (let j = 0; j < 5; j++) {
         await new Promise(r => setTimeout(r, 500));
         setProgress(((i * 5 + j + 1) / totalSteps) * 100);
 
+        const idNumber = String(mockRecords.length + 1).padStart(3, '0');
         const record: DatasetRecord = {
-          record_id: `VN_CRAWL_${Date.now()}_${String(mockRecords.length + 1).padStart(4, '0')}`,
+          id: `VN_CRAWL_${idNumber}_00`,
+          timestamp: new Date().toISOString(),
+          paths: {
+            image: `images/crawled/VN_CRAWL_${idNumber}_00.jpg`
+          },
           metadata: {
-            topic: 'vietnam_landmark',
-            entity_name: `Địa danh mẫu ${mockRecords.length + 1}`,
+            landmark_name: `Địa danh mẫu ${mockRecords.length + 1}`,
             location: {
               city: ['Hà Nội', 'Hồ Chí Minh', 'Đà Nẵng'][Math.floor(Math.random() * 3)],
               district: 'Quận 1',
-              lat_long: [20 + Math.random() * 3, 105 + Math.random() * 5]
-            },
-            tags: ['architecture', 'historic']
+              gps: {
+                lat: 20 + Math.random() * 3,
+                lon: 105 + Math.random() * 5
+              }
+            }
           },
-          assets: {
-            image_path: `data/images/crawled_${mockRecords.length + 1}.jpg`,
-            audio_evidence: null
-          },
-          qa_items: [{
-            qa_id: `qa_crawl_${mockRecords.length + 1}`,
-            scenario: 'text_ask_image',
-            modality_in: ['image', 'text'],
-            query: {
-              text: 'Mô tả kiến trúc của địa danh này?',
-              audio_query_path: null,
-              audio_query_transcript: null
+          qa_pairs: [{
+            q: 'Mô tả kiến trúc của địa danh này?',
+            a: 'Đây là mô tả mẫu được crawl tự động.',
+            type: 'ask_image',
+            paths: {
+              question_audio: '',
+              answer_audio: ''
             },
-            target: {
-              answer: 'Đây là mô tả mẫu được crawl tự động.',
-              evidence_source: 'image',
-              answer_format: 'one_sentence'
+            audio_meta: {
+              q_voice: { id: 'vi-VN-HoaiMyNeural' },
+              a_voice: { id: 'vi-VN-HoaiMyNeural' }
             }
           }],
           status: 'pending'
@@ -154,48 +149,44 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
   };
 
   const handleManualAdd = () => {
-    if (!manualEntry.entity_name || !manualEntry.question || !manualEntry.answer) {
+    if (!manualEntry.landmark_name || !manualEntry.question || !manualEntry.answer) {
       toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
       return;
     }
 
+    const idNumber = String(Date.now()).slice(-6);
     const newRecord: DatasetRecord = {
-      record_id: `VN_MANUAL_${Date.now()}`,
+      id: `VN_MANUAL_${idNumber}`,
+      timestamp: new Date().toISOString(),
+      paths: {
+        image: manualEntry.image_path || '',
+        ...(manualEntry.audio_path && { audio_evidence: manualEntry.audio_path })
+      },
       metadata: {
-        topic: manualEntry.topic,
-        entity_name: manualEntry.entity_name,
+        landmark_name: manualEntry.landmark_name,
         location: {
           city: manualEntry.city || 'Unknown',
-          district: manualEntry.district || 'Unknown',
-          lat_long: [21.0, 105.8]
+          district: manualEntry.district || '',
+          gps: { lat: 21.0, lon: 105.8 }
         },
-        tags: manualEntry.tags.split(',').map(t => t.trim()).filter(Boolean)
+        ...(manualEntry.audio_transcript && {
+          audio_spec: {
+            transcript: manualEntry.audio_transcript,
+            voice_id: 'vi-VN-NamMinhNeural'
+          }
+        })
       },
-      assets: {
-        image_path: manualEntry.image_path || null,
-        audio_evidence: manualEntry.audio_path ? {
-          path: manualEntry.audio_path,
-          type: manualEntry.audio_type,
-          transcript: manualEntry.audio_transcript,
-          duration_sec: 10,
-          sr: 16000
-        } : null
-      },
-      qa_items: [{
-        qa_id: `qa_manual_${Date.now()}`,
-        scenario: manualEntry.scenario,
-        modality_in: manualEntry.scenario === 'text_ask_image' ? ['image', 'text'] :
-                     manualEntry.scenario === 'audio_ask_image' ? ['image', 'audio'] :
-                     manualEntry.scenario === 'text_ask_audio' ? ['audio', 'text'] : ['audio'],
-        query: {
-          text: manualEntry.scenario.startsWith('text') ? manualEntry.question : null,
-          audio_query_path: manualEntry.scenario.startsWith('audio') ? `data/queries/manual_${Date.now()}.wav` : null,
-          audio_query_transcript: manualEntry.scenario.startsWith('audio') ? manualEntry.question : null
+      qa_pairs: [{
+        q: manualEntry.question,
+        a: manualEntry.answer,
+        type: manualEntry.qa_type,
+        paths: {
+          question_audio: '',
+          answer_audio: ''
         },
-        target: {
-          answer: manualEntry.answer,
-          evidence_source: manualEntry.scenario.includes('image') ? 'image' : 'audio',
-          answer_format: manualEntry.answer_format
+        audio_meta: {
+          q_voice: { id: 'vi-VN-HoaiMyNeural' },
+          a_voice: { id: 'vi-VN-HoaiMyNeural' }
         }
       }],
       status: 'pending'
@@ -204,21 +195,17 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
     onAddRecords([newRecord]);
     toast.success('Đã thêm record mới');
 
-    // Reset form
     setManualEntry({
-      entity_name: '',
+      landmark_name: '',
       city: '',
       district: '',
-      topic: 'vietnam_landmark',
       tags: '',
       image_path: '',
       audio_path: '',
-      audio_type: 'environment',
       audio_transcript: '',
       question: '',
       answer: '',
-      scenario: 'text_ask_image',
-      answer_format: 'one_sentence'
+      qa_type: 'ask_image'
     });
   };
 
@@ -236,7 +223,7 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
     <div className="p-6 space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground">Crawl & Import Data</h2>
-        <p className="text-muted-foreground">Crawl dữ liệu từ nguồn hoặc nhập thủ công theo format</p>
+        <p className="text-muted-foreground">Crawl dữ liệu từ nguồn hoặc nhập thủ công</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -251,10 +238,7 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               {sources.map((source) => (
-                <div 
-                  key={source.id} 
-                  className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                >
+                <div key={source.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                   <div className="flex items-center gap-3">
                     <Badge variant="outline">{source.type}</Badge>
                     <div>
@@ -264,21 +248,12 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
                   </div>
                   <div className="flex items-center gap-2">
                     {source.status === 'done' && (
-                      <Badge className="bg-accent text-accent-foreground">
-                        {source.recordsCount} records
-                      </Badge>
+                      <Badge className="bg-accent text-accent-foreground">{source.recordsCount} records</Badge>
                     )}
                     {source.status === 'crawling' && (
-                      <Badge className="bg-chart-3/10 text-chart-3 animate-pulse">
-                        Crawling...
-                      </Badge>
+                      <Badge className="bg-chart-3/10 text-chart-3 animate-pulse">Crawling...</Badge>
                     )}
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => removeSource(source.id)}
-                      disabled={isCrawling}
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => removeSource(source.id)} disabled={isCrawling}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -290,16 +265,8 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
 
             <div className="space-y-3">
               <Label>Thêm nguồn mới</Label>
-              <Input
-                placeholder="Tên nguồn"
-                value={newSourceName}
-                onChange={(e) => setNewSourceName(e.target.value)}
-              />
-              <Input
-                placeholder="URL"
-                value={newSourceUrl}
-                onChange={(e) => setNewSourceUrl(e.target.value)}
-              />
+              <Input placeholder="Tên nguồn" value={newSourceName} onChange={(e) => setNewSourceName(e.target.value)} />
+              <Input placeholder="URL" value={newSourceUrl} onChange={(e) => setNewSourceUrl(e.target.value)} />
               <Button onClick={addSource} variant="outline" className="w-full">
                 <Plus className="h-4 w-4 mr-2" />
                 Thêm nguồn
@@ -312,9 +279,7 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
               <div className="space-y-3">
                 <Progress value={progress} className="h-2" />
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Đã crawl {crawledRecords.length} records...
-                  </span>
+                  <span className="text-sm text-muted-foreground">Đã crawl {crawledRecords.length} records...</span>
                   <Button variant="destructive" size="sm" onClick={() => setIsCrawling(false)}>
                     <Square className="h-4 w-4 mr-2" />
                     Dừng
@@ -355,10 +320,10 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <Label>Entity Name *</Label>
+                <Label>Landmark Name *</Label>
                 <Input
-                  value={manualEntry.entity_name}
-                  onChange={(e) => setManualEntry({ ...manualEntry, entity_name: e.target.value })}
+                  value={manualEntry.landmark_name}
+                  onChange={(e) => setManualEntry({ ...manualEntry, landmark_name: e.target.value })}
                   placeholder="Ví dụ: Chùa Một Cột"
                   className="mt-1"
                 />
@@ -381,32 +346,6 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
                   className="mt-1"
                 />
               </div>
-              <div>
-                <Label>Topic</Label>
-                <Select 
-                  value={manualEntry.topic}
-                  onValueChange={(v) => setManualEntry({ ...manualEntry, topic: v })}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="vietnam_landmark">Vietnam Landmark</SelectItem>
-                    <SelectItem value="vietnam_temple">Vietnam Temple</SelectItem>
-                    <SelectItem value="vietnam_cuisine">Vietnam Cuisine</SelectItem>
-                    <SelectItem value="vietnam_nature">Vietnam Nature</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Tags (comma separated)</Label>
-                <Input
-                  value={manualEntry.tags}
-                  onChange={(e) => setManualEntry({ ...manualEntry, tags: e.target.value })}
-                  placeholder="architecture, historic"
-                  className="mt-1"
-                />
-              </div>
             </div>
 
             <Separator />
@@ -417,34 +356,18 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
                 <Input
                   value={manualEntry.image_path}
                   onChange={(e) => setManualEntry({ ...manualEntry, image_path: e.target.value })}
-                  placeholder="data/images/example.jpg"
+                  placeholder="images/example.jpg"
                   className="mt-1"
                 />
               </div>
-              <div>
+              <div className="col-span-2">
                 <Label>Audio Path</Label>
                 <Input
                   value={manualEntry.audio_path}
                   onChange={(e) => setManualEntry({ ...manualEntry, audio_path: e.target.value })}
-                  placeholder="data/audio/example.wav"
+                  placeholder="audio_evidence/example.wav"
                   className="mt-1"
                 />
-              </div>
-              <div>
-                <Label>Audio Type</Label>
-                <Select 
-                  value={manualEntry.audio_type}
-                  onValueChange={(v) => setManualEntry({ ...manualEntry, audio_type: v as 'environment' | 'speech' | 'music' })}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="environment">Environment</SelectItem>
-                    <SelectItem value="speech">Speech</SelectItem>
-                    <SelectItem value="music">Music</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
 
@@ -452,19 +375,18 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
 
             <div className="space-y-4">
               <div>
-                <Label>Scenario *</Label>
+                <Label>QA Type *</Label>
                 <Select 
-                  value={manualEntry.scenario}
-                  onValueChange={(v: Scenario) => setManualEntry({ ...manualEntry, scenario: v })}
+                  value={manualEntry.qa_type}
+                  onValueChange={(v: QAType) => setManualEntry({ ...manualEntry, qa_type: v })}
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="text_ask_image">Text → Image</SelectItem>
-                    <SelectItem value="audio_ask_image">Audio → Image</SelectItem>
-                    <SelectItem value="text_ask_audio">Text → Audio</SelectItem>
-                    <SelectItem value="audio_ask_audio">Audio → Audio</SelectItem>
+                    <SelectItem value="ask_image">ask_image</SelectItem>
+                    <SelectItem value="ask_audio">ask_audio</SelectItem>
+                    <SelectItem value="ask_both">ask_both</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -487,22 +409,6 @@ export function CrawlInterface({ onAddRecords }: CrawlInterfaceProps) {
                   className="mt-1"
                   rows={3}
                 />
-              </div>
-              <div>
-                <Label>Answer Format</Label>
-                <Select 
-                  value={manualEntry.answer_format}
-                  onValueChange={(v) => setManualEntry({ ...manualEntry, answer_format: v as 'short_phrase' | 'one_sentence' | 'free' })}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="short_phrase">Short Phrase</SelectItem>
-                    <SelectItem value="one_sentence">One Sentence</SelectItem>
-                    <SelectItem value="free">Free</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
 

@@ -21,65 +21,13 @@ interface ExportInterfaceProps {
   stats: DatasetStats;
 }
 
-interface ExportedQAPair {
-  q: string;
-  a: string;
-  type: 'ask_image' | 'ask_audio' | 'ask_both';
-  paths?: {
-    question_audio?: string;
-    answer_audio?: string;
-  };
-  audio_meta?: {
-    q_voice?: {
-      id: string;
-      rate?: string;
-      pitch?: string;
-    };
-    a_voice?: {
-      id: string;
-      type?: string;
-    };
-  };
-}
-
-interface ExportedRecord {
-  id: string;
-  timestamp: string;
-  paths: {
-    image: string;
-    audio_evidence?: string;
-  };
-  metadata: {
-    landmark_name: string;
-    location: {
-      city: string;
-      district: string;
-      gps: {
-        lat: number;
-        lng: number;
-      };
-    };
-    image_spec: {
-      resolution?: string;
-      license?: string;
-      source_url?: string;
-    };
-    audio_spec?: {
-      transcript?: string;
-      voice_id?: string;
-    };
-  };
-  qa_pairs: ExportedQAPair[];
-}
-
 export function ExportInterface({ records, stats }: ExportInterfaceProps) {
   const [exportFormat, setExportFormat] = useState<'json' | 'jsonl' | 'csv'>('json');
   const [statusFilters, setStatusFilters] = useState({
     pending: false,
-    reviewed: true,
     approved: true,
     rejected: false,
-    warning: false
+    needs_review: true
   });
   const [includeFields, setIncludeFields] = useState({
     paths: true,
@@ -95,117 +43,20 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
     });
   }, [records, statusFilters]);
 
+  // Records are already in the correct format, just export them directly
   const exportData = useMemo(() => {
-    return filteredRecords.map((record, recordIndex) => {
-      // Priority: geographic_info.location_name > entity_name
-      const landmarkName = record.metadata?.geographic_info?.location_name || 
-                           record.metadata?.entity_name || 
-                           'Unknown';
+    return filteredRecords.map((record, index) => {
+      // Ensure proper ID format
+      const idNumber = String(index + 1).padStart(3, '0');
+      const recordId = record.id || `VN_LM_2025_${idNumber}_00`;
       
-      // Priority: geographic_info.city > location.city
-      const city = record.metadata?.geographic_info?.city || 
-                   record.metadata?.location?.city || 
-                   '';
-      
-      // Priority: geographic_info.district > location.district (if exists, else null)
-      const district = record.metadata?.geographic_info?.district || 
-                       record.metadata?.location?.district || 
-                       '';
-      
-      // GPS: lat = lat, lng = lon (mapping lon to lng)
-      const geoInfo = record.metadata?.geographic_info;
-      const lat = geoInfo?.lat 
-        ? (typeof geoInfo.lat === 'number' ? geoInfo.lat : parseFloat(geoInfo.lat))
-        : record.metadata?.location?.lat_long?.[0] || 0;
-      
-      const lng = geoInfo?.lon 
-        ? (typeof geoInfo.lon === 'number' ? geoInfo.lon : parseFloat(geoInfo.lon))
-        : record.metadata?.location?.lat_long?.[1] || 0;
-
-      // source_url = page_url, license = license_info
-      const sourceUrl = geoInfo?.page_url || record.assets?.image_url || undefined;
-      const license = geoInfo?.license_info || 'CC BY-SA 4.0';
-
-      const imagePath = record.assets?.image_path || record.assets?.image_url || '';
-      const folderName = landmarkName.toLowerCase().replace(/\s+/g, '_').replace(/[()]/g, '');
-      
-      // Generate proper ID: VN_LM_2025_XXX_YY
-      const idNumber = String(recordIndex + 1).padStart(3, '0');
-      const recordId = `VN_LM_2025_${idNumber}_00`;
-      
-      // Convert qa_items to new format
-      const qaPairs: ExportedQAPair[] = record.qa_items.map((item, index) => {
-        // Determine type based on scenario or evidence_source
-        let type: 'ask_image' | 'ask_audio' | 'ask_both' = 'ask_image';
-        if (item.scenario?.includes('audio') && item.scenario?.includes('image')) {
-          type = 'ask_both';
-        } else if (item.scenario?.includes('audio') || item.target?.evidence_source === 'audio') {
-          type = 'ask_audio';
-        }
-
-        const qaIndex = String(index + 1).padStart(2, '0');
-        
-        const qaPair: ExportedQAPair = {
-          q: item.query?.text || item.query?.audio_query_transcript || '',
-          a: item.target?.answer || (item.target?.alternative_answers?.[0]) || '',
-          type
-        };
-
-        if (includeFields.paths) {
-          qaPair.paths = {
-            question_audio: `audio_queries/${folderName}/q_${recordId}_qa_${qaIndex}.wav`,
-            answer_audio: `audio_answers/${folderName}/a_${recordId}_qa_${qaIndex}.wav`
-          };
-        }
-
-        if (includeFields.audio_meta) {
-          qaPair.audio_meta = {
-            q_voice: {
-              id: 'vi-VN-HoaiMyNeural',
-              rate: '-10%',
-              pitch: '+0Hz'
-            },
-            a_voice: {
-              id: 'vi-VN-HoaiMyNeural',
-              type: 'fixed_target'
-            }
-          };
-        }
-
-        return qaPair;
-      });
-
-      const exported: ExportedRecord = {
+      return {
         id: recordId,
-        timestamp: record.createdAt || new Date().toISOString(),
-        paths: {
-          image: `images/${folderName}/${recordId}.jpg`,
-        },
-        metadata: {
-          landmark_name: landmarkName,
-          location: {
-            city,
-            district,
-            gps: { lat, lng }
-          },
-          image_spec: {
-            source_url: sourceUrl,
-            license
-          }
-        },
-        qa_pairs: qaPairs
+        timestamp: record.timestamp || new Date().toISOString(),
+        paths: record.paths,
+        metadata: record.metadata,
+        qa_pairs: record.qa_pairs
       };
-
-      // Add audio evidence if available
-      if (record.assets?.audio_evidence) {
-        exported.paths.audio_evidence = `audio_evidence/${folderName}/evid_${recordId}.wav`;
-        exported.metadata.audio_spec = {
-          transcript: record.assets.audio_evidence.transcript,
-          voice_id: 'vi-VN-NamMinhNeural'
-        };
-      }
-
-      return exported;
     });
   }, [filteredRecords, includeFields]);
 
@@ -224,18 +75,18 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
       mimeType = 'application/x-jsonlines';
     } else {
       // CSV export - flatten the data
-      const headers = ['id', 'timestamp', 'landmark_name', 'city', 'lat', 'lng', 'question', 'answer', 'type'];
+      const headers = ['id', 'timestamp', 'landmark_name', 'city', 'lat', 'lon', 'question', 'answer', 'type'];
       const rows: string[][] = [];
       
       exportData.forEach(record => {
-        record.qa_pairs.forEach(qa => {
+        record.qa_pairs?.forEach(qa => {
           rows.push([
             record.id,
             record.timestamp,
             record.metadata.landmark_name,
             record.metadata.location.city,
-            String(record.metadata.location.gps.lat),
-            String(record.metadata.location.gps.lng),
+            String(record.metadata.location.gps?.lat || 0),
+            String(record.metadata.location.gps?.lon || 0),
             qa.q,
             qa.a,
             qa.type
@@ -295,16 +146,12 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
               <Badge variant="outline">{stats.pending}</Badge>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Reviewed</span>
-              <Badge className="bg-chart-3/10 text-chart-3">{stats.reviewed}</Badge>
+              <span className="text-muted-foreground">Needs Review</span>
+              <Badge className="bg-chart-3/10 text-chart-3">{stats.needs_review}</Badge>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Approved</span>
               <Badge className="bg-accent text-accent-foreground">{stats.approved}</Badge>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Warning</span>
-              <Badge className="bg-chart-4/10 text-chart-4">{stats.warning}</Badge>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Rejected</span>
@@ -368,27 +215,7 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
                         setStatusFilters({ ...statusFilters, [key]: !!checked })
                       }
                     />
-                    <Label htmlFor={`status-${key}`} className="capitalize">{key}</Label>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">Include Fields</Label>
-              <div className="space-y-2">
-                {Object.entries(includeFields).map(([key, value]) => (
-                  <div key={key} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`field-${key}`}
-                      checked={value}
-                      onCheckedChange={(checked) => 
-                        setIncludeFields({ ...includeFields, [key]: !!checked })
-                      }
-                    />
-                    <Label htmlFor={`field-${key}`} className="capitalize">{key.replace('_', ' ')}</Label>
+                    <Label htmlFor={`status-${key}`} className="capitalize">{key.replace('_', ' ')}</Label>
                   </div>
                 ))}
               </div>
@@ -405,7 +232,7 @@ export function ExportInterface({ records, stats }: ExportInterfaceProps) {
             <div className="bg-muted rounded-lg p-4 max-h-80 overflow-auto">
               <pre className="text-xs font-mono whitespace-pre-wrap break-all">
                 {exportFormat === 'csv' 
-                  ? 'id,timestamp,landmark_name,city,lat,lng,question,answer,type\n...'
+                  ? 'id,timestamp,landmark_name,city,lat,lon,question,answer,type\n...'
                   : JSON.stringify(exportData.slice(0, 1), null, 2)}
                 {exportData.length > 1 && '\n\n... và ' + (exportData.length - 1) + ' records nữa'}
               </pre>

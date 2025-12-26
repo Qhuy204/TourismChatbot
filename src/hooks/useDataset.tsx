@@ -54,7 +54,7 @@ export function useDataset() {
     try {
       const inserts = newRecords.map(record => ({
         record_id: record.id,
-        data: record,
+        data: JSON.parse(JSON.stringify(record)), // Ensure it's serializable
         status: record.status || 'pending',
         created_by: user.id,
       }));
@@ -86,7 +86,7 @@ export function useDataset() {
       const { error } = await supabase
         .from('dataset_records')
         .update({
-          data: record,
+          data: JSON.parse(JSON.stringify(record)),
           status: record.status,
         })
         .eq('record_id', record.id);

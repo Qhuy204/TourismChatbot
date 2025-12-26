@@ -4,10 +4,8 @@ import {
   Clock, 
   CheckCircle2, 
   XCircle, 
-  Eye,
   Image,
-  Volume2,
-  MessageSquare
+  Volume2
 } from 'lucide-react';
 import { StatsCard } from './StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,21 +20,21 @@ interface DashboardProps {
 
 export function Dashboard({ records, stats }: DashboardProps) {
   const progressPercent = useMemo(() => {
+    if (stats.total === 0) return 0;
     return Math.round(((stats.approved + stats.rejected) / stats.total) * 100);
   }, [stats]);
 
   const pieData = [
     { name: 'Pending', value: stats.pending, color: 'hsl(var(--chart-5))' },
-    { name: 'Reviewed', value: stats.reviewed, color: 'hsl(var(--chart-3))' },
+    { name: 'Needs Review', value: stats.needs_review, color: 'hsl(var(--chart-3))' },
     { name: 'Approved', value: stats.approved, color: 'hsl(var(--chart-1))' },
     { name: 'Rejected', value: stats.rejected, color: 'hsl(var(--destructive))' },
   ];
 
-  const scenarioData = [
-    { name: 'Text→Image', value: stats.scenarios.text_ask_image, fill: 'hsl(var(--chart-1))' },
-    { name: 'Audio→Image', value: stats.scenarios.audio_ask_image, fill: 'hsl(var(--chart-2))' },
-    { name: 'Text→Audio', value: stats.scenarios.text_ask_audio, fill: 'hsl(var(--chart-3))' },
-    { name: 'Audio→Audio', value: stats.scenarios.audio_ask_audio, fill: 'hsl(var(--chart-4))' },
+  const qaTypeData = [
+    { name: 'ask_image', value: stats.qa_types?.ask_image || 0, fill: 'hsl(var(--chart-1))' },
+    { name: 'ask_audio', value: stats.qa_types?.ask_audio || 0, fill: 'hsl(var(--chart-2))' },
+    { name: 'ask_both', value: stats.qa_types?.ask_both || 0, fill: 'hsl(var(--chart-3))' },
   ];
 
   const recentRecords = useMemo(() => {
@@ -89,7 +87,7 @@ export function Dashboard({ records, stats }: DashboardProps) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Eye className="h-5 w-5 text-primary" />
+            <CheckCircle2 className="h-5 w-5 text-primary" />
             Tiến trình Annotation
           </CardTitle>
         </CardHeader>
@@ -139,15 +137,15 @@ export function Dashboard({ records, stats }: DashboardProps) {
           </CardContent>
         </Card>
 
-        {/* Scenario Bar Chart */}
+        {/* QA Type Bar Chart */}
         <Card>
           <CardHeader>
-            <CardTitle>Phân bố Scenarios</CardTitle>
+            <CardTitle>Phân bố QA Types</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={scenarioData}>
+                <BarChart data={qaTypeData}>
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                   <YAxis />
                   <Tooltip />
@@ -170,28 +168,28 @@ export function Dashboard({ records, stats }: DashboardProps) {
               <p className="text-muted-foreground text-center py-8">Chưa có hoạt động nào</p>
             ) : (
               recentRecords.map((record) => (
-                <div key={record.record_id} className="flex items-center justify-between p-3 rounded-lg bg-background border">
+                <div key={record.id} className="flex items-center justify-between p-3 rounded-lg bg-background border">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-md bg-primary/10">
-                      {record.assets.image_path ? (
+                      {record.paths?.image ? (
                         <Image className="h-4 w-4 text-primary" />
                       ) : (
                         <Volume2 className="h-4 w-4 text-primary" />
                       )}
                     </div>
                     <div>
-                      <p className="font-medium text-sm">{record.metadata.entity_name}</p>
-                      <p className="text-xs text-muted-foreground">{record.record_id}</p>
+                      <p className="font-medium text-sm">{record.metadata.landmark_name}</p>
+                      <p className="text-xs text-muted-foreground">{record.id}</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                       record.status === 'approved' ? 'bg-accent text-accent-foreground' :
                       record.status === 'rejected' ? 'bg-destructive/10 text-destructive' :
-                      record.status === 'reviewed' ? 'bg-chart-3/10 text-chart-3' :
+                      record.status === 'needs_review' ? 'bg-chart-3/10 text-chart-3' :
                       'bg-muted text-muted-foreground'
                     }`}>
-                      {record.status}
+                      {record.status || 'pending'}
                     </span>
                     {record.reviewedAt && (
                       <p className="text-xs text-muted-foreground mt-1">
