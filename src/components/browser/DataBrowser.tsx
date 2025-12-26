@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,15 +29,15 @@ interface DataBrowserProps {
 }
 
 const ITEMS_PER_PAGE = 100;
-const MAX_LINES = 100000;
+const MAX_LINES = 10000;
 
-type SortBy = "id" | "created" | "updated" | "status" | "name";
+type SortBy = "id" | "created" | "status" | "name";
 type SortOrder = "asc" | "desc";
 
 export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBrowserProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [scenarioFilter, setScenarioFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedRecord, setSelectedRecord] = useState<DatasetRecord | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -47,14 +47,14 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
   const filteredAndSortedRecords = useMemo(() => {
     let filtered = records.filter((record) => {
       const matchesSearch =
-        record.record_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.metadata.entity_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.metadata.landmark_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         record.metadata.location.city.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesStatus = statusFilter === "all" || record.status === statusFilter;
-      const matchesScenario = scenarioFilter === "all" || record.qa_items.some((qa) => qa.scenario === scenarioFilter);
+      const matchesType = typeFilter === "all" || record.qa_pairs?.some((qa) => qa.type === typeFilter);
 
-      return matchesSearch && matchesStatus && matchesScenario;
+      return matchesSearch && matchesStatus && matchesType;
     });
 
     // Sort
@@ -62,16 +62,13 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
       let comparison = 0;
       switch (sortBy) {
         case "id":
-          comparison = a.record_id.localeCompare(b.record_id);
+          comparison = a.id.localeCompare(b.id);
           break;
         case "name":
-          comparison = a.metadata.entity_name.localeCompare(b.metadata.entity_name);
+          comparison = a.metadata.landmark_name.localeCompare(b.metadata.landmark_name);
           break;
         case "created":
-          comparison = (a.createdAt || "").localeCompare(b.createdAt || "");
-          break;
-        case "updated":
-          comparison = (a.updatedAt || a.reviewedAt || "").localeCompare(b.updatedAt || b.reviewedAt || "");
+          comparison = (a.timestamp || "").localeCompare(b.timestamp || "");
           break;
         case "status":
           comparison = (a.status || "pending").localeCompare(b.status || "pending");
@@ -82,7 +79,7 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
 
     // Limit to MAX_LINES
     return filtered.slice(0, MAX_LINES);
-  }, [records, searchQuery, statusFilter, scenarioFilter, sortBy, sortOrder]);
+  }, [records, searchQuery, statusFilter, typeFilter, sortBy, sortOrder]);
 
   const totalPages = Math.ceil(filteredAndSortedRecords.length / ITEMS_PER_PAGE);
   const paginatedRecords = filteredAndSortedRecords.slice(
@@ -96,9 +93,7 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
         return "bg-accent text-accent-foreground";
       case "rejected":
         return "bg-destructive/10 text-destructive";
-      case "reviewed":
-        return "bg-chart-3/10 text-chart-3";
-      case "warning":
+      case "needs_review":
         return "bg-chart-4/10 text-chart-4";
       default:
         return "bg-muted text-muted-foreground";
@@ -119,11 +114,11 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
     if (selectedIds.size === paginatedRecords.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(paginatedRecords.map((r) => r.record_id)));
+      setSelectedIds(new Set(paginatedRecords.map((r) => r.id)));
     }
   };
 
-  const handleBulkAction = (action: "approve" | "reject" | "warning" | "delete") => {
+  const handleBulkAction = (action: "approve" | "reject" | "needs_review" | "delete") => {
     if (selectedIds.size === 0) {
       toast.error("Chưa chọn record nào");
       return;
@@ -131,15 +126,14 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
 
     const updatedRecords = records
       .map((record) => {
-        if (!selectedIds.has(record.record_id)) return record;
+        if (!selectedIds.has(record.id)) return record;
 
         if (action === "delete") return null;
 
         return {
           ...record,
-          status: action === "approve" ? "approved" : action === "reject" ? "rejected" : "warning",
+          status: action === "approve" ? "approved" : action === "reject" ? "rejected" : "needs_review",
           reviewedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
         } as DatasetRecord;
       })
       .filter(Boolean) as DatasetRecord[];
@@ -149,7 +143,7 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
     }
 
     toast.success(
-      `Đã ${action === "approve" ? "phê duyệt" : action === "reject" ? "từ chối" : action === "warning" ? "đánh dấu cảnh báo" : "xóa"} ${selectedIds.size} records`,
+      `Đã ${action === "approve" ? "phê duyệt" : action === "reject" ? "từ chối" : action === "needs_review" ? "đánh dấu cần xem xét" : "xóa"} ${selectedIds.size} records`,
     );
     setSelectedIds(new Set());
   };
@@ -159,7 +153,7 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
     (direction: "prev" | "next") => {
       if (!selectedRecord) return;
 
-      const currentIndex = filteredAndSortedRecords.findIndex((r) => r.record_id === selectedRecord.record_id);
+      const currentIndex = filteredAndSortedRecords.findIndex((r) => r.id === selectedRecord.id);
       if (currentIndex === -1) return;
 
       const newIndex = direction === "prev" ? currentIndex - 1 : currentIndex + 1;
@@ -210,28 +204,26 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
               <SelectContent>
                 <SelectItem value="all">Tất cả trạng thái</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="reviewed">Reviewed</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="rejected">Rejected</SelectItem>
-                <SelectItem value="warning">Warning</SelectItem>
+                <SelectItem value="needs_review">Needs Review</SelectItem>
               </SelectContent>
             </Select>
             <Select
-              value={scenarioFilter}
+              value={typeFilter}
               onValueChange={(v) => {
-                setScenarioFilter(v);
+                setTypeFilter(v);
                 setCurrentPage(1);
               }}
             >
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Scenario" />
+                <SelectValue placeholder="QA Type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Tất cả scenarios</SelectItem>
-                <SelectItem value="text_ask_image">Text → Image</SelectItem>
-                <SelectItem value="audio_ask_image">Audio → Image</SelectItem>
-                <SelectItem value="text_ask_audio">Text → Audio</SelectItem>
-                <SelectItem value="audio_ask_audio">Audio → Audio</SelectItem>
+                <SelectItem value="all">Tất cả types</SelectItem>
+                <SelectItem value="ask_image">ask_image</SelectItem>
+                <SelectItem value="ask_audio">ask_audio</SelectItem>
+                <SelectItem value="ask_both">ask_both</SelectItem>
               </SelectContent>
             </Select>
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
@@ -243,7 +235,6 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
                 <SelectItem value="id">ID</SelectItem>
                 <SelectItem value="name">Tên</SelectItem>
                 <SelectItem value="created">Ngày tạo</SelectItem>
-                <SelectItem value="updated">Ngày cập nhật</SelectItem>
                 <SelectItem value="status">Trạng thái</SelectItem>
               </SelectContent>
             </Select>
@@ -263,9 +254,9 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
                   <CheckCircle2 className="h-4 w-4 mr-1" />
                   Phê duyệt
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleBulkAction("warning")}>
+                <Button size="sm" variant="outline" onClick={() => handleBulkAction("needs_review")}>
                   <AlertTriangle className="h-4 w-4 mr-1" />
-                  Cảnh báo
+                  Cần xem xét
                 </Button>
                 <Button size="sm" variant="destructive" onClick={() => handleBulkAction("reject")}>
                   <XCircle className="h-4 w-4 mr-1" />
@@ -307,25 +298,25 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
             <TableBody>
               {paginatedRecords.map((record, index) => {
                 const rowNumber = (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
-                const hasImage = !!(record.assets.image_path || record.assets.image_url);
-                const hasAudio = !!record.assets.audio_evidence;
+                const hasImage = !!record.paths?.image;
+                const hasAudio = !!record.paths?.audio_evidence;
 
                 return (
-                  <TableRow key={record.record_id} className={selectedIds.has(record.record_id) ? "bg-primary/5" : ""}>
+                  <TableRow key={record.id} className={selectedIds.has(record.id) ? "bg-primary/5" : ""}>
                     <TableCell>
                       <Checkbox
-                        checked={selectedIds.has(record.record_id)}
-                        onCheckedChange={() => toggleSelection(record.record_id)}
+                        checked={selectedIds.has(record.id)}
+                        onCheckedChange={() => toggleSelection(record.id)}
                       />
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">{rowNumber}</TableCell>
-                    <TableCell className="font-mono text-xs">{record.record_id}</TableCell>
-                    <TableCell className="font-medium">{record.metadata.entity_name}</TableCell>
+                    <TableCell className="font-mono text-xs">{record.id}</TableCell>
+                    <TableCell className="font-medium">{record.metadata.landmark_name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{record.metadata.location.city}</TableCell>
                     <TableCell>
                       <Badge className={getStatusColor(record.status)}>{record.status || "pending"}</Badge>
                     </TableCell>
-                    <TableCell className="text-center text-sm">{record.qa_items.length}</TableCell>
+                    <TableCell className="text-center text-sm">{record.qa_pairs?.length || 0}</TableCell>
                     <TableCell className="text-center">
                       {hasImage ? (
                         <span className="text-accent-foreground">✓</span>
@@ -387,7 +378,7 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
         onUpdate={onRecordUpdate}
         onNavigate={handleNavigateRecord}
         currentIndex={
-          selectedRecord ? filteredAndSortedRecords.findIndex((r) => r.record_id === selectedRecord.record_id) : -1
+          selectedRecord ? filteredAndSortedRecords.findIndex((r) => r.id === selectedRecord.id) : -1
         }
         totalRecords={filteredAndSortedRecords.length}
       />
