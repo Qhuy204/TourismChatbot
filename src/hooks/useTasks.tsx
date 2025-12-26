@@ -94,26 +94,39 @@ export function useTasks() {
     }
 
     try {
-      // Get TOTAL count of pending records from DB (not limited by fetch)
-      const { count: totalPendingCount, error: countError } = await supabase
+      // Get TOTAL count of all records
+      const { count: totalRecordsCount, error: totalCountError } = await supabase
         .from('dataset_records')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
+        .select('*', { count: 'exact', head: true });
 
-      if (countError) {
-        console.error('Error getting count:', countError);
+      if (totalCountError) {
+        console.error('Error getting total count:', totalCountError);
         toast.error('Không thể lấy số lượng records');
         return null;
       }
 
-      const totalCount = totalPendingCount || 0;
-      if (totalCount === 0) {
-        toast.error('Không có records pending để giao');
+      // Get count of already assigned records
+      const { count: assignedCount, error: assignedCountError } = await supabase
+        .from('task_records')
+        .select('*', { count: 'exact', head: true });
+
+      if (assignedCountError) {
+        console.error('Error getting assigned count:', assignedCountError);
+        toast.error('Không thể lấy số lượng records đã giao');
         return null;
       }
 
-      // Calculate how many records to assign based on TOTAL count
-      const recordsToAssign = Math.ceil((percentage / 100) * totalCount);
+      const totalCount = totalRecordsCount || 0;
+      const alreadyAssigned = assignedCount || 0;
+      const availableCount = totalCount - alreadyAssigned;
+
+      if (availableCount <= 0) {
+        toast.error('Không còn records khả dụng để giao');
+        return null;
+      }
+
+      // Calculate how many records to assign based on AVAILABLE count
+      const recordsToAssign = Math.ceil((percentage / 100) * availableCount);
 
       const { data: task, error: taskError } = await supabase
         .from('annotation_tasks')
@@ -134,15 +147,27 @@ export function useTasks() {
         return null;
       }
 
-      // Get records to assign (fetch the calculated amount)
-      const { data: allRecords } = await supabase
+      // Get records that are NOT already assigned to any task
+      const { data: assignedRecordIds } = await supabase
+        .from('task_records')
+        .select('record_id');
+
+      const alreadyAssignedIds = assignedRecordIds?.map(r => r.record_id) || [];
+
+      // Fetch available records (not in task_records)
+      let query = supabase
         .from('dataset_records')
         .select('id')
-        .eq('status', 'pending')
         .limit(recordsToAssign);
 
-      if (allRecords && allRecords.length > 0) {
-        const taskRecords = allRecords.map(record => ({
+      if (alreadyAssignedIds.length > 0) {
+        query = query.not('id', 'in', `(${alreadyAssignedIds.join(',')})`);
+      }
+
+      const { data: availableRecords } = await query;
+
+      if (availableRecords && availableRecords.length > 0) {
+        const taskRecords = availableRecords.map(record => ({
           task_id: task.id,
           record_id: record.id,
           status: 'pending' as const,
@@ -152,7 +177,7 @@ export function useTasks() {
       }
 
       await fetchTasks();
-      toast.success(`Đã tạo task với ${allRecords?.length || 0} records (${percentage}% của ${totalCount})`);
+      toast.success(`Đã tạo task với ${availableRecords?.length || 0} records (${percentage}% của ${availableCount} khả dụng)`);
       return task;
     } catch (error) {
       console.error('Error creating task:', error);

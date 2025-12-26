@@ -138,6 +138,10 @@ const Index = () => {
   // Get user's tasks (for regular users)
   const userTasks = tasks?.filter(t => t.assigned_to === user?.id) || [];
 
+  // Calculate available records (total - already assigned in tasks)
+  const assignedRecordsCount = tasks?.reduce((sum, task) => sum + (task.progress?.total || 0), 0) || 0;
+  const availableRecords = Math.max(0, totalCount - assignedRecordsCount);
+
   // Create task handler for admin
   const handleCreateTask = useCallback(async (name: string, userId: string, percentage: number, description?: string) => {
     await createTask(name, userId, percentage, description);
@@ -154,6 +158,7 @@ const Index = () => {
             tasksCount={tasks?.length || 0}
             users={users}
             tasks={tasks}
+            availableRecords={availableRecords}
             onCreateTask={handleCreateTask}
           />
         ) : (
@@ -232,7 +237,7 @@ const Index = () => {
         return <SettingsInterface />;
       default:
         return isAdmin ? (
-          <AdminDashboard records={records} stats={stats} usersCount={users?.length || 0} tasksCount={tasks?.length || 0} users={users} tasks={tasks} />
+          <AdminDashboard records={records} stats={stats} usersCount={users?.length || 0} tasksCount={tasks?.length || 0} users={users} tasks={tasks} availableRecords={availableRecords} />
         ) : (
           <UserDashboard records={records} tasks={userTasks} onNavigateToAnnotate={() => setCurrentView('annotate')} onStartTask={handleStartTaskAnnotation} />
         );
