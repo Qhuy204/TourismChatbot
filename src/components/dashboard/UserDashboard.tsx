@@ -8,41 +8,47 @@ import {
 } from 'lucide-react';
 import { StatsCard } from './StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { DatasetRecord } from '@/types/dataset';
+import { AnnotationTask, DatasetRecord } from '@/types/dataset';
 import { useAuth } from '@/hooks/useAuth';
+import { UserProgressBar } from './UserProgressBar';
+import { TaskProgressList } from '@/components/tasks/TaskProgressList';
 
 interface UserDashboardProps {
   records: DatasetRecord[];
-  assignedTasksCount?: number;
-  completedTasksCount?: number;
+  tasks?: AnnotationTask[];
   onNavigateToAnnotate?: () => void;
 }
 
 export function UserDashboard({ 
   records, 
-  assignedTasksCount = 0, 
-  completedTasksCount = 0,
+  tasks = [],
   onNavigateToAnnotate 
 }: UserDashboardProps) {
   const { user } = useAuth();
   
-  // Calculate user-specific stats from assigned records only
-  const userStats = useMemo(() => {
-    const userRecords = records.filter(r => r.reviewedBy === user?.id);
-    return {
-      totalReviewed: userRecords.length,
-      approved: userRecords.filter(r => r.status === 'approved').length,
-      rejected: userRecords.filter(r => r.status === 'rejected').length,
-      needsReview: userRecords.filter(r => r.status === 'needs_review').length,
-    };
-  }, [records, user?.id]);
+  // Calculate aggregated progress from all tasks
+  const myProgress = useMemo(() => {
+    const totals = tasks.reduce(
+      (acc, task) => ({
+        total: acc.total + (task.progress?.total || 0),
+        completed: acc.completed + (task.progress?.completed || 0),
+        pending: acc.pending + (task.progress?.pending || 0),
+        needs_review: acc.needs_review + (task.progress?.needs_review || 0),
+        rejected: acc.rejected + (task.progress?.rejected || 0),
+      }),
+      { total: 0, completed: 0, pending: 0, needs_review: 0, rejected: 0 }
+    );
+
+    return totals;
+  }, [tasks]);
 
   const progressPercent = useMemo(() => {
-    if (assignedTasksCount === 0) return 0;
-    return Math.round((completedTasksCount / assignedTasksCount) * 100);
-  }, [assignedTasksCount, completedTasksCount]);
+    if (myProgress.total === 0) return 0;
+    return Math.round((myProgress.completed / myProgress.total) * 100);
+  }, [myProgress]);
+
+  const pendingCount = myProgress.pending + myProgress.needs_review;
 
   return (
     <div className="p-6 space-y-6">
@@ -54,56 +60,59 @@ export function UserDashboard({
       {/* User Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
-          title="Tasks được giao"
-          value={assignedTasksCount}
+          title="Tổng Records"
+          value={myProgress.total}
           icon={ListTodo}
           variant="primary"
-          description="Số tasks cần hoàn thành"
+          description="Được giao annotation"
         />
         <StatsCard
           title="Đã hoàn thành"
-          value={completedTasksCount}
+          value={myProgress.completed}
           icon={CheckCircle2}
           variant="success"
-          description="Tasks đã xong"
+          description={`${progressPercent}% hoàn thành`}
         />
         <StatsCard
-          title="Đã review"
-          value={userStats.totalReviewed}
-          icon={TrendingUp}
-          variant="primary"
-          description="Số records bạn đã xử lý"
-        />
-        <StatsCard
-          title="Cần xem lại"
-          value={userStats.needsReview}
-          icon={AlertCircle}
+          title="Đang chờ"
+          value={pendingCount}
+          icon={Clock}
           variant="warning"
-          description="Records cần chỉnh sửa"
+          description="Cần xử lý"
+        />
+        <StatsCard
+          title="Bị từ chối"
+          value={myProgress.rejected}
+          icon={AlertCircle}
+          variant="destructive"
+          description="Cần sửa lại"
         />
       </div>
 
-      {/* Progress Section */}
+      {/* My Progress Bar */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-primary" />
-            Tiến trình hoàn thành
+            Tiến trình tổng thể của bạn
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Hoàn thành</span>
-              <span className="font-medium">{progressPercent}%</span>
-            </div>
-            <Progress value={progressPercent} className="h-3" />
-            <p className="text-xs text-muted-foreground mt-2">
-              {completedTasksCount} / {assignedTasksCount} tasks đã hoàn thành
-            </p>
-          </div>
+          <UserProgressBar
+            userName=""
+            total={myProgress.total}
+            segments={[
+              { value: myProgress.completed, color: 'hsl(var(--chart-1))', label: 'Approved' },
+              { value: myProgress.needs_review, color: 'hsl(var(--chart-3))', label: 'Needs Review' },
+              { value: myProgress.rejected, color: 'hsl(var(--destructive))', label: 'Rejected' },
+              { value: myProgress.pending, color: 'hsl(var(--muted))', label: 'Pending' },
+            ]}
+          />
         </CardContent>
       </Card>
+
+      {/* Tasks List */}
+      <TaskProgressList tasks={tasks} title="Tasks của bạn" showAssignee={false} />
 
       {/* Quick Actions */}
       <Card>
@@ -111,14 +120,14 @@ export function UserDashboard({
           <CardTitle>Hành động nhanh</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {assignedTasksCount > completedTasksCount ? (
+          {pendingCount > 0 ? (
             <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-md bg-primary/10">
                   <Clock className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium">Bạn có {assignedTasksCount - completedTasksCount} tasks chưa hoàn thành</p>
+                  <p className="font-medium">Bạn có {pendingCount} records chưa hoàn thành</p>
                   <p className="text-sm text-muted-foreground">Tiếp tục annotation để hoàn thành tasks</p>
                 </div>
               </div>
@@ -126,7 +135,7 @@ export function UserDashboard({
                 Tiếp tục Annotation
               </Button>
             </div>
-          ) : assignedTasksCount > 0 ? (
+          ) : myProgress.total > 0 ? (
             <div className="flex items-center justify-center p-8 text-center">
               <div className="flex flex-col items-center gap-2">
                 <CheckCircle2 className="h-12 w-12 text-primary" />

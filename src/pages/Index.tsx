@@ -29,7 +29,7 @@ const Index = () => {
   // Use database-synced data
   const { records, loading: dataLoading, addRecords, updateRecord, deleteRecords, refetch, calculateStats } = useDataset();
   const { users } = useUsers();
-  const { tasks } = useTasks();
+  const { tasks, createTask } = useTasks();
   
   // Annotation navigation state
   const [annotateRecordId, setAnnotateRecordId] = useState<string | undefined>();
@@ -102,9 +102,13 @@ const Index = () => {
     </div>
   );
 
-  // Calculate user-specific task stats
+  // Get user's tasks (for regular users)
   const userTasks = tasks?.filter(t => t.assigned_to === user?.id) || [];
-  const completedUserTasks = userTasks.filter(t => t.status === 'completed').length;
+
+  // Create task handler for admin
+  const handleCreateTask = useCallback(async (name: string, userId: string, percentage: number, description?: string) => {
+    await createTask(name, userId, percentage, description);
+  }, [createTask]);
 
   const renderContent = () => {
     switch (currentView) {
@@ -115,12 +119,14 @@ const Index = () => {
             stats={stats} 
             usersCount={users?.length || 0}
             tasksCount={tasks?.length || 0}
+            users={users}
+            tasks={tasks}
+            onCreateTask={handleCreateTask}
           />
         ) : (
           <UserDashboard 
             records={records}
-            assignedTasksCount={userTasks.length}
-            completedTasksCount={completedUserTasks}
+            tasks={userTasks}
             onNavigateToAnnotate={() => setCurrentView('annotate')}
           />
         );
@@ -170,9 +176,9 @@ const Index = () => {
         return <SettingsInterface />;
       default:
         return isAdmin ? (
-          <AdminDashboard records={records} stats={stats} usersCount={users?.length || 0} tasksCount={tasks?.length || 0} />
+          <AdminDashboard records={records} stats={stats} usersCount={users?.length || 0} tasksCount={tasks?.length || 0} users={users} tasks={tasks} />
         ) : (
-          <UserDashboard records={records} assignedTasksCount={userTasks.length} completedTasksCount={completedUserTasks} onNavigateToAnnotate={() => setCurrentView('annotate')} />
+          <UserDashboard records={records} tasks={userTasks} onNavigateToAnnotate={() => setCurrentView('annotate')} />
         );
     }
   };

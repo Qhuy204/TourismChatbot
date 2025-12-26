@@ -10,16 +10,46 @@ export function useDataset() {
   const { isAdmin } = useRole();
   const [records, setRecords] = useState<DatasetRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [statsFromDB, setStatsFromDB] = useState<DatasetStats | null>(null);
 
   const fetchRecords = useCallback(async () => {
     if (!user) return;
 
     setLoading(true);
     try {
+      // Get total count first (bypasses 1000 limit)
+      const { count: total, error: countError } = await supabase
+        .from('dataset_records')
+        .select('*', { count: 'exact', head: true });
+
+      if (!countError && total !== null) {
+        setTotalCount(total);
+      }
+
+      // Get counts by status for accurate stats
+      const [pendingRes, approvedRes, rejectedRes, needsReviewRes] = await Promise.all([
+        supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
+        supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'rejected'),
+        supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'needs_review'),
+      ]);
+
+      setStatsFromDB({
+        total: total || 0,
+        pending: pendingRes.count || 0,
+        approved: approvedRes.count || 0,
+        rejected: rejectedRes.count || 0,
+        needs_review: needsReviewRes.count || 0,
+        qa_types: { ask_image: 0, ask_audio: 0, ask_both: 0 },
+      });
+
+      // Fetch first batch of records for display (limit 1000)
       const { data, error } = await supabase
         .from('dataset_records')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(1000);
 
       if (error) {
         console.error('Error fetching records:', error);
@@ -52,7 +82,6 @@ export function useDataset() {
     }
 
     try {
-      // For large imports, batch insert in chunks of 500 to avoid timeouts
       const BATCH_SIZE = 500;
       let successCount = 0;
       let errorCount = 0;
@@ -62,7 +91,7 @@ export function useDataset() {
         
         const inserts = batch.map(record => ({
           record_id: record.id,
-          data: JSON.parse(JSON.stringify(record)), // Full record data stored in JSONB
+          data: JSON.parse(JSON.stringify(record)),
           status: record.status || 'pending',
           created_by: user.id,
         }));
@@ -78,7 +107,6 @@ export function useDataset() {
           successCount += batch.length;
         }
 
-        // Show progress for large imports
         if (newRecords.length > BATCH_SIZE) {
           const progress = Math.min(100, Math.round((i + batch.length) / newRecords.length * 100));
           toast.info(`Đang import: ${progress}% (${successCount}/${newRecords.length})`, {
@@ -157,8 +185,14 @@ export function useDataset() {
   }, [user, isAdmin]);
 
   const calculateStats = useCallback((): DatasetStats => {
+    // Return accurate stats from DB if available
+    if (statsFromDB) {
+      return statsFromDB;
+    }
+
+    // Fallback to local calculation
     const stats: DatasetStats = {
-      total: records.length,
+      total: totalCount || records.length,
       pending: 0,
       approved: 0,
       rejected: 0,
@@ -193,11 +227,12 @@ export function useDataset() {
     });
 
     return stats;
-  }, [records]);
+  }, [records, totalCount, statsFromDB]);
 
   return {
     records,
     loading,
+    totalCount,
     addRecords,
     updateRecord,
     deleteRecords,
