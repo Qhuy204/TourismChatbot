@@ -29,7 +29,8 @@ interface AdminDashboardProps {
   users?: UserWithRole[];
   tasks?: AnnotationTask[];
   availableRecords?: number;
-  onCreateTask?: (name: string, userId: string, percentage: number, description?: string) => Promise<void>;
+  onCreateTask?: (name: string, userId: string, percentage: number) => Promise<void>;
+  onDeleteTask?: (taskId: string) => Promise<boolean>;
 }
 
 export function AdminDashboard({ 
@@ -40,7 +41,8 @@ export function AdminDashboard({
   users = [],
   tasks = [],
   availableRecords = 0,
-  onCreateTask
+  onCreateTask,
+  onDeleteTask
 }: AdminDashboardProps) {
   const [showTaskDialog, setShowTaskDialog] = useState(false);
 
@@ -67,7 +69,7 @@ export function AdminDashboard({
     const userMap = new Map<string, { 
       name: string; 
       total: number; 
-      completed: number; 
+      approved: number; 
       pending: number; 
       needs_review: number; 
       rejected: number;
@@ -78,13 +80,13 @@ export function AdminDashboard({
       
       const existing = userMap.get(task.assigned_to) || { 
         name: task.assignee_name || 'Unknown', 
-        total: 0, completed: 0, pending: 0, needs_review: 0, rejected: 0 
+        total: 0, approved: 0, pending: 0, needs_review: 0, rejected: 0 
       };
       
       userMap.set(task.assigned_to, {
         name: existing.name,
         total: existing.total + task.progress.total,
-        completed: existing.completed + task.progress.completed,
+        approved: existing.approved + task.progress.approved,
         pending: existing.pending + task.progress.pending,
         needs_review: existing.needs_review + task.progress.needs_review,
         rejected: existing.rejected + task.progress.rejected,
@@ -94,9 +96,15 @@ export function AdminDashboard({
     return Array.from(userMap.entries()).map(([id, data]) => ({ id, ...data }));
   }, [tasks]);
 
-  const handleCreateTask = async (name: string, userId: string, percentage: number, description?: string) => {
+  const handleCreateTask = async (name: string, userId: string, percentage: number) => {
     if (onCreateTask) {
-      await onCreateTask(name, userId, percentage, description);
+      await onCreateTask(name, userId, percentage);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (onDeleteTask) {
+      await onDeleteTask(taskId);
     }
   };
 
@@ -168,7 +176,7 @@ export function AdminDashboard({
                 userName={user.name}
                 total={user.total}
                 segments={[
-                  { value: user.completed, color: 'hsl(var(--chart-1))', label: 'Approved' },
+                  { value: user.approved, color: 'hsl(var(--chart-1))', label: 'Approved' },
                   { value: user.needs_review, color: 'hsl(var(--chart-3))', label: 'Needs Review' },
                   { value: user.rejected, color: 'hsl(var(--destructive))', label: 'Rejected' },
                   { value: user.pending, color: 'hsl(var(--muted))', label: 'Pending' },
@@ -202,7 +210,12 @@ export function AdminDashboard({
       </Card>
 
       {/* Tasks List */}
-      <TaskProgressList tasks={tasks} title="Danh sách Tasks" />
+      <TaskProgressList 
+        tasks={tasks} 
+        title="Danh sách Tasks" 
+        showDeleteButton={true}
+        onDeleteTask={handleDeleteTask}
+      />
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

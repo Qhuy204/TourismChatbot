@@ -97,14 +97,14 @@ export interface UserWithRole {
   role: AppRole;
 }
 
+// Updated to match new schema
 export interface AnnotationTask {
-  id: string;
-  name: string;
-  description?: string;
+  task_id: string;
+  task_name: string;
+  created_by?: string;
   assigned_to?: string;
   assigned_by?: string;
-  percentage: number;
-  status: 'pending' | 'in_progress' | 'completed';
+  status: 'open' | 'in_progress' | 'done' | 'archived';
   created_at: string;
   updated_at: string;
   // Computed
@@ -114,17 +114,20 @@ export interface AnnotationTask {
 
 export interface TaskProgress {
   total: number;
-  completed: number;
+  approved: number;
   pending: number;
   needs_review: number;
   rejected: number;
 }
 
-export interface TaskRecord {
+// Updated to match new schema (anno_task_details)
+export interface AnnoTaskDetail {
   id: string;
   task_id: string;
-  record_id: string;
-  status: 'pending' | 'completed' | 'needs_review' | 'rejected';
-  annotated_by?: string;
-  annotated_at?: string;
+  image_id: string;
+  annotator_id?: string;
+  status: 'pending' | 'approved' | 'rejected' | 'needs_review';
+  reviewed_by?: string;
+  reviewed_at?: string;
+  updated_at?: string;
 }

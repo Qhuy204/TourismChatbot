@@ -17,7 +17,7 @@ import {
   ListTodo,
   ArrowLeft,
 } from 'lucide-react';
-import { DatasetRecord, AnnotationTask } from '@/types/dataset';
+import { DatasetRecord, AnnotationTask, AnnoTaskDetail } from '@/types/dataset';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -29,40 +29,31 @@ interface TaskAnnotationProps {
   onTaskUpdate: () => void;
 }
 
-interface TaskRecord {
-  id: string;
-  task_id: string;
-  record_id: string;
-  status: string;
-  annotated_at: string | null;
-  annotated_by: string | null;
-}
-
 export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationProps) {
   const { user } = useAuth();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [taskRecords, setTaskRecords] = useState<TaskRecord[]>([]);
+  const [taskDetails, setTaskDetails] = useState<AnnoTaskDetail[]>([]);
   const [recordsData, setRecordsData] = useState<Map<string, DatasetRecord>>(new Map());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   
-  const selectedTask = tasks.find(t => t.id === selectedTaskId);
+  const selectedTask = tasks.find(t => t.task_id === selectedTaskId);
   
-  // Fetch task records when task is selected
+  // Fetch task details when task is selected
   useEffect(() => {
     if (!selectedTaskId) return;
     
-    const fetchTaskRecords = async () => {
+    const fetchTaskDetails = async () => {
       setLoading(true);
       try {
         const { data, error } = await supabase
-          .from('task_records')
+          .from('anno_task_details')
           .select('*')
           .eq('task_id', selectedTaskId)
           .order('created_at', { ascending: true });
         
         if (error) throw error;
-        setTaskRecords(data || []);
+        setTaskDetails(data || []);
         
         // Find first pending record
         const pendingIdx = (data || []).findIndex(r => r.status === 'pending');
@@ -72,29 +63,29 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
           setCurrentIndex(0);
         }
       } catch (error) {
-        console.error('Error fetching task records:', error);
+        console.error('Error fetching task details:', error);
         toast.error('Không thể tải task records');
       } finally {
         setLoading(false);
       }
     };
     
-    fetchTaskRecords();
+    fetchTaskDetails();
   }, [selectedTaskId]);
   
   // Load current record data
-  const currentTaskRecord = taskRecords[currentIndex];
+  const currentTaskDetail = taskDetails[currentIndex];
   
   useEffect(() => {
-    if (!currentTaskRecord) return;
+    if (!currentTaskDetail) return;
     
     const fetchRecordData = async () => {
-      if (recordsData.has(currentTaskRecord.record_id)) return;
+      if (recordsData.has(currentTaskDetail.image_id)) return;
       
       const { data, error } = await supabase
         .from('dataset_records')
         .select('*')
-        .eq('id', currentTaskRecord.record_id)
+        .eq('id', currentTaskDetail.image_id)
         .single();
       
       if (!error && data) {
@@ -104,56 +95,56 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
           status: data.status as DatasetRecord['status'],
           db_id: data.id,
         };
-        setRecordsData(prev => new Map(prev).set(currentTaskRecord.record_id, mapped));
+        setRecordsData(prev => new Map(prev).set(currentTaskDetail.image_id, mapped));
       }
     };
     
     fetchRecordData();
-  }, [currentTaskRecord, recordsData]);
+  }, [currentTaskDetail, recordsData]);
   
-  const currentRecord = currentTaskRecord ? recordsData.get(currentTaskRecord.record_id) : null;
+  const currentRecord = currentTaskDetail ? recordsData.get(currentTaskDetail.image_id) : null;
   
   // Progress calculation
   const progress = useMemo(() => {
-    if (!taskRecords.length) return { completed: 0, pending: 0, needs_review: 0, rejected: 0 };
+    if (!taskDetails.length) return { approved: 0, pending: 0, needs_review: 0, rejected: 0 };
     return {
-      completed: taskRecords.filter(r => r.status === 'completed').length,
-      pending: taskRecords.filter(r => r.status === 'pending').length,
-      needs_review: taskRecords.filter(r => r.status === 'needs_review').length,
-      rejected: taskRecords.filter(r => r.status === 'rejected').length,
+      approved: taskDetails.filter(r => r.status === 'approved').length,
+      pending: taskDetails.filter(r => r.status === 'pending').length,
+      needs_review: taskDetails.filter(r => r.status === 'needs_review').length,
+      rejected: taskDetails.filter(r => r.status === 'rejected').length,
     };
-  }, [taskRecords]);
+  }, [taskDetails]);
   
-  const progressPercent = taskRecords.length > 0 
-    ? ((progress.completed + progress.rejected) / taskRecords.length) * 100 
+  const progressPercent = taskDetails.length > 0 
+    ? ((progress.approved + progress.rejected) / taskDetails.length) * 100 
     : 0;
   
-  // Update task record status
-  const updateStatus = useCallback(async (status: 'completed' | 'needs_review' | 'rejected') => {
-    if (!currentTaskRecord || !user) return;
+  // Update task detail status
+  const updateStatus = useCallback(async (status: 'approved' | 'needs_review' | 'rejected') => {
+    if (!currentTaskDetail || !user) return;
     
     try {
       const { error } = await supabase
-        .from('task_records')
+        .from('anno_task_details')
         .update({
           status,
-          annotated_by: user.id,
-          annotated_at: new Date().toISOString(),
+          annotator_id: user.id,
+          updated_at: new Date().toISOString(),
         })
-        .eq('id', currentTaskRecord.id);
+        .eq('id', currentTaskDetail.id);
       
       if (error) throw error;
       
       // Update local state
-      setTaskRecords(prev => prev.map(r => 
-        r.id === currentTaskRecord.id 
-          ? { ...r, status, annotated_by: user.id, annotated_at: new Date().toISOString() }
+      setTaskDetails(prev => prev.map(r => 
+        r.id === currentTaskDetail.id 
+          ? { ...r, status, annotator_id: user.id, updated_at: new Date().toISOString() }
           : r
       ));
       
       // Show toast
       const messages = {
-        completed: 'Đã phê duyệt',
+        approved: 'Đã phê duyệt',
         needs_review: 'Đã đánh dấu cần kiểm tra lại',
         rejected: 'Đã từ chối',
       };
@@ -163,22 +154,22 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
       goToNextPending();
       onTaskUpdate();
     } catch (error) {
-      console.error('Error updating task record:', error);
+      console.error('Error updating task detail:', error);
       toast.error('Không thể cập nhật');
     }
-  }, [currentTaskRecord, user, onTaskUpdate]);
+  }, [currentTaskDetail, user, onTaskUpdate]);
   
   const goToNextPending = useCallback(() => {
-    const nextPendingIdx = taskRecords.findIndex((r, idx) => idx > currentIndex && r.status === 'pending');
+    const nextPendingIdx = taskDetails.findIndex((r, idx) => idx > currentIndex && r.status === 'pending');
     if (nextPendingIdx !== -1) {
       setCurrentIndex(nextPendingIdx);
-    } else if (currentIndex < taskRecords.length - 1) {
+    } else if (currentIndex < taskDetails.length - 1) {
       setCurrentIndex(currentIndex + 1);
     }
-  }, [taskRecords, currentIndex]);
+  }, [taskDetails, currentIndex]);
   
   const goNext = () => {
-    if (currentIndex < taskRecords.length - 1) {
+    if (currentIndex < taskDetails.length - 1) {
       setCurrentIndex(currentIndex + 1);
     }
   };
@@ -201,11 +192,11 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, taskRecords.length]);
+  }, [currentIndex, taskDetails.length]);
   
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'completed': return <CheckCircle2 className="h-4 w-4 text-primary" />;
+      case 'approved': return <CheckCircle2 className="h-4 w-4 text-primary" />;
       case 'rejected': return <XCircle className="h-4 w-4 text-destructive" />;
       case 'needs_review': return <AlertTriangle className="h-4 w-4 text-chart-4" />;
       default: return <Clock className="h-4 w-4 text-muted-foreground" />;
@@ -237,31 +228,28 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {tasks.map(task => (
             <Card 
-              key={task.id} 
+              key={task.task_id} 
               className="cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => setSelectedTaskId(task.id)}
+              onClick={() => setSelectedTaskId(task.task_id)}
             >
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  <span className="truncate">{task.name}</span>
-                  <Badge variant={task.status === 'completed' ? 'default' : 'outline'}>
+                  <span className="truncate">{task.task_name}</span>
+                  <Badge variant={task.status === 'done' ? 'default' : 'outline'}>
                     {task.status}
                   </Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {task.description && (
-                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{task.description}</p>
-                )}
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Tiến độ</span>
                     <span className="font-medium">
-                      {task.progress?.completed || 0}/{task.progress?.total || 0}
+                      {task.progress?.approved || 0}/{task.progress?.total || 0}
                     </span>
                   </div>
                   <Progress 
-                    value={task.progress?.total ? ((task.progress.completed || 0) / task.progress.total) * 100 : 0} 
+                    value={task.progress?.total ? ((task.progress.approved || 0) / task.progress.total) * 100 : 0} 
                   />
                 </div>
                 <Button className="w-full mt-4" size="sm">
@@ -296,16 +284,16 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <span className="font-semibold">{selectedTask?.name}</span>
+            <span className="font-semibold">{selectedTask?.task_name}</span>
             <span className="text-muted-foreground mx-2">•</span>
             <span className="text-sm text-muted-foreground">
-              {currentIndex + 1} / {taskRecords.length}
+              {currentIndex + 1} / {taskDetails.length}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-primary">{progress.completed} hoàn thành</span>
+            <span className="text-primary">{progress.approved} hoàn thành</span>
             <span className="text-muted-foreground">•</span>
             <span className="text-chart-4">{progress.needs_review} cần xem</span>
             <span className="text-muted-foreground">•</span>
@@ -320,14 +308,14 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
         {/* Sidebar */}
         <div className="w-64 shrink-0 border-r bg-background flex flex-col">
           <div className="p-3 border-b">
-            <Select value={currentTaskRecord?.status || 'all'} onValueChange={() => {}}>
+            <Select value={currentTaskDetail?.status || 'all'} onValueChange={() => {}}>
               <SelectTrigger className="text-sm">
                 <SelectValue placeholder="Filter" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tất cả</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="needs_review">Needs Review</SelectItem>
                 <SelectItem value="rejected">Rejected</SelectItem>
               </SelectContent>
@@ -335,11 +323,11 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
           </div>
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1">
-              {taskRecords.map((tr, idx) => {
-                const rec = recordsData.get(tr.record_id);
+              {taskDetails.map((td, idx) => {
+                const rec = recordsData.get(td.image_id);
                 return (
                   <button
-                    key={tr.id}
+                    key={td.id}
                     onClick={() => setCurrentIndex(idx)}
                     className={cn(
                       "w-full text-left p-2 rounded-lg transition-colors text-sm",
@@ -349,8 +337,8 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
                     )}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs truncate flex-1">{tr.record_id.slice(0, 20)}...</span>
-                      {getStatusIcon(tr.status)}
+                      <span className="font-mono text-xs truncate flex-1">{td.image_id.slice(0, 20)}...</span>
+                      {getStatusIcon(td.status)}
                     </div>
                     {rec && (
                       <p className="text-xs text-muted-foreground truncate mt-1">
@@ -439,7 +427,7 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
                     <ChevronLeft className="h-4 w-4 mr-1" />
                     Trước
                   </Button>
-                  <Button variant="outline" size="sm" onClick={goNext} disabled={currentIndex === taskRecords.length - 1}>
+                  <Button variant="outline" size="sm" onClick={goNext} disabled={currentIndex === taskDetails.length - 1}>
                     Sau
                     <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
@@ -447,13 +435,13 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
                 
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-sm">
-                    {currentTaskRecord?.status || 'pending'}
+                    {currentTaskDetail?.status || 'pending'}
                   </Badge>
                   
                   <Button 
                     variant="outline" 
                     onClick={() => updateStatus('needs_review')}
-                    disabled={currentTaskRecord?.status === 'needs_review'}
+                    disabled={currentTaskDetail?.status === 'needs_review'}
                   >
                     <AlertTriangle className="h-4 w-4 mr-2" />
                     Cần xem lại
@@ -461,14 +449,14 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
                   <Button 
                     variant="destructive" 
                     onClick={() => updateStatus('rejected')}
-                    disabled={currentTaskRecord?.status === 'rejected'}
+                    disabled={currentTaskDetail?.status === 'rejected'}
                   >
                     <XCircle className="h-4 w-4 mr-2" />
                     Từ chối
                   </Button>
                   <Button 
-                    onClick={() => updateStatus('completed')}
-                    disabled={currentTaskRecord?.status === 'completed'}
+                    onClick={() => updateStatus('approved')}
+                    disabled={currentTaskDetail?.status === 'approved'}
                   >
                     <CheckCircle2 className="h-4 w-4 mr-2" />
                     Phê duyệt
@@ -478,7 +466,7 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-muted-foreground">Không có dữ liệu</p>
+              <p className="text-muted-foreground">Chọn một record để xem</p>
             </div>
           )}
         </div>

@@ -31,7 +31,7 @@ const Index = () => {
   // Use database-synced data
   const { records, loading: dataLoading, totalCount, loadedCount, loadMoreRecords, addRecords, updateRecord, deleteRecords, refetch, calculateStats } = useDataset();
   const { users } = useUsers();
-  const { tasks, createTask, getTaskRecordIds, refetch: refetchTasks } = useTasks();
+  const { tasks, createTask, deleteTask, getTaskImageIds, refetch: refetchTasks } = useTasks();
   
   // Annotation navigation state
   const [annotateRecordId, setAnnotateRecordId] = useState<string | undefined>();
@@ -79,10 +79,10 @@ const Index = () => {
   // Navigate to annotate from Task with task's record IDs
   const handleStartTaskAnnotation = useCallback(async (taskId: string) => {
     try {
-      // Fetch all record IDs for the task
-      const { data: taskRecords, error } = await supabase
-        .from('task_records')
-        .select('record_id')
+      // Fetch all image IDs for the task
+      const { data: taskDetails, error } = await supabase
+        .from('anno_task_details')
+        .select('image_id')
         .eq('task_id', taskId);
 
       if (error) {
@@ -90,7 +90,7 @@ const Index = () => {
         return;
       }
 
-      const recordIds = taskRecords?.map(tr => tr.record_id) || [];
+      const recordIds = taskDetails?.map(tr => tr.image_id) || [];
       
       if (recordIds.length === 0) {
         toast.error('Task không có records nào');
@@ -143,9 +143,14 @@ const Index = () => {
   const availableRecords = Math.max(0, totalCount - assignedRecordsCount);
 
   // Create task handler for admin
-  const handleCreateTask = useCallback(async (name: string, userId: string, percentage: number, description?: string) => {
-    await createTask(name, userId, percentage, description);
+  const handleCreateTask = useCallback(async (name: string, userId: string, percentage: number) => {
+    await createTask(name, userId, percentage);
   }, [createTask]);
+
+  // Delete task handler for admin
+  const handleDeleteTask = useCallback(async (taskId: string) => {
+    return await deleteTask(taskId);
+  }, [deleteTask]);
 
   const renderContent = () => {
     switch (currentView) {
@@ -160,6 +165,7 @@ const Index = () => {
             tasks={tasks}
             availableRecords={availableRecords}
             onCreateTask={handleCreateTask}
+            onDeleteTask={handleDeleteTask}
           />
         ) : (
           <UserDashboard 
@@ -172,7 +178,7 @@ const Index = () => {
       case 'task-annotate':
         // Redirect to annotate with first task's records if available
         if (userTasks.length > 0) {
-          handleStartTaskAnnotation(userTasks[0].id);
+          handleStartTaskAnnotation(userTasks[0].task_id);
         }
         return (
           <div className="p-6 flex items-center justify-center min-h-[400px]">
@@ -237,7 +243,17 @@ const Index = () => {
         return <SettingsInterface />;
       default:
         return isAdmin ? (
-          <AdminDashboard records={records} stats={stats} usersCount={users?.length || 0} tasksCount={tasks?.length || 0} users={users} tasks={tasks} availableRecords={availableRecords} />
+          <AdminDashboard 
+            records={records} 
+            stats={stats} 
+            usersCount={users?.length || 0} 
+            tasksCount={tasks?.length || 0} 
+            users={users} 
+            tasks={tasks} 
+            availableRecords={availableRecords}
+            onCreateTask={handleCreateTask}
+            onDeleteTask={handleDeleteTask}
+          />
         ) : (
           <UserDashboard records={records} tasks={userTasks} onNavigateToAnnotate={() => setCurrentView('annotate')} onStartTask={handleStartTaskAnnotation} />
         );

@@ -34,12 +34,12 @@ export function UserDashboard({
     const totals = tasks.reduce(
       (acc, task) => ({
         total: acc.total + (task.progress?.total || 0),
-        completed: acc.completed + (task.progress?.completed || 0),
+        approved: acc.approved + (task.progress?.approved || 0),
         pending: acc.pending + (task.progress?.pending || 0),
         needs_review: acc.needs_review + (task.progress?.needs_review || 0),
         rejected: acc.rejected + (task.progress?.rejected || 0),
       }),
-      { total: 0, completed: 0, pending: 0, needs_review: 0, rejected: 0 }
+      { total: 0, approved: 0, pending: 0, needs_review: 0, rejected: 0 }
     );
 
     return totals;
@@ -47,7 +47,7 @@ export function UserDashboard({
 
   const progressPercent = useMemo(() => {
     if (myProgress.total === 0) return 0;
-    return Math.round((myProgress.completed / myProgress.total) * 100);
+    return Math.round((myProgress.approved / myProgress.total) * 100);
   }, [myProgress]);
 
   const pendingCount = myProgress.pending + myProgress.needs_review;
@@ -70,7 +70,7 @@ export function UserDashboard({
         />
         <StatsCard
           title="Đã hoàn thành"
-          value={myProgress.completed}
+          value={myProgress.approved}
           icon={CheckCircle2}
           variant="success"
           description={`${progressPercent}% hoàn thành`}
@@ -104,7 +104,7 @@ export function UserDashboard({
             userName=""
             total={myProgress.total}
             segments={[
-              { value: myProgress.completed, color: 'hsl(var(--chart-1))', label: 'Approved' },
+              { value: myProgress.approved, color: 'hsl(var(--chart-1))', label: 'Approved' },
               { value: myProgress.needs_review, color: 'hsl(var(--chart-3))', label: 'Needs Review' },
               { value: myProgress.rejected, color: 'hsl(var(--destructive))', label: 'Rejected' },
               { value: myProgress.pending, color: 'hsl(var(--muted))', label: 'Pending' },
