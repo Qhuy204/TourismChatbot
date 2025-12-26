@@ -140,7 +140,6 @@ export function useTasks() {
           task_name: name,
           assigned_to: assignedTo,
           assigned_by: user.id,
-          created_by: user.id,
           status: 'open',
         })
         .select()
