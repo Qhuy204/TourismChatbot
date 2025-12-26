@@ -26,15 +26,15 @@ interface DataBrowserProps {
   records: DatasetRecord[];
   onRecordUpdate?: (record: DatasetRecord) => void;
   onRecordsUpdate?: (records: DatasetRecord[]) => void;
+  onNavigateToAnnotate?: (recordId: string) => void;
 }
 
 const ITEMS_PER_PAGE = 100;
-const MAX_LINES = 10000;
 
 type SortBy = "id" | "created" | "status" | "name";
 type SortOrder = "asc" | "desc";
 
-export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBrowserProps) {
+export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate, onNavigateToAnnotate }: DataBrowserProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -77,8 +77,7 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
       return sortOrder === "asc" ? comparison : -comparison;
     });
 
-    // Limit to MAX_LINES
-    return filtered.slice(0, MAX_LINES);
+    return filtered;
   }, [records, searchQuery, statusFilter, typeFilter, sortBy, sortOrder]);
 
   const totalPages = Math.ceil(filteredAndSortedRecords.length / ITEMS_PER_PAGE);
@@ -169,7 +168,7 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Data Browser</h2>
-          <p className="text-muted-foreground">Duyệt và quản lý dataset (max {MAX_LINES.toLocaleString()} records)</p>
+          <p className="text-muted-foreground">Duyệt và quản lý dataset</p>
         </div>
       </div>
 
@@ -245,7 +244,6 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
           <div className="mt-3 flex items-center justify-between">
             <span className="text-sm text-muted-foreground">
               Hiển thị {paginatedRecords.length} / {filteredAndSortedRecords.length} records
-              {filteredAndSortedRecords.length >= MAX_LINES && ` (limited to ${MAX_LINES.toLocaleString()})`}
             </span>
             {selectedIds.size > 0 && (
               <div className="flex items-center gap-2">
@@ -332,7 +330,13 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate }: DataBr
                       )}
                     </TableCell>
                     <TableCell>
-                      <Button size="sm" variant="ghost" onClick={() => setSelectedRecord(record)}>
+                      <Button size="sm" variant="ghost" onClick={() => {
+                        if (onNavigateToAnnotate) {
+                          onNavigateToAnnotate(record.id);
+                        } else {
+                          setSelectedRecord(record);
+                        }
+                      }}>
                         <Eye className="h-4 w-4" />
                       </Button>
                     </TableCell>
