@@ -53,10 +53,17 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
           .order('created_at', { ascending: true });
         
         if (error) throw error;
-        setTaskDetails(data || []);
+        
+        // Cast to correct type (Supabase returns status as string)
+        const typedData = (data || []).map(d => ({
+          ...d,
+          status: d.status as AnnoTaskDetail['status'],
+        })) as AnnoTaskDetail[];
+        
+        setTaskDetails(typedData);
         
         // Find first pending record
-        const pendingIdx = (data || []).findIndex(r => r.status === 'pending');
+        const pendingIdx = typedData.findIndex(r => r.status === 'pending');
         if (pendingIdx !== -1) {
           setCurrentIndex(pendingIdx);
         } else {
