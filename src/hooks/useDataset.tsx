@@ -44,12 +44,11 @@ export function useDataset() {
         qa_types: { ask_image: 0, ask_audio: 0, ask_both: 0 },
       });
 
-      // Fetch first batch of records for display (limit 1000)
+      // Fetch all records for display
       const { data, error } = await supabase
         .from('dataset_records')
         .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1000);
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching records:', error);

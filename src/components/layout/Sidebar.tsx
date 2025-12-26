@@ -119,7 +119,7 @@ export function Sidebar({ currentView, onViewChange, onOpenSettings, isAdmin = f
                 </Button>
               </TooltipTrigger>
               {isCollapsed && (
-                <TooltipContent side="right" className="z-[1000]">
+                <TooltipContent side="right" className="z-[999999] bg-popover text-popover-foreground border shadow-md">
                   {item.label}
                 </TooltipContent>
               )}
@@ -152,7 +152,7 @@ export function Sidebar({ currentView, onViewChange, onOpenSettings, isAdmin = f
               </button>
             </TooltipTrigger>
             {isCollapsed && (
-              <TooltipContent side="right" className="z-[1000]">
+              <TooltipContent side="right" className="z-[999999] bg-popover text-popover-foreground border shadow-md">
                 <p className="font-medium">{displayName}</p>
                 <p className="text-xs text-muted-foreground">{user?.email}</p>
               </TooltipContent>
@@ -174,7 +174,7 @@ export function Sidebar({ currentView, onViewChange, onOpenSettings, isAdmin = f
               </Button>
             </TooltipTrigger>
             {isCollapsed && (
-              <TooltipContent side="right" className="z-[1000]">
+              <TooltipContent side="right" className="z-[999999] bg-popover text-popover-foreground border shadow-md">
                 Sign Out
               </TooltipContent>
             )}
