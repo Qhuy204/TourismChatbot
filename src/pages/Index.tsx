@@ -30,7 +30,7 @@ const Index = () => {
 
   const handleRecordUpdate = useCallback((updatedRecord: DatasetRecord) => {
     setRecords(prev => 
-      prev.map(r => r.record_id === updatedRecord.record_id ? updatedRecord : r)
+      prev.map(r => r.id === updatedRecord.id ? updatedRecord : r)
     );
   }, []);
 
