@@ -36,10 +36,10 @@ export function useTasks() {
       // Get progress for each task
       const tasksWithProgress: AnnotationTask[] = await Promise.all(
         (data || []).map(async (task: any) => {
-          const { data: taskRecords } = await supabase
-            .from('task_records')
+          const { data: taskDetails } = await supabase
+            .from('anno_task_details')
             .select('status')
-            .eq('task_id', task.id);
+            .eq('task_id', task.task_id);
 
           // Fetch assignee name separately
           let assignee_name = undefined;
@@ -53,15 +53,22 @@ export function useTasks() {
           }
 
           const progress: TaskProgress = {
-            total: taskRecords?.length || 0,
-            completed: taskRecords?.filter(r => r.status === 'completed').length || 0,
-            pending: taskRecords?.filter(r => r.status === 'pending').length || 0,
-            needs_review: taskRecords?.filter(r => r.status === 'needs_review').length || 0,
-            rejected: taskRecords?.filter(r => r.status === 'rejected').length || 0,
+            total: taskDetails?.length || 0,
+            approved: taskDetails?.filter(r => r.status === 'approved').length || 0,
+            pending: taskDetails?.filter(r => r.status === 'pending').length || 0,
+            needs_review: taskDetails?.filter(r => r.status === 'needs_review').length || 0,
+            rejected: taskDetails?.filter(r => r.status === 'rejected').length || 0,
           };
 
           return {
-            ...task,
+            task_id: task.task_id,
+            task_name: task.task_name,
+            created_by: task.created_by,
+            assigned_to: task.assigned_to,
+            assigned_by: task.assigned_by,
+            status: task.status,
+            created_at: task.created_at,
+            updated_at: task.updated_at,
             assignee_name,
             progress,
           };
@@ -85,8 +92,7 @@ export function useTasks() {
   const createTask = useCallback(async (
     name: string,
     assignedTo: string,
-    percentage: number,
-    description?: string
+    percentage: number
   ) => {
     if (!user || !isAdmin) {
       toast.error('Bạn không có quyền tạo task');
@@ -107,7 +113,7 @@ export function useTasks() {
 
       // Get count of already assigned records
       const { count: assignedCount, error: assignedCountError } = await supabase
-        .from('task_records')
+        .from('anno_task_details')
         .select('*', { count: 'exact', head: true });
 
       if (assignedCountError) {
@@ -131,12 +137,11 @@ export function useTasks() {
       const { data: task, error: taskError } = await supabase
         .from('annotation_tasks')
         .insert({
-          name,
-          description,
+          task_name: name,
           assigned_to: assignedTo,
           assigned_by: user.id,
-          percentage,
-          status: 'pending',
+          created_by: user.id,
+          status: 'open',
         })
         .select()
         .single();
@@ -149,12 +154,12 @@ export function useTasks() {
 
       // Get records that are NOT already assigned to any task
       const { data: assignedRecordIds } = await supabase
-        .from('task_records')
-        .select('record_id');
+        .from('anno_task_details')
+        .select('image_id');
 
-      const alreadyAssignedIds = assignedRecordIds?.map(r => r.record_id) || [];
+      const alreadyAssignedIds = assignedRecordIds?.map(r => r.image_id) || [];
 
-      // Fetch available records (not in task_records)
+      // Fetch available records (not in anno_task_details)
       let query = supabase
         .from('dataset_records')
         .select('id')
@@ -167,13 +172,18 @@ export function useTasks() {
       const { data: availableRecords } = await query;
 
       if (availableRecords && availableRecords.length > 0) {
-        const taskRecords = availableRecords.map(record => ({
-          task_id: task.id,
-          record_id: record.id,
+        const taskDetails = availableRecords.map(record => ({
+          task_id: task.task_id,
+          image_id: record.id,
           status: 'pending' as const,
         }));
 
-        await supabase.from('task_records').insert(taskRecords);
+        const { error: insertError } = await supabase.from('anno_task_details').insert(taskDetails);
+        if (insertError) {
+          console.error('Error inserting task details:', insertError);
+          toast.error('Lỗi khi giao records cho task');
+          return null;
+        }
       }
 
       await fetchTasks();
@@ -186,50 +196,79 @@ export function useTasks() {
     }
   }, [user, isAdmin, fetchTasks]);
 
-  const updateTaskRecordStatus = useCallback(async (
+  const deleteTask = useCallback(async (taskId: string) => {
+    if (!user || !isAdmin) {
+      toast.error('Bạn không có quyền xóa task');
+      return false;
+    }
+
+    try {
+      // Delete task (cascade will delete anno_task_details)
+      const { error } = await supabase
+        .from('annotation_tasks')
+        .delete()
+        .eq('task_id', taskId);
+
+      if (error) {
+        console.error('Error deleting task:', error);
+        toast.error('Không thể xóa task');
+        return false;
+      }
+
+      await fetchTasks();
+      toast.success('Đã xóa task thành công');
+      return true;
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      toast.error('Lỗi khi xóa task');
+      return false;
+    }
+  }, [user, isAdmin, fetchTasks]);
+
+  const updateTaskDetailStatus = useCallback(async (
     taskId: string,
-    recordId: string,
-    status: 'completed' | 'needs_review' | 'rejected'
+    imageId: string,
+    status: 'approved' | 'needs_review' | 'rejected'
   ) => {
     if (!user) return false;
 
     try {
       const { error } = await supabase
-        .from('task_records')
+        .from('anno_task_details')
         .update({
           status,
-          annotated_by: user.id,
-          annotated_at: new Date().toISOString(),
+          annotator_id: user.id,
+          updated_at: new Date().toISOString(),
         })
         .eq('task_id', taskId)
-        .eq('record_id', recordId);
+        .eq('image_id', imageId);
 
       if (error) {
-        console.error('Error updating task record:', error);
+        console.error('Error updating task detail:', error);
         return false;
       }
 
       await fetchTasks();
       return true;
     } catch (error) {
-      console.error('Error updating task record:', error);
+      console.error('Error updating task detail:', error);
       return false;
     }
   }, [user, fetchTasks]);
 
-  // Get record IDs for a task
-  const getTaskRecordIds = useCallback(async (taskId: string): Promise<string[]> => {
+  // Get image IDs for a task
+  const getTaskImageIds = useCallback(async (taskId: string): Promise<string[]> => {
     const { data, error } = await supabase
-      .from('task_records')
-      .select('record_id')
+      .from('anno_task_details')
+      .select('image_id')
       .eq('task_id', taskId);
 
     if (error) {
-      console.error('Error fetching task records:', error);
+      console.error('Error fetching task details:', error);
       return [];
     }
 
-    return data?.map(r => r.record_id) || [];
+    return data?.map(r => r.image_id) || [];
   }, []);
 
   const getMyProgress = useCallback(() => {
@@ -241,17 +280,17 @@ export function useTasks() {
     const totals = myTasks.reduce(
       (acc, task) => ({
         total: acc.total + (task.progress?.total || 0),
-        completed: acc.completed + (task.progress?.completed || 0),
+        approved: acc.approved + (task.progress?.approved || 0),
         pending: acc.pending + (task.progress?.pending || 0),
         needs_review: acc.needs_review + (task.progress?.needs_review || 0),
         rejected: acc.rejected + (task.progress?.rejected || 0),
       }),
-      { total: 0, completed: 0, pending: 0, needs_review: 0, rejected: 0 }
+      { total: 0, approved: 0, pending: 0, needs_review: 0, rejected: 0 }
     );
 
     return {
       ...totals,
-      completedPercent: totals.total > 0 ? (totals.completed / totals.total) * 100 : 0,
+      approvedPercent: totals.total > 0 ? (totals.approved / totals.total) * 100 : 0,
       pendingPercent: totals.total > 0 ? (totals.pending / totals.total) * 100 : 0,
       needsReviewPercent: totals.total > 0 ? (totals.needs_review / totals.total) * 100 : 0,
       rejectedPercent: totals.total > 0 ? (totals.rejected / totals.total) * 100 : 0,
@@ -262,8 +301,9 @@ export function useTasks() {
     tasks,
     loading,
     createTask,
-    updateTaskRecordStatus,
-    getTaskRecordIds,
+    deleteTask,
+    updateTaskDetailStatus,
+    getTaskImageIds,
     getMyProgress,
     refetch: fetchTasks,
   };

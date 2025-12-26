@@ -14,38 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
+      anno_task_details: {
+        Row: {
+          annotator_id: string | null
+          created_at: string
+          id: string
+          image_id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          task_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          annotator_id?: string | null
+          created_at?: string
+          id?: string
+          image_id: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          task_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          annotator_id?: string | null
+          created_at?: string
+          id?: string
+          image_id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          task_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "anno_task_details_image_id_fkey"
+            columns: ["image_id"]
+            isOneToOne: false
+            referencedRelation: "dataset_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "anno_task_details_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "annotation_tasks"
+            referencedColumns: ["task_id"]
+          },
+        ]
+      }
       annotation_tasks: {
         Row: {
           assigned_by: string | null
           assigned_to: string | null
           created_at: string
-          description: string | null
-          id: string
-          name: string
-          percentage: number
           status: string
+          task_id: string
+          task_name: string
           updated_at: string
         }
         Insert: {
           assigned_by?: string | null
           assigned_to?: string | null
           created_at?: string
-          description?: string | null
-          id?: string
-          name: string
-          percentage: number
           status?: string
+          task_id?: string
+          task_name: string
           updated_at?: string
         }
         Update: {
           assigned_by?: string | null
           assigned_to?: string | null
           created_at?: string
-          description?: string | null
-          id?: string
-          name?: string
-          percentage?: number
           status?: string
+          task_id?: string
+          task_name?: string
           updated_at?: string
         }
         Relationships: []
@@ -112,51 +157,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      task_records: {
-        Row: {
-          annotated_at: string | null
-          annotated_by: string | null
-          created_at: string
-          id: string
-          record_id: string
-          status: string
-          task_id: string
-        }
-        Insert: {
-          annotated_at?: string | null
-          annotated_by?: string | null
-          created_at?: string
-          id?: string
-          record_id: string
-          status?: string
-          task_id: string
-        }
-        Update: {
-          annotated_at?: string | null
-          annotated_by?: string | null
-          created_at?: string
-          id?: string
-          record_id?: string
-          status?: string
-          task_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "task_records_record_id_fkey"
-            columns: ["record_id"]
-            isOneToOne: false
-            referencedRelation: "dataset_records"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "task_records_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "annotation_tasks"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       user_roles: {
         Row: {
