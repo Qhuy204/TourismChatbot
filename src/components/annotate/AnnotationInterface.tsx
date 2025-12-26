@@ -70,8 +70,8 @@ export function AnnotationInterface({
     }
   }, [records, recordCache]);
 
-  // Get sidebar items (minimal data)
-  const sidebarItems = useMemo(() => {
+  // Get sidebar items (minimal data) - create from records directly for efficiency
+  const allSidebarItems = useMemo(() => {
     return workingRecordIds.map(id => {
       const cached = recordCache.get(id);
       const original = records.find(r => r.id === id);
@@ -99,9 +99,13 @@ export function AnnotationInterface({
   const [audioDuration, setAudioDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Filtered and sorted sidebar items
+  // Infinite scroll state
+  const [visibleCount, setVisibleCount] = useState(1000);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Filtered and sorted sidebar items (full list for navigation)
   const filteredSidebarItems = useMemo(() => {
-    let filtered = sidebarItems.filter(item => {
+    let filtered = allSidebarItems.filter(item => {
       const matchesSearch = 
         item.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.landmark_name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -117,7 +121,28 @@ export function AnnotationInterface({
     });
 
     return filtered;
-  }, [sidebarItems, searchQuery, statusFilter, sortAsc]);
+  }, [allSidebarItems, searchQuery, statusFilter, sortAsc]);
+
+  // Visible items for rendering (limited for performance)
+  const visibleSidebarItems = useMemo(() => {
+    return filteredSidebarItems.slice(0, visibleCount);
+  }, [filteredSidebarItems, visibleCount]);
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(1000);
+  }, [searchQuery, statusFilter, sortAsc]);
+
+  // Handle scroll to load more
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement;
+    const { scrollTop, scrollHeight, clientHeight } = target;
+    
+    // Load more when scrolled to 80% of the list
+    if (scrollTop + clientHeight >= scrollHeight * 0.8) {
+      setVisibleCount(prev => Math.min(prev + 500, filteredSidebarItems.length));
+    }
+  }, [filteredSidebarItems.length]);
 
   // Get filtered record IDs for navigation
   const filteredRecordIds_internal = useMemo(() => filteredSidebarItems.map(i => i.id), [filteredSidebarItems]);
@@ -243,11 +268,12 @@ export function AnnotationInterface({
     setIsPlaying(!isPlaying);
   };
 
-  // Get image source
-  const getImageSrc = () => {
-    const imagePath = record?.paths?.image;
+  // Get image source - uses displayRecord which is defined after render checks
+  const getImageSrc = (rec: DatasetRecord | undefined) => {
+    if (!rec) return null;
+    const imagePath = rec.paths?.image;
     if (imagePath?.startsWith('http')) return imagePath;
-    if (record?.metadata?.image_spec?.original_url) return record.metadata.image_spec.original_url;
+    if (rec.metadata?.image_spec?.original_url) return rec.metadata.image_spec.original_url;
     return null;
   };
 
@@ -284,17 +310,21 @@ export function AnnotationInterface({
     return id.toLowerCase().replace(/_/g, '_').split('_').slice(-2, -1)[0] || 'data';
   };
 
-  if (!record) {
+  // Only show empty state if there are NO records at all (not when search has no results)
+  if (!record && records.length === 0) {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center space-y-4">
           <CheckCircle2 className="h-16 w-16 mx-auto text-primary" />
           <h3 className="text-xl font-semibold">Không có dữ liệu</h3>
-          <p className="text-muted-foreground">Không tìm thấy record nào phù hợp với bộ lọc</p>
+          <p className="text-muted-foreground">Chưa có record nào trong hệ thống</p>
         </div>
       </div>
     );
   }
+
+  // If search/filter has no results but we have records, show the first available record
+  const displayRecord = record || records[0];
 
   return (
     <div className="h-full flex flex-col bg-muted/30">
@@ -303,7 +333,7 @@ export function AnnotationInterface({
         <div className="flex items-center gap-2 text-sm">
           <span className="font-semibold text-lg">Annotate</span>
           <span className="text-muted-foreground">•</span>
-          <span className="text-muted-foreground font-mono">{record.id}</span>
+          <span className="text-muted-foreground font-mono">{displayRecord.id}</span>
         </div>
         <div className="flex items-center gap-4">
           <div className="relative">
@@ -363,39 +393,50 @@ export function AnnotationInterface({
             </div>
           </div>
 
-          {/* Record list */}
-          <ScrollArea className="flex-1">
+          {/* Record list with infinite scroll */}
+          <ScrollArea className="flex-1" onScrollCapture={handleScroll}>
             <div className="p-2 space-y-1">
-              {filteredSidebarItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => selectRecord(item.id)}
-                  className={cn(
-                    "w-full text-left p-3 rounded-lg transition-colors",
-                    item.id === record?.id 
-                      ? "bg-primary/10 border border-primary/20" 
-                      : "hover:bg-muted/50"
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="font-mono text-xs truncate">{item.id}</span>
+              {visibleSidebarItems.length === 0 && filteredSidebarItems.length === 0 ? (
+                <div className="p-4 text-center text-muted-foreground text-sm">
+                  Không tìm thấy kết quả
+                </div>
+              ) : (
+                visibleSidebarItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => selectRecord(item.id)}
+                    className={cn(
+                      "w-full text-left p-3 rounded-lg transition-colors",
+                      item.id === displayRecord?.id 
+                        ? "bg-primary/10 border border-primary/20" 
+                        : "hover:bg-muted/50"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="font-mono text-xs truncate">{item.id}</span>
+                      </div>
+                      {getStatusIcon(item.status)}
                     </div>
-                    {getStatusIcon(item.status)}
-                  </div>
-                  <p className="font-medium text-sm mt-1 truncate">{item.landmark_name}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {item.landmark_name.toLowerCase().replace(/\s+/g, '_')}
-                  </p>
-                </button>
-              ))}
+                    <p className="font-medium text-sm mt-1 truncate">{item.landmark_name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {item.landmark_name.toLowerCase().replace(/\s+/g, '_')}
+                    </p>
+                  </button>
+                ))
+              )}
+              {visibleCount < filteredSidebarItems.length && (
+                <div className="p-3 text-center text-muted-foreground text-xs">
+                  Scroll để tải thêm...
+                </div>
+              )}
             </div>
           </ScrollArea>
 
           {/* Footer */}
           <div className="p-3 border-t text-xs text-muted-foreground">
-            Showing {filteredSidebarItems.length} / {workingRecordIds.length} records
+            Showing {Math.min(visibleCount, filteredSidebarItems.length)} / {filteredSidebarItems.length} (total: {workingRecordIds.length})
           </div>
         </div>
 
@@ -404,9 +445,9 @@ export function AnnotationInterface({
           {/* Media Header */}
           <div className="p-4 flex items-start justify-between">
             <div>
-              <h2 className="text-xl font-semibold">{record.metadata.landmark_name}</h2>
+              <h2 className="text-xl font-semibold">{displayRecord.metadata.landmark_name}</h2>
               <Badge variant="outline" className="mt-1 bg-blue-50 text-blue-700 border-blue-200">
-                {record.metadata.location.city}
+                {displayRecord.metadata.location.city}
               </Badge>
             </div>
             <Button 
@@ -423,10 +464,10 @@ export function AnnotationInterface({
             <div className="space-y-4 pb-4">
               {/* Image */}
               <div className="rounded-xl overflow-hidden bg-muted">
-                {getImageSrc() ? (
+                {getImageSrc(displayRecord) ? (
                   <img 
-                    src={getImageSrc()!} 
-                    alt={record.metadata.landmark_name}
+                    src={getImageSrc(displayRecord)!} 
+                    alt={displayRecord.metadata.landmark_name}
                     className="w-full h-auto object-cover max-h-80"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = '/placeholder.svg';
@@ -439,9 +480,9 @@ export function AnnotationInterface({
                 )}
               </div>
               
-              {record.metadata.image_spec?.original_url && (
+              {displayRecord.metadata.image_spec?.original_url && (
                 <a 
-                  href={record.metadata.image_spec.original_url}
+                  href={displayRecord.metadata.image_spec.original_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"
@@ -463,7 +504,7 @@ export function AnnotationInterface({
                     size="icon"
                     className="h-10 w-10 rounded-full bg-primary hover:bg-primary/90"
                     onClick={togglePlay}
-                    disabled={!record.paths?.audio_evidence}
+                    disabled={!displayRecord.paths?.audio_evidence}
                   >
                     {isPlaying ? (
                       <Pause className="h-5 w-5" />
@@ -473,7 +514,7 @@ export function AnnotationInterface({
                   </Button>
                   <div className="flex-1 space-y-1">
                     <p className="text-sm font-medium truncate">
-                      {record.paths?.audio_evidence?.split('/').pop() || 'No audio'}
+                      {displayRecord.paths?.audio_evidence?.split('/').pop() || 'No audio'}
                     </p>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-1 bg-muted rounded-full">
@@ -490,10 +531,10 @@ export function AnnotationInterface({
                 </div>
 
                 {/* Transcript */}
-                {record.metadata.audio_spec?.transcript && (
+                {displayRecord.metadata.audio_spec?.transcript && (
                   <div className="bg-blue-50/50 rounded-lg p-3">
                     <p className="text-sm text-muted-foreground leading-relaxed line-clamp-6">
-                      {record.metadata.audio_spec.transcript}
+                      {displayRecord.metadata.audio_spec.transcript}
                     </p>
                   </div>
                 )}
@@ -560,13 +601,13 @@ export function AnnotationInterface({
           <div className="p-4 flex items-center justify-between border-b">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold">QA Pairs</h3>
-              <Badge variant="outline">{record.qa_pairs?.length || 0} samples</Badge>
+              <Badge variant="outline">{displayRecord.qa_pairs?.length || 0} samples</Badge>
             </div>
           </div>
 
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-4">
-              {record.qa_pairs?.map((qa, qaIndex) => (
+              {displayRecord.qa_pairs?.map((qa, qaIndex) => (
                 <div key={qaIndex} className="flex gap-3">
                   {/* Index */}
                   <div className="shrink-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
@@ -656,7 +697,7 @@ export function AnnotationInterface({
             <DialogTitle className="flex items-center gap-2">
               Edit Metadata
               <span className="text-muted-foreground font-normal text-sm">
-                {record.id} • {record.metadata.landmark_name}
+                {displayRecord.id} • {displayRecord.metadata.landmark_name}
               </span>
             </DialogTitle>
           </DialogHeader>
@@ -672,14 +713,14 @@ export function AnnotationInterface({
                 <div className="space-y-1.5">
                   <Label className="text-xs uppercase text-muted-foreground">City</Label>
                   <Input
-                    value={record.metadata.location.city}
+                    value={displayRecord.metadata.location.city}
                     onChange={(e) => handleFieldChange('metadata.location.city', e.target.value)}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs uppercase text-muted-foreground">District</Label>
                   <Input
-                    value={record.metadata.location.district}
+                    value={displayRecord.metadata.location.district}
                     onChange={(e) => handleFieldChange('metadata.location.district', e.target.value)}
                   />
                 </div>
@@ -688,7 +729,7 @@ export function AnnotationInterface({
                   <Input
                     type="number"
                     step="any"
-                    value={record.metadata.location.gps?.lat || ''}
+                    value={displayRecord.metadata.location.gps?.lat || ''}
                     onChange={(e) => handleFieldChange('metadata.location.gps.lat', parseFloat(e.target.value) || 0)}
                   />
                 </div>
@@ -697,7 +738,7 @@ export function AnnotationInterface({
                   <Input
                     type="number"
                     step="any"
-                    value={record.metadata.location.gps?.lon || ''}
+                    value={displayRecord.metadata.location.gps?.lon || ''}
                     onChange={(e) => handleFieldChange('metadata.location.gps.lon', parseFloat(e.target.value) || 0)}
                   />
                 </div>
@@ -714,7 +755,7 @@ export function AnnotationInterface({
                 <div className="space-y-1.5">
                   <Label className="text-xs uppercase text-muted-foreground">Original URL</Label>
                   <Input
-                    value={record.metadata.image_spec?.original_url || ''}
+                    value={displayRecord.metadata.image_spec?.original_url || ''}
                     onChange={(e) => handleFieldChange('metadata.image_spec.original_url', e.target.value)}
                     className="bg-purple-50 border-purple-200"
                   />
@@ -723,14 +764,14 @@ export function AnnotationInterface({
                   <div className="space-y-1.5">
                     <Label className="text-xs uppercase text-muted-foreground">Source</Label>
                     <Input
-                      value={record.metadata.image_spec?.source || ''}
+                      value={displayRecord.metadata.image_spec?.source || ''}
                       onChange={(e) => handleFieldChange('metadata.image_spec.source', e.target.value)}
                     />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs uppercase text-muted-foreground">License</Label>
                     <Input
-                      value={record.metadata.image_spec?.license || ''}
+                      value={displayRecord.metadata.image_spec?.license || ''}
                       onChange={(e) => handleFieldChange('metadata.image_spec.license', e.target.value)}
                     />
                   </div>
@@ -738,14 +779,14 @@ export function AnnotationInterface({
                 <div className="space-y-1.5">
                   <Label className="text-xs uppercase text-muted-foreground">Description</Label>
                   <Input
-                    value={record.metadata.image_spec?.description || ''}
+                    value={displayRecord.metadata.image_spec?.description || ''}
                     onChange={(e) => handleFieldChange('metadata.image_spec.description', e.target.value)}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs uppercase text-muted-foreground">Match Info</Label>
                   <Input
-                    value={record.metadata.image_spec?.match_info || ''}
+                    value={displayRecord.metadata.image_spec?.match_info || ''}
                     onChange={(e) => handleFieldChange('metadata.image_spec.match_info', e.target.value)}
                   />
                 </div>
@@ -762,7 +803,7 @@ export function AnnotationInterface({
                 <div className="col-span-2 space-y-1.5">
                   <Label className="text-xs uppercase text-muted-foreground">Transcript</Label>
                   <Textarea
-                    value={record.metadata.audio_spec?.transcript || ''}
+                    value={displayRecord.metadata.audio_spec?.transcript || ''}
                     onChange={(e) => handleFieldChange('metadata.audio_spec.transcript', e.target.value)}
                     rows={4}
                     className="resize-none"
@@ -771,7 +812,7 @@ export function AnnotationInterface({
                 <div className="space-y-1.5">
                   <Label className="text-xs uppercase text-muted-foreground">Voice ID</Label>
                   <Input
-                    value={record.metadata.audio_spec?.voice_id || ''}
+                    value={displayRecord.metadata.audio_spec?.voice_id || ''}
                     onChange={(e) => handleFieldChange('metadata.audio_spec.voice_id', e.target.value)}
                   />
                   <p className="text-xs text-orange-600 mt-2">
@@ -800,10 +841,10 @@ export function AnnotationInterface({
       </Dialog>
 
       {/* Hidden audio element */}
-      {record.paths?.audio_evidence && (
+      {displayRecord.paths?.audio_evidence && (
         <audio 
           ref={audioRef}
-          src={record.paths.audio_evidence}
+          src={displayRecord.paths.audio_evidence}
           onEnded={() => setIsPlaying(false)}
           onTimeUpdate={(e) => {
             const audio = e.target as HTMLAudioElement;
