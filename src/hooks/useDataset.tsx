@@ -1,63 +1,31 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { DatasetRecord, DatasetStats } from '@/types/dataset';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { toast } from 'sonner';
 
-// Global cache to persist data across component mounts
-let globalRecordsCache: DatasetRecord[] | null = null;
-let globalTotalCount: number | null = null;
-let globalStatsCache: DatasetStats | null = null;
-let lastFetchTime: number | null = null;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
 export function useDataset() {
   const { user } = useAuth();
   const { isAdmin } = useRole();
-  const [records, setRecords] = useState<DatasetRecord[]>(globalRecordsCache || []);
-  const [loading, setLoading] = useState(globalRecordsCache === null);
-  const [totalCount, setTotalCount] = useState(globalTotalCount || 0);
-  const [statsFromDB, setStatsFromDB] = useState<DatasetStats | null>(globalStatsCache);
-  const [loadedCount, setLoadedCount] = useState(globalRecordsCache?.length || 0);
-  const isLoadingMore = useRef(false);
-  const hasInitialized = useRef(false);
+  const [records, setRecords] = useState<DatasetRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [statsFromDB, setStatsFromDB] = useState<DatasetStats | null>(null);
 
-  // Calculate batch size (5% of total or minimum 100)
-  const getBatchSize = useCallback((total: number) => {
-    return Math.max(100, Math.ceil(total * 0.05));
-  }, []);
-
-  // Fetch initial batch and stats
-  const fetchInitialRecords = useCallback(async (forceRefresh = false) => {
+  const fetchRecords = useCallback(async () => {
     if (!user) return;
-
-    // Use cache if available and not expired
-    const now = Date.now();
-    if (!forceRefresh && globalRecordsCache && lastFetchTime && (now - lastFetchTime < CACHE_DURATION)) {
-      setRecords(globalRecordsCache);
-      setTotalCount(globalTotalCount || 0);
-      setStatsFromDB(globalStatsCache);
-      setLoadedCount(globalRecordsCache.length);
-      setLoading(false);
-      return;
-    }
 
     setLoading(true);
     try {
-      // Get total count first
+      // Get total count first (bypasses 1000 limit)
       const { count: total, error: countError } = await supabase
         .from('dataset_records')
         .select('*', { count: 'exact', head: true });
 
-      if (countError) {
-        console.error('Error getting count:', countError);
-        return;
+      if (!countError && total !== null) {
+        setTotalCount(total);
       }
-
-      const totalRecords = total || 0;
-      setTotalCount(totalRecords);
-      globalTotalCount = totalRecords;
 
       // Get counts by status for accurate stats
       const [pendingRes, approvedRes, rejectedRes, needsReviewRes] = await Promise.all([
@@ -67,24 +35,20 @@ export function useDataset() {
         supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'needs_review'),
       ]);
 
-      const stats: DatasetStats = {
-        total: totalRecords,
+      setStatsFromDB({
+        total: total || 0,
         pending: pendingRes.count || 0,
         approved: approvedRes.count || 0,
         rejected: rejectedRes.count || 0,
         needs_review: needsReviewRes.count || 0,
         qa_types: { ask_image: 0, ask_audio: 0, ask_both: 0 },
-      };
-      setStatsFromDB(stats);
-      globalStatsCache = stats;
+      });
 
-      // Fetch initial batch (5% of total or minimum 100)
-      const batchSize = getBatchSize(totalRecords);
+      // Fetch all records for display
       const { data, error } = await supabase
         .from('dataset_records')
         .select('*')
-        .order('created_at', { ascending: false })
-        .range(0, batchSize - 1);
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching records:', error);
@@ -99,62 +63,16 @@ export function useDataset() {
       }));
 
       setRecords(mapped);
-      setLoadedCount(mapped.length);
-      globalRecordsCache = mapped;
-      lastFetchTime = Date.now();
     } catch (error) {
       console.error('Error fetching records:', error);
     } finally {
       setLoading(false);
     }
-  }, [user, getBatchSize]);
+  }, [user]);
 
-  // Load more records (next 5%)
-  const loadMoreRecords = useCallback(async () => {
-    if (!user || isLoadingMore.current || loadedCount >= totalCount) return;
-
-    isLoadingMore.current = true;
-    try {
-      const batchSize = getBatchSize(totalCount);
-      const { data, error } = await supabase
-        .from('dataset_records')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .range(loadedCount, loadedCount + batchSize - 1);
-
-      if (error) {
-        console.error('Error loading more records:', error);
-        return;
-      }
-
-      const mapped: DatasetRecord[] = (data || []).map((row: any) => ({
-        ...row.data,
-        status: row.status,
-        db_id: row.id,
-      }));
-
-      if (mapped.length > 0) {
-        setRecords(prev => {
-          const updated = [...prev, ...mapped];
-          globalRecordsCache = updated;
-          return updated;
-        });
-        setLoadedCount(prev => prev + mapped.length);
-      }
-    } catch (error) {
-      console.error('Error loading more records:', error);
-    } finally {
-      isLoadingMore.current = false;
-    }
-  }, [user, loadedCount, totalCount, getBatchSize]);
-
-  // Initialize on mount - only fetch if not already cached
   useEffect(() => {
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
-      fetchInitialRecords();
-    }
-  }, [fetchInitialRecords]);
+    fetchRecords();
+  }, [fetchRecords]);
 
   const addRecords = useCallback(async (newRecords: DatasetRecord[]) => {
     if (!user || !isAdmin) {
@@ -196,10 +114,7 @@ export function useDataset() {
         }
       }
 
-      // Force refresh after adding
-      globalRecordsCache = null;
-      lastFetchTime = null;
-      await fetchInitialRecords(true);
+      await fetchRecords();
       
       if (errorCount > 0) {
         toast.warning(`Đã thêm ${successCount} records, ${errorCount} lỗi`);
@@ -213,7 +128,7 @@ export function useDataset() {
       toast.error('Lỗi khi thêm dữ liệu');
       return false;
     }
-  }, [user, isAdmin, fetchInitialRecords]);
+  }, [user, isAdmin, fetchRecords]);
 
   const updateRecord = useCallback(async (record: DatasetRecord) => {
     if (!user) return false;
@@ -233,11 +148,7 @@ export function useDataset() {
         return false;
       }
 
-      setRecords(prev => {
-        const updated = prev.map(r => r.id === record.id ? record : r);
-        globalRecordsCache = updated;
-        return updated;
-      });
+      setRecords(prev => prev.map(r => r.id === record.id ? record : r));
       return true;
     } catch (error) {
       console.error('Error updating record:', error);
@@ -263,13 +174,7 @@ export function useDataset() {
         return false;
       }
 
-      setRecords(prev => {
-        const updated = prev.filter(r => !recordIds.includes(r.id));
-        globalRecordsCache = updated;
-        return updated;
-      });
-      setTotalCount(prev => prev - recordIds.length);
-      globalTotalCount = (globalTotalCount || 0) - recordIds.length;
+      setRecords(prev => prev.filter(r => !recordIds.includes(r.id)));
       toast.success(`Đã xóa ${recordIds.length} records`);
       return true;
     } catch (error) {
@@ -323,23 +228,14 @@ export function useDataset() {
     return stats;
   }, [records, totalCount, statsFromDB]);
 
-  // Force refresh function
-  const refetch = useCallback(async () => {
-    globalRecordsCache = null;
-    lastFetchTime = null;
-    await fetchInitialRecords(true);
-  }, [fetchInitialRecords]);
-
   return {
     records,
     loading,
     totalCount,
-    loadedCount,
-    loadMoreRecords,
     addRecords,
     updateRecord,
     deleteRecords,
-    refetch,
+    refetch: fetchRecords,
     calculateStats,
   };
 }

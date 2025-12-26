@@ -18,14 +18,12 @@ interface UserDashboardProps {
   records: DatasetRecord[];
   tasks?: AnnotationTask[];
   onNavigateToAnnotate?: () => void;
-  onStartTask?: (taskId: string) => void;
 }
 
 export function UserDashboard({ 
   records, 
   tasks = [],
-  onNavigateToAnnotate,
-  onStartTask
+  onNavigateToAnnotate 
 }: UserDashboardProps) {
   const { user } = useAuth();
   
@@ -114,7 +112,7 @@ export function UserDashboard({
       </Card>
 
       {/* Tasks List */}
-      <TaskProgressList tasks={tasks} title="Tasks của bạn" showAssignee={false} onStartTask={onStartTask} />
+      <TaskProgressList tasks={tasks} title="Tasks của bạn" showAssignee={false} />
 
       {/* Quick Actions */}
       <Card>
