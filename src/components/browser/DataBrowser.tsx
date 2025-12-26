@@ -25,6 +25,8 @@ import { toast } from "sonner";
 interface DataBrowserProps {
   records: DatasetRecord[];
   totalCount?: number;
+  loadedCount?: number;
+  onLoadMore?: () => void;
   onRecordUpdate?: (record: DatasetRecord) => void;
   onRecordsUpdate?: (records: DatasetRecord[]) => void;
   onNavigateToAnnotate?: (recordId: string) => void;
@@ -35,7 +37,7 @@ const ITEMS_PER_PAGE = 1000;
 type SortBy = "id" | "created" | "status" | "name";
 type SortOrder = "asc" | "desc";
 
-export function DataBrowser({ records, totalCount, onRecordUpdate, onRecordsUpdate, onNavigateToAnnotate }: DataBrowserProps) {
+export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRecordUpdate, onRecordsUpdate, onNavigateToAnnotate }: DataBrowserProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");

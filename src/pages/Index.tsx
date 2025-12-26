@@ -10,7 +10,6 @@ import { AdminDashboard } from '@/components/dashboard/AdminDashboard';
 import { UserDashboard } from '@/components/dashboard/UserDashboard';
 import { DataBrowser } from '@/components/browser/DataBrowser';
 import { AnnotationInterface } from '@/components/annotate/AnnotationInterface';
-import { TaskAnnotation } from '@/components/annotate/TaskAnnotation';
 import { RandomQACheck } from '@/components/qa-check/RandomQACheck';
 import { CrawlInterface } from '@/components/crawl/CrawlInterface';
 import { ImportInterface } from '@/components/import/ImportInterface';
@@ -20,6 +19,8 @@ import { UserSettingsDialog } from '@/components/settings/UserSettingsDialog';
 import { DatasetRecord } from '@/types/dataset';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const Index = () => {
   const { user, loading: authLoading } = useAuth();
@@ -28,9 +29,9 @@ const Index = () => {
   const [currentView, setCurrentView] = useState('dashboard');
   
   // Use database-synced data
-  const { records, loading: dataLoading, totalCount, addRecords, updateRecord, deleteRecords, refetch, calculateStats } = useDataset();
+  const { records, loading: dataLoading, totalCount, loadedCount, loadMoreRecords, addRecords, updateRecord, deleteRecords, refetch, calculateStats } = useDataset();
   const { users } = useUsers();
-  const { tasks, createTask, refetch: refetchTasks } = useTasks();
+  const { tasks, createTask, getTaskRecordIds, refetch: refetchTasks } = useTasks();
   
   // Annotation navigation state
   const [annotateRecordId, setAnnotateRecordId] = useState<string | undefined>();
@@ -73,6 +74,37 @@ const Index = () => {
     setAnnotateFilteredIds(recordIds);
     setAnnotateRecordId(recordIds[0]);
     setCurrentView('annotate');
+  }, []);
+
+  // Navigate to annotate from Task with task's record IDs
+  const handleStartTaskAnnotation = useCallback(async (taskId: string) => {
+    try {
+      // Fetch all record IDs for the task
+      const { data: taskRecords, error } = await supabase
+        .from('task_records')
+        .select('record_id')
+        .eq('task_id', taskId);
+
+      if (error) {
+        toast.error('Không thể tải records của task');
+        return;
+      }
+
+      const recordIds = taskRecords?.map(tr => tr.record_id) || [];
+      
+      if (recordIds.length === 0) {
+        toast.error('Task không có records nào');
+        return;
+      }
+
+      // Navigate to annotate with task's record IDs
+      setAnnotateFilteredIds(recordIds);
+      setAnnotateRecordId(recordIds[0]);
+      setCurrentView('annotate');
+    } catch (err) {
+      console.error('Error starting task annotation:', err);
+      toast.error('Có lỗi xảy ra');
+    }
   }, []);
 
   // Handle view change - reset annotation state when going to annotate directly
@@ -128,22 +160,32 @@ const Index = () => {
           <UserDashboard 
             records={records}
             tasks={userTasks}
-            onNavigateToAnnotate={() => setCurrentView('task-annotate')}
+            onNavigateToAnnotate={() => setCurrentView('annotate')}
+            onStartTask={handleStartTaskAnnotation}
           />
         );
       case 'task-annotate':
+        // Redirect to annotate with first task's records if available
+        if (userTasks.length > 0) {
+          handleStartTaskAnnotation(userTasks[0].id);
+        }
         return (
-          <TaskAnnotation 
-            tasks={isAdmin ? tasks : userTasks}
-            onBack={() => setCurrentView('dashboard')}
-            onTaskUpdate={refetchTasks}
-          />
+          <div className="p-6 flex items-center justify-center min-h-[400px]">
+            <Card className="max-w-md">
+              <CardContent className="p-12 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+                <p className="text-muted-foreground">Đang tải task...</p>
+              </CardContent>
+            </Card>
+          </div>
         );
       case 'browser':
         return (
           <DataBrowser 
             records={records} 
             totalCount={totalCount}
+            loadedCount={loadedCount}
+            onLoadMore={loadMoreRecords}
             onRecordUpdate={handleRecordUpdate} 
             onRecordsUpdate={handleRecordsUpdate}
             onNavigateToAnnotate={handleNavigateToAnnotate}
@@ -153,6 +195,9 @@ const Index = () => {
         return (
           <AnnotationInterface 
             records={records} 
+            totalCount={totalCount}
+            loadedCount={loadedCount}
+            onLoadMore={loadMoreRecords}
             onRecordUpdate={handleRecordUpdate}
             initialRecordId={annotateRecordId}
             filteredRecordIds={annotateFilteredIds}
@@ -189,7 +234,7 @@ const Index = () => {
         return isAdmin ? (
           <AdminDashboard records={records} stats={stats} usersCount={users?.length || 0} tasksCount={tasks?.length || 0} users={users} tasks={tasks} />
         ) : (
-          <UserDashboard records={records} tasks={userTasks} onNavigateToAnnotate={() => setCurrentView('annotate')} />
+          <UserDashboard records={records} tasks={userTasks} onNavigateToAnnotate={() => setCurrentView('annotate')} onStartTask={handleStartTaskAnnotation} />
         );
     }
   };

@@ -92,6 +92,27 @@ export function useTasks() {
     }
 
     try {
+      // Get TOTAL count of pending records from DB (not limited by fetch)
+      const { count: totalPendingCount, error: countError } = await supabase
+        .from('dataset_records')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      if (countError) {
+        console.error('Error getting count:', countError);
+        toast.error('Không thể lấy số lượng records');
+        return null;
+      }
+
+      const totalCount = totalPendingCount || 0;
+      if (totalCount === 0) {
+        toast.error('Không có records pending để giao');
+        return null;
+      }
+
+      // Calculate how many records to assign based on TOTAL count
+      const recordsToAssign = Math.ceil((percentage / 100) * totalCount);
+
       const { data: task, error: taskError } = await supabase
         .from('annotation_tasks')
         .insert({
@@ -111,17 +132,15 @@ export function useTasks() {
         return null;
       }
 
-      // Get records to assign
+      // Get records to assign (fetch the calculated amount)
       const { data: allRecords } = await supabase
         .from('dataset_records')
         .select('id')
-        .eq('status', 'pending');
+        .eq('status', 'pending')
+        .limit(recordsToAssign);
 
       if (allRecords && allRecords.length > 0) {
-        const count = Math.ceil((percentage / 100) * allRecords.length);
-        const selectedRecords = allRecords.slice(0, count);
-
-        const taskRecords = selectedRecords.map(record => ({
+        const taskRecords = allRecords.map(record => ({
           task_id: task.id,
           record_id: record.id,
           status: 'pending' as const,
@@ -131,7 +150,7 @@ export function useTasks() {
       }
 
       await fetchTasks();
-      toast.success('Đã tạo task thành công');
+      toast.success(`Đã tạo task với ${allRecords?.length || 0} records (${percentage}% của ${totalCount})`);
       return task;
     } catch (error) {
       console.error('Error creating task:', error);
@@ -171,6 +190,21 @@ export function useTasks() {
     }
   }, [user, fetchTasks]);
 
+  // Get record IDs for a task
+  const getTaskRecordIds = useCallback(async (taskId: string): Promise<string[]> => {
+    const { data, error } = await supabase
+      .from('task_records')
+      .select('record_id')
+      .eq('task_id', taskId);
+
+    if (error) {
+      console.error('Error fetching task records:', error);
+      return [];
+    }
+
+    return data?.map(r => r.record_id) || [];
+  }, []);
+
   const getMyProgress = useCallback(() => {
     if (!tasks.length) return null;
 
@@ -202,6 +236,7 @@ export function useTasks() {
     loading,
     createTask,
     updateTaskRecordStatus,
+    getTaskRecordIds,
     getMyProgress,
     refetch: fetchTasks,
   };
