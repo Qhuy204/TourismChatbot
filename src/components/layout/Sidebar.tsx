@@ -12,7 +12,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  User
+  User,
+  ClipboardList
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -30,13 +31,14 @@ interface SidebarProps {
 
 const allNavItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
-  { id: 'browser', label: 'Data Browser', icon: FolderOpen, adminOnly: false },
-  { id: 'annotate', label: 'Annotate', icon: Tags, adminOnly: false },
-  { id: 'random-check', label: 'QA Check (10%)', icon: Shuffle, adminOnly: false },
+  { id: 'task-annotate', label: 'My Tasks', icon: ClipboardList, adminOnly: false },
+  { id: 'browser', label: 'Data Browser', icon: FolderOpen, adminOnly: true },
+  { id: 'annotate', label: 'Annotate All', icon: Tags, adminOnly: true },
+  { id: 'random-check', label: 'QA Check (10%)', icon: Shuffle, adminOnly: true },
   { id: 'import', label: 'Import Data', icon: Upload, adminOnly: true },
   { id: 'crawl', label: 'Crawl Data', icon: Globe, adminOnly: true },
-  { id: 'export', label: 'Export', icon: Download, adminOnly: false },
-  { id: 'settings', label: 'Settings', icon: Settings, adminOnly: false },
+  { id: 'export', label: 'Export', icon: Download, adminOnly: true },
+  { id: 'settings', label: 'Settings', icon: Settings, adminOnly: true },
 ];
 
 export function Sidebar({ currentView, onViewChange, onOpenSettings, isAdmin = false }: SidebarProps) {

@@ -24,6 +24,7 @@ import { toast } from "sonner";
 
 interface DataBrowserProps {
   records: DatasetRecord[];
+  totalCount?: number;
   onRecordUpdate?: (record: DatasetRecord) => void;
   onRecordsUpdate?: (records: DatasetRecord[]) => void;
   onNavigateToAnnotate?: (recordId: string) => void;
@@ -34,7 +35,7 @@ const ITEMS_PER_PAGE = 100;
 type SortBy = "id" | "created" | "status" | "name";
 type SortOrder = "asc" | "desc";
 
-export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate, onNavigateToAnnotate }: DataBrowserProps) {
+export function DataBrowser({ records, totalCount, onRecordUpdate, onRecordsUpdate, onNavigateToAnnotate }: DataBrowserProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -249,6 +250,9 @@ export function DataBrowser({ records, onRecordUpdate, onRecordsUpdate, onNaviga
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">
                 Hiển thị {paginatedRecords.length} / {filteredAndSortedRecords.length} records
+                {totalCount && totalCount > records.length && (
+                  <span className="text-muted-foreground/70"> (Tổng cộng: {totalCount.toLocaleString()})</span>
+                )}
               </span>
               <Button size="sm" variant="outline" onClick={selectAllDataset}>
                 Chọn tất cả ({filteredAndSortedRecords.length})
