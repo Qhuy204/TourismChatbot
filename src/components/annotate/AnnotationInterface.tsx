@@ -42,6 +42,9 @@ interface AnnotationInterfaceProps {
   onRecordUpdate: (record: DatasetRecord) => void;
   initialRecordId?: string;
   filteredRecordIds?: string[];
+  totalCount?: number;
+  loadedCount?: number;
+  onLoadMore?: () => Promise<void>;
 }
 
 type StatusFilter = "all" | "pending" | "approved" | "rejected" | "needs_review";
