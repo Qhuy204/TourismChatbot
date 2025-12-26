@@ -26,6 +26,7 @@ interface TaskAssignmentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   users: UserWithRole[];
+  availableRecords: number;
   totalRecords: number;
   onAssign: (name: string, userId: string, percentage: number, description?: string) => Promise<void>;
 }
@@ -34,6 +35,7 @@ export function TaskAssignmentDialog({
   open,
   onOpenChange,
   users,
+  availableRecords,
   totalRecords,
   onAssign,
 }: TaskAssignmentDialogProps) {
@@ -43,8 +45,9 @@ export function TaskAssignmentDialog({
   const [percentage, setPercentage] = useState(10);
   const [loading, setLoading] = useState(false);
 
-  const recordCount = Math.ceil((percentage / 100) * totalRecords);
-  const regularUsers = users.filter(u => u.role === 'user');
+  const recordCount = Math.ceil((percentage / 100) * availableRecords);
+  // Allow all users (including admins) to be assigned tasks
+  const assignableUsers = users;
 
   const handleSubmit = async () => {
     if (!name.trim() || !selectedUser) return;
@@ -102,14 +105,14 @@ export function TaskAssignmentDialog({
                 <SelectValue placeholder="Chọn user..." />
               </SelectTrigger>
               <SelectContent>
-                {regularUsers.length === 0 ? (
+                {assignableUsers.length === 0 ? (
                   <div className="p-2 text-sm text-muted-foreground">
                     Chưa có user nào
                   </div>
                 ) : (
-                  regularUsers.map((user) => (
+                  assignableUsers.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
-                      {user.display_name || user.email}
+                      {user.display_name || user.email} {user.role === 'admin' ? '(Admin)' : ''}
                     </SelectItem>
                   ))
                 )}
@@ -133,7 +136,7 @@ export function TaskAssignmentDialog({
               className="w-full"
             />
             <p className="text-xs text-muted-foreground">
-              Tổng số records trong hệ thống: {totalRecords.toLocaleString()}
+              Records khả dụng: {availableRecords.toLocaleString()} / Tổng: {totalRecords.toLocaleString()}
             </p>
           </div>
         </div>

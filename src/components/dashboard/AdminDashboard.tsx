@@ -28,6 +28,7 @@ interface AdminDashboardProps {
   tasksCount?: number;
   users?: UserWithRole[];
   tasks?: AnnotationTask[];
+  availableRecords?: number;
   onCreateTask?: (name: string, userId: string, percentage: number, description?: string) => Promise<void>;
 }
 
@@ -38,6 +39,7 @@ export function AdminDashboard({
   tasksCount = 0,
   users = [],
   tasks = [],
+  availableRecords = 0,
   onCreateTask
 }: AdminDashboardProps) {
   const [showTaskDialog, setShowTaskDialog] = useState(false);
@@ -259,6 +261,7 @@ export function AdminDashboard({
         open={showTaskDialog}
         onOpenChange={setShowTaskDialog}
         users={users}
+        availableRecords={availableRecords}
         totalRecords={stats.total}
         onAssign={handleCreateTask}
       />
