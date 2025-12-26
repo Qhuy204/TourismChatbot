@@ -101,7 +101,6 @@ export interface UserWithRole {
 export interface AnnotationTask {
   task_id: string;
   task_name: string;
-  created_by?: string;
   assigned_to?: string;
   assigned_by?: string;
   status: 'open' | 'in_progress' | 'done' | 'archived';
