@@ -31,7 +31,7 @@ const Index = () => {
   // Use database-synced data
   const { records, loading: dataLoading, totalCount, loadedCount, loadMoreRecords, addRecords, updateRecord, deleteRecords, refetch, calculateStats } = useDataset();
   const { users } = useUsers();
-  const { tasks, createTask, deleteTask, getTaskImageIds, refetch: refetchTasks } = useTasks();
+  const { tasks, createTask, deleteTask, getTaskImageIds, availableRecordsInfo, refetch: refetchTasks } = useTasks();
   
   // Annotation navigation state
   const [annotateRecordId, setAnnotateRecordId] = useState<string | undefined>();
@@ -138,9 +138,9 @@ const Index = () => {
   // Get user's tasks (for regular users)
   const userTasks = tasks?.filter(t => t.assigned_to === user?.id) || [];
 
-  // Calculate available records (total - already assigned in tasks)
-  const assignedRecordsCount = tasks?.reduce((sum, task) => sum + (task.progress?.total || 0), 0) || 0;
-  const availableRecords = Math.max(0, totalCount - assignedRecordsCount);
+  // Use availableRecordsInfo from useTasks hook (fetches directly from DB)
+  const availableRecords = availableRecordsInfo.available;
+  const totalRecordsCount = availableRecordsInfo.total;
 
   // Create task handler for admin
   const handleCreateTask = useCallback(async (name: string, userId: string, percentage: number) => {
@@ -164,6 +164,7 @@ const Index = () => {
             users={users}
             tasks={tasks}
             availableRecords={availableRecords}
+            totalRecords={totalRecordsCount}
             onCreateTask={handleCreateTask}
             onDeleteTask={handleDeleteTask}
           />
@@ -251,6 +252,7 @@ const Index = () => {
             users={users} 
             tasks={tasks} 
             availableRecords={availableRecords}
+            totalRecords={totalRecordsCount}
             onCreateTask={handleCreateTask}
             onDeleteTask={handleDeleteTask}
           />
