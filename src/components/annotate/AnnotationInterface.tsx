@@ -7,7 +7,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -29,7 +30,8 @@ import {
   Check,
   Image as ImageIcon,
   MapPin,
-  Volume2
+  Volume2,
+  Loader2
 } from 'lucide-react';
 import { DatasetRecord, QAPair } from '@/types/dataset';
 import { toast } from 'sonner';
@@ -87,6 +89,7 @@ export function AnnotationInterface({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortAsc, setSortAsc] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Main state
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -329,24 +332,20 @@ export function AnnotationInterface({
   return (
     <div className="h-full flex flex-col bg-muted/30">
       {/* Header */}
-      <div className="shrink-0 h-16 px-6 flex items-center justify-between border-b bg-background">
+      <div className="shrink-0 h-14 px-6 flex items-center justify-between border-b bg-background">
         <div className="flex items-center gap-2 text-sm">
           <span className="font-semibold text-lg">Annotate</span>
           <span className="text-muted-foreground">•</span>
           <span className="text-muted-foreground font-mono">{displayRecord.id}</span>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search... ⌘K" 
-              className="pl-9 w-64 bg-muted/50"
-            />
-          </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs">
+            {currentIndex + 1} / {filteredSidebarItems.length}
+          </Badge>
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Main content with resizable panels */}
       <div className="flex-1 min-h-0 flex">
         {/* Panel 1: Data Sidebar */}
         <div className="w-72 shrink-0 border-r bg-background flex flex-col">
@@ -440,8 +439,11 @@ export function AnnotationInterface({
           </div>
         </div>
 
-        {/* Panel 2: Media Viewer */}
-        <div className="flex-1 min-w-0 flex flex-col bg-background border-r">
+        {/* Resizable area for Media Viewer and QA Editor */}
+        <ResizablePanelGroup direction="horizontal" className="flex-1 min-w-0">
+          {/* Panel 2: Media Viewer */}
+          <ResizablePanel defaultSize={40} minSize={30}>
+            <div className="h-full flex flex-col bg-background">
           {/* Media Header */}
           <div className="p-4 flex items-start justify-between">
             <div>
@@ -595,99 +597,105 @@ export function AnnotationInterface({
             </Button>
           </div>
         </div>
+          </ResizablePanel>
 
-        {/* Panel 3: QA Editor - wider for important content */}
-        <div className="w-[580px] shrink-0 flex flex-col bg-background">
-          <div className="p-4 flex items-center justify-between border-b">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold">QA Pairs</h3>
-              <Badge variant="outline">{displayRecord.qa_pairs?.length || 0} samples</Badge>
-            </div>
-          </div>
+          <ResizableHandle withHandle />
 
-          <ScrollArea className="flex-1">
-            <div className="p-4 space-y-4">
-              {displayRecord.qa_pairs?.map((qa, qaIndex) => (
-                <div key={qaIndex} className="flex gap-3">
-                  {/* Index */}
-                  <div className="shrink-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
-                    {qaIndex + 1}
-                  </div>
-
-                  {/* Card */}
-                  <div className="flex-1 rounded-lg border p-4 space-y-4">
-                    {/* Header */}
-                    <div className="flex items-center justify-between gap-2">
-                      <Select
-                        value={qa.type}
-                        onValueChange={(v) => handleFieldChange(`qa_pairs[${qaIndex}].type`, v)}
-                      >
-                        <SelectTrigger className={cn("w-28 h-7 text-xs font-medium", getTypeBadgeClass(qa.type))}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ask_image">ASK IMAGE</SelectItem>
-                          <SelectItem value="ask_audio">ASK AUDIO</SelectItem>
-                          <SelectItem value="ask_both">ASK BOTH</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <span className="text-xs text-muted-foreground truncate">
-                        {qa.paths?.question_audio?.split('/').pop()}
-                      </span>
-                    </div>
-
-                    {/* Question */}
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <MessageSquare className="h-4 w-4 text-blue-500" />
-                        <Textarea
-                          value={qa.q || ''}
-                          onChange={(e) => handleFieldChange(`qa_pairs[${qaIndex}].q`, e.target.value)}
-                          className="flex-1 min-h-[60px] text-sm resize-none"
-                          placeholder="Nhập câu hỏi..."
-                        />
-                      </div>
-                      <div className="flex items-center gap-2 ml-6">
-                        <Badge variant="outline" className="bg-primary/10 text-primary text-xs">
-                          {qa.audio_meta?.q_voice?.id || 'vi-VN-HoaiMyNeural'}
-                        </Badge>
-                        {qa.audio_meta?.q_voice?.rate && (
-                          <Badge variant="outline" className="text-xs">
-                            🎵 {qa.audio_meta.q_voice.rate}
-                          </Badge>
-                        )}
-                        <Button variant="ghost" size="icon" className="h-6 w-6">
-                          <Play className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Answer */}
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-primary" />
-                        <Textarea
-                          value={qa.a || ''}
-                          onChange={(e) => handleFieldChange(`qa_pairs[${qaIndex}].a`, e.target.value)}
-                          className="flex-1 min-h-[80px] text-sm resize-none"
-                          placeholder="Nhập câu trả lời..."
-                        />
-                      </div>
-                      <div className="flex items-center gap-2 ml-6">
-                        <Badge variant="outline" className="bg-primary/10 text-primary text-xs">
-                          {qa.audio_meta?.a_voice?.id || 'vi-VN-HoaiMyNeural'}
-                        </Badge>
-                        <Button variant="ghost" size="icon" className="h-6 w-6">
-                          <Play className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
+          {/* Panel 3: QA Editor */}
+          <ResizablePanel defaultSize={60} minSize={40}>
+            <div className="h-full flex flex-col bg-background">
+              <div className="p-4 flex items-center justify-between border-b">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold">QA Pairs</h3>
+                  <Badge variant="outline">{displayRecord.qa_pairs?.length || 0} samples</Badge>
                 </div>
-              ))}
+              </div>
+
+              <ScrollArea className="flex-1">
+                <div className="p-4 space-y-4">
+                  {displayRecord.qa_pairs?.map((qa, qaIndex) => (
+                    <div key={qaIndex} className="flex gap-3">
+                      {/* Index */}
+                      <div className="shrink-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
+                        {qaIndex + 1}
+                      </div>
+
+                      {/* Card */}
+                      <div className="flex-1 rounded-lg border p-4 space-y-4">
+                        {/* Header */}
+                        <div className="flex items-center justify-between gap-2">
+                          <Select
+                            value={qa.type}
+                            onValueChange={(v) => handleFieldChange(`qa_pairs[${qaIndex}].type`, v)}
+                          >
+                            <SelectTrigger className={cn("w-28 h-7 text-xs font-medium", getTypeBadgeClass(qa.type))}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ask_image">ASK IMAGE</SelectItem>
+                              <SelectItem value="ask_audio">ASK AUDIO</SelectItem>
+                              <SelectItem value="ask_both">ASK BOTH</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <span className="text-xs text-muted-foreground truncate">
+                            {qa.paths?.question_audio?.split('/').pop()}
+                          </span>
+                        </div>
+
+                        {/* Question */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <MessageSquare className="h-4 w-4 text-blue-500" />
+                            <Textarea
+                              value={qa.q || ''}
+                              onChange={(e) => handleFieldChange(`qa_pairs[${qaIndex}].q`, e.target.value)}
+                              className="flex-1 min-h-[60px] text-sm resize-none"
+                              placeholder="Nhập câu hỏi..."
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 ml-6">
+                            <Badge variant="outline" className="bg-primary/10 text-primary text-xs">
+                              {qa.audio_meta?.q_voice?.id || 'vi-VN-HoaiMyNeural'}
+                            </Badge>
+                            {qa.audio_meta?.q_voice?.rate && (
+                              <Badge variant="outline" className="text-xs">
+                                🎵 {qa.audio_meta.q_voice.rate}
+                              </Badge>
+                            )}
+                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                              <Play className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Answer */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Check className="h-4 w-4 text-primary" />
+                            <Textarea
+                              value={qa.a || ''}
+                              onChange={(e) => handleFieldChange(`qa_pairs[${qaIndex}].a`, e.target.value)}
+                              className="flex-1 min-h-[80px] text-sm resize-none"
+                              placeholder="Nhập câu trả lời..."
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 ml-6">
+                            <Badge variant="outline" className="bg-primary/10 text-primary text-xs">
+                              {qa.audio_meta?.a_voice?.id || 'vi-VN-HoaiMyNeural'}
+                            </Badge>
+                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                              <Play className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
             </div>
-          </ScrollArea>
-        </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
 
       {/* Metadata Dialog - wider */}
