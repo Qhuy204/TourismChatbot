@@ -117,7 +117,7 @@ export function Sidebar({ currentView, onViewChange, onOpenSettings, isAdmin = f
                 </Button>
               </TooltipTrigger>
               {isCollapsed && (
-                <TooltipContent side="right">
+                <TooltipContent side="right" className="z-[1000]">
                   {item.label}
                 </TooltipContent>
               )}
@@ -150,7 +150,7 @@ export function Sidebar({ currentView, onViewChange, onOpenSettings, isAdmin = f
               </button>
             </TooltipTrigger>
             {isCollapsed && (
-              <TooltipContent side="right">
+              <TooltipContent side="right" className="z-[1000]">
                 <p className="font-medium">{displayName}</p>
                 <p className="text-xs text-muted-foreground">{user?.email}</p>
               </TooltipContent>
@@ -172,7 +172,7 @@ export function Sidebar({ currentView, onViewChange, onOpenSettings, isAdmin = f
               </Button>
             </TooltipTrigger>
             {isCollapsed && (
-              <TooltipContent side="right">
+              <TooltipContent side="right" className="z-[1000]">
                 Sign Out
               </TooltipContent>
             )}
