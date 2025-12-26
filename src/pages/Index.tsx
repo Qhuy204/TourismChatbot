@@ -177,19 +177,14 @@ const Index = () => {
           />
         );
       case 'task-annotate':
-        // Redirect to annotate with first task's records if available
-        if (userTasks.length > 0) {
-          handleStartTaskAnnotation(userTasks[0].task_id);
-        }
+        // Show My Tasks view - let user click "Bắt đầu" to start annotation
         return (
-          <div className="p-6 flex items-center justify-center min-h-[400px]">
-            <Card className="max-w-md">
-              <CardContent className="p-12 text-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-                <p className="text-muted-foreground">Đang tải task...</p>
-              </CardContent>
-            </Card>
-          </div>
+          <UserDashboard 
+            records={records}
+            tasks={userTasks}
+            onNavigateToAnnotate={() => setCurrentView('annotate')}
+            onStartTask={handleStartTaskAnnotation}
+          />
         );
       case 'browser':
         return (
