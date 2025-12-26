@@ -30,7 +30,7 @@ interface DataBrowserProps {
   onNavigateToAnnotate?: (recordId: string) => void;
 }
 
-const ITEMS_PER_PAGE = 100;
+const ITEMS_PER_PAGE = 1000;
 
 type SortBy = "id" | "created" | "status" | "name";
 type SortOrder = "asc" | "desc";
