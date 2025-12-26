@@ -1,16 +1,18 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { UserProgressBar } from '@/components/dashboard/UserProgressBar';
 import { AnnotationTask } from '@/types/dataset';
-import { ListTodo, Users } from 'lucide-react';
+import { ListTodo, Users, Play } from 'lucide-react';
 
 interface TaskProgressListProps {
   tasks: AnnotationTask[];
   title?: string;
   showAssignee?: boolean;
+  onStartTask?: (taskId: string) => void;
 }
 
-export function TaskProgressList({ tasks, title = "Tiến độ Tasks", showAssignee = true }: TaskProgressListProps) {
+export function TaskProgressList({ tasks, title = "Tiến độ Tasks", showAssignee = true, onStartTask }: TaskProgressListProps) {
   const getStatusBadge = (task: AnnotationTask) => {
     const progress = task.progress;
     if (!progress || progress.total === 0) {
@@ -83,6 +85,12 @@ export function TaskProgressList({ tasks, title = "Tiến độ Tasks", showAssi
                     </div>
                   )}
                 </div>
+                {onStartTask && (
+                  <Button size="sm" onClick={() => onStartTask(task.id)}>
+                    <Play className="h-4 w-4 mr-1" />
+                    Bắt đầu
+                  </Button>
+                )}
               </div>
 
               <UserProgressBar

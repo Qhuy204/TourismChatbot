@@ -39,6 +39,9 @@ import { cn } from '@/lib/utils';
 
 interface AnnotationInterfaceProps {
   records: DatasetRecord[];
+  totalCount?: number;
+  loadedCount?: number;
+  onLoadMore?: () => void;
   onRecordUpdate: (record: DatasetRecord) => void;
   initialRecordId?: string;
   filteredRecordIds?: string[];
@@ -48,6 +51,9 @@ type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'needs_review'
 
 export function AnnotationInterface({ 
   records, 
+  totalCount = 0,
+  loadedCount = 0,
+  onLoadMore,
   onRecordUpdate, 
   initialRecordId,
   filteredRecordIds 
@@ -102,8 +108,13 @@ export function AnnotationInterface({
   const [audioDuration, setAudioDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Infinite scroll state
-  const [visibleCount, setVisibleCount] = useState(1000);
+  // Infinite scroll state - start with 5% of total
+  const initialVisibleCount = useMemo(() => {
+    const fivePercent = Math.ceil((totalCount || records.length) * 0.05);
+    return Math.max(100, Math.min(fivePercent, records.length));
+  }, [totalCount, records.length]);
+  
+  const [visibleCount, setVisibleCount] = useState(initialVisibleCount);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Filtered and sorted sidebar items (full list for navigation)
@@ -131,21 +142,29 @@ export function AnnotationInterface({
     return filteredSidebarItems.slice(0, visibleCount);
   }, [filteredSidebarItems, visibleCount]);
 
-  // Reset visible count when filters change
+  // Reset visible count when filters change - use 5% of filtered list
   useEffect(() => {
-    setVisibleCount(1000);
-  }, [searchQuery, statusFilter, sortAsc]);
+    const fivePercent = Math.ceil(filteredSidebarItems.length * 0.05);
+    setVisibleCount(Math.max(100, fivePercent));
+  }, [searchQuery, statusFilter, sortAsc, filteredSidebarItems.length]);
 
-  // Handle scroll to load more
+  // Handle scroll to load more (5% more each time)
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const target = e.target as HTMLDivElement;
     const { scrollTop, scrollHeight, clientHeight } = target;
     
     // Load more when scrolled to 80% of the list
     if (scrollTop + clientHeight >= scrollHeight * 0.8) {
-      setVisibleCount(prev => Math.min(prev + 500, filteredSidebarItems.length));
+      const fivePercent = Math.ceil((totalCount || records.length) * 0.05);
+      const increment = Math.max(100, fivePercent);
+      setVisibleCount(prev => Math.min(prev + increment, filteredSidebarItems.length));
+      
+      // Also trigger loading more from database if needed
+      if (onLoadMore && loadedCount < (totalCount || 0) && visibleCount >= loadedCount * 0.8) {
+        onLoadMore();
+      }
     }
-  }, [filteredSidebarItems.length]);
+  }, [filteredSidebarItems.length, totalCount, records.length, onLoadMore, loadedCount, visibleCount]);
 
   // Get filtered record IDs for navigation
   const filteredRecordIds_internal = useMemo(() => filteredSidebarItems.map(i => i.id), [filteredSidebarItems]);
@@ -435,7 +454,7 @@ export function AnnotationInterface({
 
           {/* Footer */}
           <div className="p-3 border-t text-xs text-muted-foreground">
-            Showing {Math.min(visibleCount, filteredSidebarItems.length)} / {filteredSidebarItems.length} (total: {workingRecordIds.length})
+            Showing {Math.min(visibleCount, filteredSidebarItems.length).toLocaleString()} / {loadedCount > 0 ? loadedCount.toLocaleString() : filteredSidebarItems.length.toLocaleString()} (total: {(totalCount || workingRecordIds.length).toLocaleString()})
           </div>
         </div>
 
