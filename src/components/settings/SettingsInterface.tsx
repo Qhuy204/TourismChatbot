@@ -7,18 +7,41 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { 
   Settings, 
   Key, 
   Check, 
   AlertTriangle,
   ExternalLink,
-  Save
+  Save,
+  Users,
+  Shield,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useRole } from '@/hooks/useRole';
+import { useUsers } from '@/hooks/useUsers';
+import { AppRole } from '@/types/dataset';
 
-interface SettingsInterfaceProps {}
-
-export function SettingsInterface({}: SettingsInterfaceProps) {
+export function SettingsInterface() {
+  const { isAdmin } = useRole();
+  const { users, loading: usersLoading, updateUserRole, refetch: refetchUsers } = useUsers();
+  
   const [huggingFaceToken, setHuggingFaceToken] = useState('');
   const [isTokenSaved, setIsTokenSaved] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -71,6 +94,10 @@ export function SettingsInterface({}: SettingsInterfaceProps) {
     toast.success('Đã xóa token');
   };
 
+  const handleRoleChange = async (userId: string, newRole: AppRole) => {
+    await updateUserRole(userId, newRole);
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -78,7 +105,89 @@ export function SettingsInterface({}: SettingsInterfaceProps) {
         <p className="text-muted-foreground">Cấu hình API keys và các thiết lập hệ thống</p>
       </div>
 
-      <div className="grid gap-6 max-w-2xl">
+      <div className="grid gap-6 max-w-4xl">
+        {/* User Management - Admin Only */}
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Quản lý người dùng
+                  </CardTitle>
+                  <CardDescription>
+                    Quản lý tài khoản và phân quyền cho người dùng
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={refetchUsers} disabled={usersLoading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${usersLoading ? 'animate-spin' : ''}`} />
+                  Làm mới
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {usersLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : users.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Chưa có người dùng nào
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tên hiển thị</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Vai trò</TableHead>
+                      <TableHead>Ngày tạo</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {users.map((u) => (
+                      <TableRow key={u.id}>
+                        <TableCell className="font-medium">
+                          {u.display_name || 'Chưa đặt tên'}
+                        </TableCell>
+                        <TableCell>{u.email || 'N/A'}</TableCell>
+                        <TableCell>
+                          <Select
+                            value={u.role || 'user'}
+                            onValueChange={(value: AppRole) => handleRoleChange(u.id, value)}
+                          >
+                            <SelectTrigger className="w-32">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="user">
+                                <div className="flex items-center gap-2">
+                                  <Users className="h-4 w-4" />
+                                  User
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="admin">
+                                <div className="flex items-center gap-2">
+                                  <Shield className="h-4 w-4" />
+                                  Admin
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          N/A
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Hugging Face Configuration */}
         <Card>
           <CardHeader>
@@ -206,7 +315,10 @@ export function SettingsInterface({}: SettingsInterfaceProps) {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Data Storage</span>
-                <span>Local State (In-Memory)</span>
+                <span className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  Supabase Database
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">API Keys</span>
@@ -217,13 +329,6 @@ export function SettingsInterface({}: SettingsInterfaceProps) {
                 <span>LocalStorage</span>
               </div>
             </div>
-            <Alert className="mt-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                Lưu ý: Dữ liệu dataset hiện tại được lưu trong memory. 
-                Để lưu trữ vĩnh viễn, hãy sử dụng chức năng Export.
-              </AlertDescription>
-            </Alert>
           </CardContent>
         </Card>
       </div>
