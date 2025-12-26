@@ -50,13 +50,38 @@ export function AnnotationInterface({
   initialRecordId,
   filteredRecordIds 
 }: AnnotationInterfaceProps) {
-  // Get working records
-  const workingRecords = useMemo(() => {
+  // Get working records - only IDs for sidebar, load full data on demand
+  const workingRecordIds = useMemo(() => {
     if (filteredRecordIds && filteredRecordIds.length > 0) {
-      return records.filter(r => filteredRecordIds.includes(r.id));
+      return filteredRecordIds;
     }
-    return records;
+    return records.map(r => r.id);
   }, [records, filteredRecordIds]);
+
+  // Cache for loaded records
+  const [recordCache, setRecordCache] = useState<Map<string, DatasetRecord>>(new Map());
+
+  // Load record data when needed
+  const loadRecord = useCallback((recordId: string) => {
+    if (recordCache.has(recordId)) return;
+    const record = records.find(r => r.id === recordId);
+    if (record) {
+      setRecordCache(prev => new Map(prev).set(recordId, record));
+    }
+  }, [records, recordCache]);
+
+  // Get sidebar items (minimal data)
+  const sidebarItems = useMemo(() => {
+    return workingRecordIds.map(id => {
+      const cached = recordCache.get(id);
+      const original = records.find(r => r.id === id);
+      return {
+        id,
+        status: cached?.status || original?.status,
+        landmark_name: cached?.metadata?.landmark_name || original?.metadata?.landmark_name || 'Loading...',
+      };
+    });
+  }, [workingRecordIds, recordCache, records]);
 
   // Sidebar state
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,38 +99,47 @@ export function AnnotationInterface({
   const [audioDuration, setAudioDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Filtered and sorted records for sidebar
-  const filteredRecords = useMemo(() => {
-    let filtered = workingRecords.filter(record => {
+  // Filtered and sorted sidebar items
+  const filteredSidebarItems = useMemo(() => {
+    let filtered = sidebarItems.filter(item => {
       const matchesSearch = 
-        record.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        record.metadata.landmark_name.toLowerCase().includes(searchQuery.toLowerCase());
+        item.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.landmark_name.toLowerCase().includes(searchQuery.toLowerCase());
       
-      const matchesStatus = statusFilter === 'all' || record.status === statusFilter;
+      const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
       
       return matchesSearch && matchesStatus;
     });
 
     filtered.sort((a, b) => {
-      const comparison = a.metadata.landmark_name.localeCompare(b.metadata.landmark_name);
+      const comparison = a.landmark_name.localeCompare(b.landmark_name);
       return sortAsc ? comparison : -comparison;
     });
 
     return filtered;
-  }, [workingRecords, searchQuery, statusFilter, sortAsc]);
+  }, [sidebarItems, searchQuery, statusFilter, sortAsc]);
+
+  // Get filtered record IDs for navigation
+  const filteredRecordIds_internal = useMemo(() => filteredSidebarItems.map(i => i.id), [filteredSidebarItems]);
 
   // Initialize to first pending or specified record
   useEffect(() => {
     if (initialRecordId) {
-      const idx = filteredRecords.findIndex(r => r.id === initialRecordId);
+      const idx = filteredSidebarItems.findIndex(r => r.id === initialRecordId);
       if (idx !== -1) setCurrentIndex(idx);
     } else {
-      const pendingIdx = filteredRecords.findIndex(r => r.status === 'pending' || r.status === 'needs_review');
+      const pendingIdx = filteredSidebarItems.findIndex(r => r.status === 'pending' || r.status === 'needs_review');
       if (pendingIdx !== -1) setCurrentIndex(pendingIdx);
     }
-  }, [initialRecordId, filteredRecords.length]);
+  }, [initialRecordId, filteredSidebarItems.length]);
 
-  const currentRecord = filteredRecords[currentIndex];
+  // Load current record on demand
+  const currentRecordId = filteredSidebarItems[currentIndex]?.id;
+  useEffect(() => {
+    if (currentRecordId) loadRecord(currentRecordId);
+  }, [currentRecordId, loadRecord]);
+
+  const currentRecord = currentRecordId ? (recordCache.get(currentRecordId) || records.find(r => r.id === currentRecordId)) : undefined;
   const record = editedRecord || currentRecord;
 
   // Keyboard navigation
@@ -123,7 +157,7 @@ export function AnnotationInterface({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, filteredRecords.length]);
+  }, [currentIndex, filteredSidebarItems.length]);
 
   const handleFieldChange = useCallback((path: string, value: any) => {
     const updated = JSON.parse(JSON.stringify(editedRecord || currentRecord));
@@ -177,7 +211,7 @@ export function AnnotationInterface({
   };
 
   const goNext = () => {
-    if (currentIndex < filteredRecords.length - 1) {
+    if (currentIndex < filteredSidebarItems.length - 1) {
       setCurrentIndex(currentIndex + 1);
       setEditedRecord(null);
     }
@@ -191,7 +225,7 @@ export function AnnotationInterface({
   };
 
   const selectRecord = (recordId: string) => {
-    const idx = filteredRecords.findIndex(r => r.id === recordId);
+    const idx = filteredSidebarItems.findIndex(r => r.id === recordId);
     if (idx !== -1) {
       setCurrentIndex(idx);
       setEditedRecord(null);
@@ -269,7 +303,7 @@ export function AnnotationInterface({
         <div className="flex items-center gap-2 text-sm">
           <span className="font-semibold text-lg">Annotate</span>
           <span className="text-muted-foreground">•</span>
-          <span className="text-muted-foreground">Record {record.id}</span>
+          <span className="text-muted-foreground font-mono">{record.id}</span>
         </div>
         <div className="flex items-center gap-4">
           <div className="relative">
@@ -332,13 +366,13 @@ export function AnnotationInterface({
           {/* Record list */}
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1">
-              {filteredRecords.map((r) => (
+              {filteredSidebarItems.map((item) => (
                 <button
-                  key={r.id}
-                  onClick={() => selectRecord(r.id)}
+                  key={item.id}
+                  onClick={() => selectRecord(item.id)}
                   className={cn(
                     "w-full text-left p-3 rounded-lg transition-colors",
-                    r.id === record.id 
+                    item.id === record?.id 
                       ? "bg-primary/10 border border-primary/20" 
                       : "hover:bg-muted/50"
                   )}
@@ -346,13 +380,13 @@ export function AnnotationInterface({
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="font-mono text-xs truncate">{r.id}</span>
+                      <span className="font-mono text-xs truncate">{item.id}</span>
                     </div>
-                    {getStatusIcon(r.status)}
+                    {getStatusIcon(item.status)}
                   </div>
-                  <p className="font-medium text-sm mt-1 truncate">{r.metadata.landmark_name}</p>
+                  <p className="font-medium text-sm mt-1 truncate">{item.landmark_name}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {r.metadata.landmark_name.toLowerCase().replace(/\s+/g, '_')}
+                    {item.landmark_name.toLowerCase().replace(/\s+/g, '_')}
                   </p>
                 </button>
               ))}
@@ -361,7 +395,7 @@ export function AnnotationInterface({
 
           {/* Footer */}
           <div className="p-3 border-t text-xs text-muted-foreground">
-            Showing {filteredRecords.length} / {workingRecords.length} records
+            Showing {filteredSidebarItems.length} / {workingRecordIds.length} records
           </div>
         </div>
 
@@ -514,15 +548,15 @@ export function AnnotationInterface({
               variant="outline" 
               size="icon"
               onClick={goNext}
-              disabled={currentIndex === filteredRecords.length - 1}
+              disabled={currentIndex === filteredSidebarItems.length - 1}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        {/* Panel 3: QA Editor */}
-        <div className="w-[420px] shrink-0 flex flex-col bg-background">
+        {/* Panel 3: QA Editor - wider for important content */}
+        <div className="w-[580px] shrink-0 flex flex-col bg-background">
           <div className="p-4 flex items-center justify-between border-b">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold">QA Pairs</h3>
@@ -615,9 +649,9 @@ export function AnnotationInterface({
         </div>
       </div>
 
-      {/* Metadata Dialog */}
+      {/* Metadata Dialog - wider */}
       <Dialog open={showMetadataDialog} onOpenChange={setShowMetadataDialog}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Edit Metadata
