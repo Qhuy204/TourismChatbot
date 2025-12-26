@@ -1,9 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useRole } from '@/hooks/useRole';
 import { useDataset } from '@/hooks/useDataset';
+import { useUsers } from '@/hooks/useUsers';
+import { useTasks } from '@/hooks/useTasks';
 import { Sidebar } from '@/components/layout/Sidebar';
-import { Dashboard } from '@/components/dashboard/Dashboard';
+import { AdminDashboard } from '@/components/dashboard/AdminDashboard';
+import { UserDashboard } from '@/components/dashboard/UserDashboard';
 import { DataBrowser } from '@/components/browser/DataBrowser';
 import { AnnotationInterface } from '@/components/annotate/AnnotationInterface';
 import { RandomQACheck } from '@/components/qa-check/RandomQACheck';
@@ -13,15 +17,19 @@ import { ExportInterface } from '@/components/export/ExportInterface';
 import { SettingsInterface } from '@/components/settings/SettingsInterface';
 import { UserSettingsDialog } from '@/components/settings/UserSettingsDialog';
 import { DatasetRecord } from '@/types/dataset';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ShieldAlert } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const Index = () => {
   const { user, loading: authLoading } = useAuth();
+  const { isAdmin, loading: roleLoading } = useRole();
   const navigate = useNavigate();
   const [currentView, setCurrentView] = useState('dashboard');
   
   // Use database-synced data
   const { records, loading: dataLoading, addRecords, updateRecord, deleteRecords, refetch, calculateStats } = useDataset();
+  const { users } = useUsers();
+  const { tasks } = useTasks();
   
   // Annotation navigation state
   const [annotateRecordId, setAnnotateRecordId] = useState<string | undefined>();
@@ -43,7 +51,6 @@ const Index = () => {
   }, [updateRecord]);
 
   const handleRecordsUpdate = useCallback(async (updatedRecords: DatasetRecord[]) => {
-    // For bulk updates, update each record
     for (const record of updatedRecords) {
       await updateRecord(record);
     }
@@ -70,17 +77,53 @@ const Index = () => {
   // Handle view change - reset annotation state when going to annotate directly
   const handleViewChange = useCallback((view: string) => {
     if (view === 'annotate' && currentView !== 'annotate') {
-      // Direct navigation to annotate - reset to show pending records
       setAnnotateRecordId(undefined);
       setAnnotateFilteredIds(undefined);
     }
     setCurrentView(view);
   }, [currentView]);
 
+  // Access denied component for non-admin trying to access admin features
+  const AccessDenied = () => (
+    <div className="p-6 flex items-center justify-center min-h-[400px]">
+      <Card className="max-w-md">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-destructive">
+            <ShieldAlert className="h-5 w-5" />
+            Không có quyền truy cập
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">
+            Chức năng này chỉ dành cho Admin. Vui lòng liên hệ quản trị viên nếu bạn cần truy cập.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  // Calculate user-specific task stats
+  const userTasks = tasks?.filter(t => t.assigned_to === user?.id) || [];
+  const completedUserTasks = userTasks.filter(t => t.status === 'completed').length;
+
   const renderContent = () => {
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard records={records} stats={stats} />;
+        return isAdmin ? (
+          <AdminDashboard 
+            records={records} 
+            stats={stats} 
+            usersCount={users?.length || 0}
+            tasksCount={tasks?.length || 0}
+          />
+        ) : (
+          <UserDashboard 
+            records={records}
+            assignedTasksCount={userTasks.length}
+            completedTasksCount={completedUserTasks}
+            onNavigateToAnnotate={() => setCurrentView('annotate')}
+          />
+        );
       case 'browser':
         return (
           <DataBrowser 
@@ -108,19 +151,33 @@ const Index = () => {
           />
         );
       case 'import':
-        return <ImportInterface onAddRecords={handleAddRecords} />;
+        // Only admin can import
+        return isAdmin ? (
+          <ImportInterface onAddRecords={handleAddRecords} />
+        ) : (
+          <AccessDenied />
+        );
       case 'crawl':
-        return <CrawlInterface onAddRecords={handleAddRecords} />;
+        // Only admin can crawl
+        return isAdmin ? (
+          <CrawlInterface onAddRecords={handleAddRecords} />
+        ) : (
+          <AccessDenied />
+        );
       case 'export':
         return <ExportInterface records={records} stats={stats} />;
       case 'settings':
         return <SettingsInterface />;
       default:
-        return <Dashboard records={records} stats={stats} />;
+        return isAdmin ? (
+          <AdminDashboard records={records} stats={stats} usersCount={users?.length || 0} tasksCount={tasks?.length || 0} />
+        ) : (
+          <UserDashboard records={records} assignedTasksCount={userTasks.length} completedTasksCount={completedUserTasks} onNavigateToAnnotate={() => setCurrentView('annotate')} />
+        );
     }
   };
 
-  if (authLoading || dataLoading) {
+  if (authLoading || roleLoading || dataLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
@@ -141,6 +198,7 @@ const Index = () => {
         currentView={currentView} 
         onViewChange={handleViewChange}
         onOpenSettings={() => setShowUserSettings(true)}
+        isAdmin={isAdmin}
       />
       <main className="flex-1 overflow-auto">
         {renderContent()}

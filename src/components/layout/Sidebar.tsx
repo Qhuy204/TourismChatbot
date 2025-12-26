@@ -25,20 +25,23 @@ interface SidebarProps {
   currentView: string;
   onViewChange: (view: string) => void;
   onOpenSettings?: () => void;
+  isAdmin?: boolean;
 }
 
-const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'browser', label: 'Data Browser', icon: FolderOpen },
-  { id: 'annotate', label: 'Annotate', icon: Tags },
-  { id: 'random-check', label: 'QA Check (10%)', icon: Shuffle },
-  { id: 'import', label: 'Import Data', icon: Upload },
-  { id: 'crawl', label: 'Crawl Data', icon: Globe },
-  { id: 'export', label: 'Export', icon: Download },
-  { id: 'settings', label: 'Settings', icon: Settings },
+const allNavItems = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
+  { id: 'browser', label: 'Data Browser', icon: FolderOpen, adminOnly: false },
+  { id: 'annotate', label: 'Annotate', icon: Tags, adminOnly: false },
+  { id: 'random-check', label: 'QA Check (10%)', icon: Shuffle, adminOnly: false },
+  { id: 'import', label: 'Import Data', icon: Upload, adminOnly: true },
+  { id: 'crawl', label: 'Crawl Data', icon: Globe, adminOnly: true },
+  { id: 'export', label: 'Export', icon: Download, adminOnly: false },
+  { id: 'settings', label: 'Settings', icon: Settings, adminOnly: false },
 ];
 
-export function Sidebar({ currentView, onViewChange, onOpenSettings }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, onOpenSettings, isAdmin = false }: SidebarProps) {
+  // Filter nav items based on admin status
+  const navItems = allNavItems.filter(item => !item.adminOnly || isAdmin);
   const { user, signOut } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar-collapsed');

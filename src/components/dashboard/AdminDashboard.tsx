@@ -1,0 +1,220 @@
+import { useMemo } from 'react';
+import { 
+  Database, 
+  Clock, 
+  CheckCircle2, 
+  XCircle, 
+  Image,
+  Volume2,
+  Users,
+  ListTodo,
+  TrendingUp
+} from 'lucide-react';
+import { StatsCard } from './StatsCard';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { DatasetStats, DatasetRecord } from '@/types/dataset';
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
+
+interface AdminDashboardProps {
+  records: DatasetRecord[];
+  stats: DatasetStats;
+  usersCount?: number;
+  tasksCount?: number;
+}
+
+export function AdminDashboard({ records, stats, usersCount = 0, tasksCount = 0 }: AdminDashboardProps) {
+  const progressPercent = useMemo(() => {
+    if (stats.total === 0) return 0;
+    return Math.round(((stats.approved + stats.rejected) / stats.total) * 100);
+  }, [stats]);
+
+  const pieData = [
+    { name: 'Pending', value: stats.pending, color: 'hsl(var(--chart-5))' },
+    { name: 'Needs Review', value: stats.needs_review, color: 'hsl(var(--chart-3))' },
+    { name: 'Approved', value: stats.approved, color: 'hsl(var(--chart-1))' },
+    { name: 'Rejected', value: stats.rejected, color: 'hsl(var(--destructive))' },
+  ];
+
+  const qaTypeData = [
+    { name: 'ask_image', value: stats.qa_types?.ask_image || 0, fill: 'hsl(var(--chart-1))' },
+    { name: 'ask_audio', value: stats.qa_types?.ask_audio || 0, fill: 'hsl(var(--chart-2))' },
+    { name: 'ask_both', value: stats.qa_types?.ask_both || 0, fill: 'hsl(var(--chart-3))' },
+  ];
+
+  const recentRecords = useMemo(() => {
+    return [...records]
+      .filter(r => r.reviewedAt)
+      .sort((a, b) => new Date(b.reviewedAt!).getTime() - new Date(a.reviewedAt!).getTime())
+      .slice(0, 5);
+  }, [records]);
+
+  return (
+    <div className="p-6 space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-foreground">Admin Dashboard</h2>
+        <p className="text-muted-foreground">Tổng quan toàn bộ hệ thống và tiến trình annotation</p>
+      </div>
+
+      {/* Admin Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <StatsCard
+          title="Tổng Records"
+          value={stats.total.toLocaleString()}
+          icon={Database}
+          variant="primary"
+          description="Tổng số mẫu trong dataset"
+        />
+        <StatsCard
+          title="Đang chờ"
+          value={stats.pending}
+          icon={Clock}
+          variant="warning"
+          description="Cần được xem xét"
+        />
+        <StatsCard
+          title="Đã duyệt"
+          value={stats.approved}
+          icon={CheckCircle2}
+          variant="success"
+          description="Đã hoàn thành"
+        />
+        <StatsCard
+          title="Người dùng"
+          value={usersCount}
+          icon={Users}
+          variant="primary"
+          description="Tổng số users"
+        />
+        <StatsCard
+          title="Tasks"
+          value={tasksCount}
+          icon={ListTodo}
+          variant="primary"
+          description="Annotation tasks"
+        />
+      </div>
+
+      {/* Progress Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Tiến trình Annotation tổng thể
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Hoàn thành</span>
+              <span className="font-medium">{progressPercent}%</span>
+            </div>
+            <Progress value={progressPercent} className="h-3" />
+            <p className="text-xs text-muted-foreground mt-2">
+              {stats.approved + stats.rejected} / {stats.total} records đã được xử lý
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Status Pie Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Phân bố trạng thái</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* QA Type Bar Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Phân bố QA Types</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={qaTypeData}>
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activity */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Hoạt động gần đây</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {recentRecords.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">Chưa có hoạt động nào</p>
+            ) : (
+              recentRecords.map((record) => (
+                <div key={record.id} className="flex items-center justify-between p-3 rounded-lg bg-background border">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-md bg-primary/10">
+                      {record.paths?.image ? (
+                        <Image className="h-4 w-4 text-primary" />
+                      ) : (
+                        <Volume2 className="h-4 w-4 text-primary" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{record.metadata.landmark_name}</p>
+                      <p className="text-xs text-muted-foreground">{record.id}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                      record.status === 'approved' ? 'bg-accent text-accent-foreground' :
+                      record.status === 'rejected' ? 'bg-destructive/10 text-destructive' :
+                      record.status === 'needs_review' ? 'bg-chart-3/10 text-chart-3' :
+                      'bg-muted text-muted-foreground'
+                    }`}>
+                      {record.status || 'pending'}
+                    </span>
+                    {record.reviewedAt && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {new Date(record.reviewedAt).toLocaleDateString('vi-VN')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

@@ -52,26 +52,50 @@ export function useDataset() {
     }
 
     try {
-      const inserts = newRecords.map(record => ({
-        record_id: record.id,
-        data: JSON.parse(JSON.stringify(record)), // Ensure it's serializable
-        status: record.status || 'pending',
-        created_by: user.id,
-      }));
+      // For large imports, batch insert in chunks of 500 to avoid timeouts
+      const BATCH_SIZE = 500;
+      let successCount = 0;
+      let errorCount = 0;
 
-      const { error } = await supabase
-        .from('dataset_records')
-        .insert(inserts);
+      for (let i = 0; i < newRecords.length; i += BATCH_SIZE) {
+        const batch = newRecords.slice(i, i + BATCH_SIZE);
+        
+        const inserts = batch.map(record => ({
+          record_id: record.id,
+          data: JSON.parse(JSON.stringify(record)), // Full record data stored in JSONB
+          status: record.status || 'pending',
+          created_by: user.id,
+        }));
 
-      if (error) {
-        console.error('Error adding records:', error);
-        toast.error('Không thể thêm dữ liệu');
-        return false;
+        const { error } = await supabase
+          .from('dataset_records')
+          .insert(inserts);
+
+        if (error) {
+          console.error(`Error adding batch ${i / BATCH_SIZE + 1}:`, error);
+          errorCount += batch.length;
+        } else {
+          successCount += batch.length;
+        }
+
+        // Show progress for large imports
+        if (newRecords.length > BATCH_SIZE) {
+          const progress = Math.min(100, Math.round((i + batch.length) / newRecords.length * 100));
+          toast.info(`Đang import: ${progress}% (${successCount}/${newRecords.length})`, {
+            id: 'import-progress',
+          });
+        }
       }
 
       await fetchRecords();
-      toast.success(`Đã thêm ${newRecords.length} records`);
-      return true;
+      
+      if (errorCount > 0) {
+        toast.warning(`Đã thêm ${successCount} records, ${errorCount} lỗi`);
+      } else {
+        toast.success(`Đã thêm ${successCount} records vào database`);
+      }
+      
+      return successCount > 0;
     } catch (error) {
       console.error('Error adding records:', error);
       toast.error('Lỗi khi thêm dữ liệu');
