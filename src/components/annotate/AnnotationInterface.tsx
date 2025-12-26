@@ -106,7 +106,7 @@ export function AnnotationInterface({
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Infinite scroll state
-  const [visibleCount, setVisibleCount] = useState(workingRecordIds.length);
+  const [visibleCount, setVisibleCount] = useState(10000);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Filtered and sorted sidebar items (full list for navigation)
