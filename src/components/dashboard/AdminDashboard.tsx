@@ -29,6 +29,7 @@ interface AdminDashboardProps {
   users?: UserWithRole[];
   tasks?: AnnotationTask[];
   availableRecords?: number;
+  totalRecords?: number;
   onCreateTask?: (name: string, userId: string, percentage: number) => Promise<void>;
   onDeleteTask?: (taskId: string) => Promise<boolean>;
 }
@@ -41,6 +42,7 @@ export function AdminDashboard({
   users = [],
   tasks = [],
   availableRecords = 0,
+  totalRecords = 0,
   onCreateTask,
   onDeleteTask
 }: AdminDashboardProps) {
@@ -275,7 +277,7 @@ export function AdminDashboard({
         onOpenChange={setShowTaskDialog}
         users={users}
         availableRecords={availableRecords}
-        totalRecords={stats.total}
+        totalRecords={totalRecords}
         onAssign={handleCreateTask}
       />
     </div>
