@@ -7,12 +7,12 @@ import { toast } from 'sonner';
 
 export function useTasks() {
   const { user } = useAuth();
-  const { isAdmin } = useRole();
+  const { isAdmin, loading: roleLoading } = useRole();
   const [tasks, setTasks] = useState<AnnotationTask[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchTasks = useCallback(async () => {
-    if (!user) return;
+    if (!user || roleLoading) return;
 
     setLoading(true);
     try {
@@ -74,11 +74,13 @@ export function useTasks() {
     } finally {
       setLoading(false);
     }
-  }, [user, isAdmin]);
+  }, [user, isAdmin, roleLoading]);
 
   useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    if (!roleLoading) {
+      fetchTasks();
+    }
+  }, [fetchTasks, roleLoading]);
 
   const createTask = useCallback(async (
     name: string,
