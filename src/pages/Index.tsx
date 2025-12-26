@@ -239,12 +239,13 @@ const Index = () => {
     }
   };
 
-  if (authLoading || roleLoading || dataLoading) {
+  // Only wait for auth loading - don't block on data loading
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Đang tải dữ liệu...</p>
+          <p className="text-sm text-muted-foreground">Đang xác thực...</p>
         </div>
       </div>
     );
