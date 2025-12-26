@@ -203,8 +203,9 @@ export function useTasks() {
         fetchOffset += fetchPageSize;
       }
       
-      // Trim to exact count needed
-      const recordsToInsert = collectedRecords.slice(0, recordsToAssign);
+      // Trim to exact count needed and dedupe
+      const uniqueIds = [...new Set(collectedRecords.map(r => r.id))];
+      const recordsToInsert = uniqueIds.slice(0, recordsToAssign).map(id => ({ id }));
 
       if (recordsToInsert.length > 0) {
         // Insert in batches of 500 to avoid hitting limits
