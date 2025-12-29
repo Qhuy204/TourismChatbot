@@ -98,6 +98,9 @@ export function useDataset() {
         ...row.data,
         status: row.status,
         db_id: row.id,
+        import_version: row.import_version,
+        import_batch_id: row.import_batch_id,
+        imported_at: row.imported_at,
       }));
 
       setRecords(mapped);
@@ -133,6 +136,9 @@ export function useDataset() {
         ...row.data,
         status: row.status,
         db_id: row.id,
+        import_version: row.import_version,
+        import_batch_id: row.import_batch_id,
+        imported_at: row.imported_at,
       }));
 
       if (mapped.length > 0) {
@@ -188,6 +194,16 @@ export function useDataset() {
         return false;
       }
 
+      // Get next import version
+      const { data: maxVersionData } = await supabase
+        .from('dataset_records')
+        .select('import_version')
+        .order('import_version', { ascending: false })
+        .limit(1);
+      
+      const nextVersion = (maxVersionData?.[0]?.import_version || 0) + 1;
+      const importBatchId = crypto.randomUUID();
+
       const BATCH_SIZE = 500;
       let successCount = 0;
       let errorCount = 0;
@@ -200,6 +216,9 @@ export function useDataset() {
           data: JSON.parse(JSON.stringify(record)),
           status: record.status || 'pending',
           created_by: user.id,
+          import_version: nextVersion,
+          import_batch_id: importBatchId,
+          imported_at: new Date().toISOString(),
         }));
 
         const { error } = await supabase
@@ -227,9 +246,9 @@ export function useDataset() {
       await fetchInitialRecords(true);
       
       if (errorCount > 0) {
-        toast.warning(`Đã thêm ${successCount} records, ${errorCount} lỗi`);
+        toast.warning(`Đã thêm ${successCount} records (Version ${nextVersion}), ${errorCount} lỗi`);
       } else {
-        toast.success(`Đã thêm ${successCount} records vào database`);
+        toast.success(`Đã thêm ${successCount} records vào database (Version ${nextVersion})`);
       }
       
       return successCount > 0;

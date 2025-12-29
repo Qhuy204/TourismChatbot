@@ -101,6 +101,9 @@ export type Database = {
           created_by: string | null
           data: Json
           id: string
+          import_batch_id: string | null
+          import_version: number | null
+          imported_at: string | null
           record_id: string
           status: string
           updated_at: string
@@ -110,6 +113,9 @@ export type Database = {
           created_by?: string | null
           data: Json
           id?: string
+          import_batch_id?: string | null
+          import_version?: number | null
+          imported_at?: string | null
           record_id: string
           status?: string
           updated_at?: string
@@ -119,6 +125,9 @@ export type Database = {
           created_by?: string | null
           data?: Json
           id?: string
+          import_batch_id?: string | null
+          import_version?: number | null
+          imported_at?: string | null
           record_id?: string
           status?: string
           updated_at?: string

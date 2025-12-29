@@ -73,6 +73,10 @@ export interface DatasetRecord {
   reviewedAt?: string;
   reviewedBy?: string;
   db_id?: string; // Supabase UUID
+  // Import versioning
+  import_version?: number;
+  import_batch_id?: string;
+  imported_at?: string;
 }
 
 export interface DatasetStats {
