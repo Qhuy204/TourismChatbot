@@ -105,6 +105,18 @@ export function convertToDatasetRecord(item: any, index: number): DatasetRecord 
     item.audio_evidence_path ||
     '';
 
+  // Transcript extraction with priority ranking
+  // Priority 1: exact "transcript" keyword
+  // Priority 2: fallback to "description"
+  const transcript = 
+    item.metadata?.audio_spec?.transcript ||  // Priority 1
+    item.audio_spec?.transcript ||             // Priority 1
+    item.transcript ||                          // Priority 1
+    item.metadata?.description ||               // Priority 2
+    item.description ||                         // Priority 2
+    item.metadata?.image_spec?.description ||   // Priority 2
+    '';
+
   let qaPairs: QAPair[] = [];
   
   if (item.qa_pairs && Array.isArray(item.qa_pairs)) {
@@ -147,7 +159,14 @@ export function convertToDatasetRecord(item: any, index: number): DatasetRecord 
           lat: typeof gpsLat === 'number' ? gpsLat : parseFloat(gpsLat) || 0,
           lon: typeof gpsLon === 'number' ? gpsLon : parseFloat(gpsLon) || 0
         }
-      }
+      },
+      // Add audio_spec with transcript if available
+      ...(transcript && {
+        audio_spec: {
+          transcript,
+          voice_id: item.metadata?.audio_spec?.voice_id || item.audio_spec?.voice_id || ''
+        }
+      })
     },
     qa_pairs: qaPairs,
     status: 'pending'
