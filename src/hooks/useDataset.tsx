@@ -6,6 +6,7 @@ import { useRole } from '@/hooks/useRole';
 import { toast } from 'sonner';
 import { validateDatasetRecords } from '@/lib/validation';
 import { mapErrorToUserMessage } from '@/lib/errorMessages';
+import { addImportLog, clearImportLogs } from '@/lib/importLogs';
 
 // Global cache to persist data across component mounts
 let globalRecordsCache: DatasetRecord[] | null = null;
@@ -170,39 +171,62 @@ export function useDataset() {
       return false;
     }
 
+    // Clear previous logs and start fresh
+    clearImportLogs();
+    addImportLog('info', `Bắt đầu import ${newRecords.length} records`);
+
     try {
       // Validate all records before insertion
+      addImportLog('info', 'Đang validate records...');
       const validationResult = validateDatasetRecords(newRecords);
       
+      addImportLog('info', `Kết quả validate: ${validationResult.validRecords.length} hợp lệ, ${validationResult.invalidCount} lỗi`);
+      
       if (validationResult.invalidCount > 0) {
+        // Log each validation error
+        validationResult.errors.forEach((e, idx) => {
+          const errorDetail = e.errors.join('; ');
+          addImportLog('error', `Record ${e.index + 1}: Validation failed`, errorDetail, newRecords[e.index]?.id);
+        });
+        
         const errorSummary = validationResult.errors
           .slice(0, 3)
           .map(e => `Record ${e.index + 1}: ${e.errors[0]}`)
           .join('; ');
         
         if (validationResult.validRecords.length === 0) {
+          addImportLog('error', 'Không có record hợp lệ để import');
           toast.error(`Không có record hợp lệ. ${errorSummary}`);
           return false;
         }
         
+        addImportLog('warning', `${validationResult.invalidCount} records không hợp lệ sẽ bị bỏ qua`);
         toast.warning(`${validationResult.invalidCount} records không hợp lệ sẽ bị bỏ qua. ${errorSummary}`);
       }
 
       const recordsToInsert = validationResult.validRecords;
       if (recordsToInsert.length === 0) {
+        addImportLog('error', 'Không có dữ liệu hợp lệ để thêm');
         toast.error('Không có dữ liệu hợp lệ để thêm');
         return false;
       }
 
       // Get next import version
-      const { data: maxVersionData } = await supabase
+      addImportLog('info', 'Đang lấy version tiếp theo...');
+      const { data: maxVersionData, error: versionError } = await supabase
         .from('dataset_records')
         .select('import_version')
         .order('import_version', { ascending: false })
         .limit(1);
       
+      if (versionError) {
+        addImportLog('error', 'Lỗi lấy version', versionError.message);
+      }
+      
       const nextVersion = (maxVersionData?.[0]?.import_version || 0) + 1;
       const importBatchId = crypto.randomUUID();
+      
+      addImportLog('info', `Import Version: ${nextVersion}, Batch ID: ${importBatchId}`);
 
       const BATCH_SIZE = 500;
       let successCount = 0;
@@ -210,9 +234,12 @@ export function useDataset() {
 
       for (let i = 0; i < recordsToInsert.length; i += BATCH_SIZE) {
         const batch = recordsToInsert.slice(i, i + BATCH_SIZE);
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+        
+        addImportLog('info', `Đang insert batch ${batchNumber} (${batch.length} records)...`);
         
         const inserts = batch.map(record => ({
-          record_id: record.id,
+          record_id: String(record.id),
           data: JSON.parse(JSON.stringify(record)),
           status: record.status || 'pending',
           created_by: user.id,
@@ -221,14 +248,17 @@ export function useDataset() {
           imported_at: new Date().toISOString(),
         }));
 
-        const { error } = await supabase
+        const { error, data } = await supabase
           .from('dataset_records')
-          .insert(inserts);
+          .insert(inserts)
+          .select('id');
 
         if (error) {
-          console.error(`Error adding batch ${i / BATCH_SIZE + 1}:`, error);
+          addImportLog('error', `Lỗi insert batch ${batchNumber}`, error.message + (error.details ? ` - ${error.details}` : ''));
+          console.error(`Error adding batch ${batchNumber}:`, error);
           errorCount += batch.length;
         } else {
+          addImportLog('success', `Batch ${batchNumber}: Đã thêm ${data?.length || batch.length} records`);
           successCount += batch.length;
         }
 
@@ -246,13 +276,17 @@ export function useDataset() {
       await fetchInitialRecords(true);
       
       if (errorCount > 0) {
+        addImportLog('warning', `Import hoàn tất với lỗi: ${successCount} thành công, ${errorCount} thất bại`);
         toast.warning(`Đã thêm ${successCount} records (Version ${nextVersion}), ${errorCount} lỗi`);
       } else {
+        addImportLog('success', `Import hoàn tất: ${successCount} records (Version ${nextVersion})`);
         toast.success(`Đã thêm ${successCount} records vào database (Version ${nextVersion})`);
       }
       
       return successCount > 0;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      addImportLog('error', 'Lỗi không xác định khi import', errorMessage);
       console.error('Error adding records:', error);
       toast.error(mapErrorToUserMessage(error, 'Lỗi khi thêm dữ liệu'));
       return false;
@@ -322,6 +356,136 @@ export function useDataset() {
     }
   }, [user, isAdmin]);
 
+  // Delete by version
+  const deleteByVersion = useCallback(async (version: number) => {
+    if (!user || !isAdmin) {
+      toast.error('Bạn không có quyền xóa dữ liệu');
+      return false;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('dataset_records')
+        .delete()
+        .eq('import_version', version);
+
+      if (error) {
+        console.error('Error deleting by version:', error);
+        toast.error('Không thể xóa');
+        return false;
+      }
+
+      // Force refresh
+      globalRecordsCache = null;
+      lastFetchTime = null;
+      await fetchInitialRecords(true);
+      
+      toast.success(`Đã xóa tất cả records của Version ${version}`);
+      return true;
+    } catch (error) {
+      console.error('Error deleting by version:', error);
+      return false;
+    }
+  }, [user, isAdmin, fetchInitialRecords]);
+
+  // Delete by status
+  const deleteByStatus = useCallback(async (status: string) => {
+    if (!user || !isAdmin) {
+      toast.error('Bạn không có quyền xóa dữ liệu');
+      return false;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('dataset_records')
+        .delete()
+        .eq('status', status);
+
+      if (error) {
+        console.error('Error deleting by status:', error);
+        toast.error('Không thể xóa');
+        return false;
+      }
+
+      // Force refresh
+      globalRecordsCache = null;
+      lastFetchTime = null;
+      await fetchInitialRecords(true);
+      
+      toast.success(`Đã xóa tất cả records có trạng thái "${status}"`);
+      return true;
+    } catch (error) {
+      console.error('Error deleting by status:', error);
+      return false;
+    }
+  }, [user, isAdmin, fetchInitialRecords]);
+
+  // Delete by date range
+  const deleteByDateRange = useCallback(async (startDate: string, endDate: string) => {
+    if (!user || !isAdmin) {
+      toast.error('Bạn không có quyền xóa dữ liệu');
+      return false;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('dataset_records')
+        .delete()
+        .gte('imported_at', startDate)
+        .lte('imported_at', endDate);
+
+      if (error) {
+        console.error('Error deleting by date:', error);
+        toast.error('Không thể xóa');
+        return false;
+      }
+
+      // Force refresh
+      globalRecordsCache = null;
+      lastFetchTime = null;
+      await fetchInitialRecords(true);
+      
+      toast.success(`Đã xóa records từ ${startDate} đến ${endDate}`);
+      return true;
+    } catch (error) {
+      console.error('Error deleting by date:', error);
+      return false;
+    }
+  }, [user, isAdmin, fetchInitialRecords]);
+
+  // Delete all records
+  const deleteAllRecords = useCallback(async () => {
+    if (!user || !isAdmin) {
+      toast.error('Bạn không có quyền xóa dữ liệu');
+      return false;
+    }
+
+    try {
+      // Delete in batches to avoid timeout
+      const { error } = await supabase
+        .from('dataset_records')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+
+      if (error) {
+        console.error('Error deleting all records:', error);
+        toast.error('Không thể xóa');
+        return false;
+      }
+
+      setRecords([]);
+      setTotalCount(0);
+      globalRecordsCache = [];
+      globalTotalCount = 0;
+      
+      toast.success('Đã xóa toàn bộ dataset');
+      return true;
+    } catch (error) {
+      console.error('Error deleting all records:', error);
+      return false;
+    }
+  }, [user, isAdmin]);
+
   const calculateStats = useCallback((): DatasetStats => {
     // Return accurate stats from DB if available
     if (statsFromDB) {
@@ -383,6 +547,10 @@ export function useDataset() {
     addRecords,
     updateRecord,
     deleteRecords,
+    deleteByVersion,
+    deleteByStatus,
+    deleteByDateRange,
+    deleteAllRecords,
     refetch,
     calculateStats,
   };

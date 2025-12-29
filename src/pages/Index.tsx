@@ -29,7 +29,7 @@ const Index = () => {
   const [currentView, setCurrentView] = useState('dashboard');
   
   // Use database-synced data
-  const { records, loading: dataLoading, totalCount, loadedCount, loadMoreRecords, addRecords, updateRecord, deleteRecords, refetch, calculateStats } = useDataset();
+  const { records, loading: dataLoading, totalCount, loadedCount, loadMoreRecords, addRecords, updateRecord, deleteRecords, deleteByVersion, deleteByStatus, deleteByDateRange, deleteAllRecords, refetch, calculateStats } = useDataset();
   const { users } = useUsers();
   const { tasks, createTask, deleteTask, getTaskImageIds, availableRecordsInfo, refetch: refetchTasks } = useTasks();
   

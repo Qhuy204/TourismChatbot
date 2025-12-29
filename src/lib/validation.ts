@@ -9,23 +9,24 @@ const MAX_RECORD_SIZE_BYTES = 100 * 1024;
 /**
  * Minimal schema for validating essential DatasetRecord fields.
  * Uses passthrough to allow additional fields required by the type.
+ * More lenient to accept various input formats.
  */
 const datasetRecordSchema = z.object({
-  id: z.string().min(1, 'Record ID is required').max(255, 'Record ID too long'),
+  id: z.union([z.string(), z.number()]).transform(v => String(v)),
   status: z.enum(['pending', 'approved', 'rejected', 'needs_review']).optional(),
   timestamp: z.string().optional(),
   paths: z.object({
     image: z.string().optional(),
     audio_evidence: z.string().optional(),
-  }).optional(),
+  }).passthrough().optional(),
   metadata: z.object({
-    landmark_name: z.string().max(1000, 'Landmark name too long').optional(),
+    landmark_name: z.string().max(5000, 'Landmark name too long').optional(),
   }).passthrough().optional(),
   qa_pairs: z.array(z.object({
-    q: z.string().max(10000, 'Question too long').optional(),
-    a: z.string().max(50000, 'Answer too long').optional(),
-    type: z.enum(['ask_image', 'ask_audio', 'ask_both']).optional(),
-  }).passthrough()).max(100, 'Too many QA pairs').optional(),
+    q: z.string().optional(),
+    a: z.string().optional(),
+    type: z.string().optional(),
+  }).passthrough()).max(500, 'Too many QA pairs').optional(),
 }).passthrough();
 
 export interface ValidationResult {
