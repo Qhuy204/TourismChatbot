@@ -453,10 +453,12 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRe
         </TabsContent>
 
         <TabsContent value="logs" className="flex-1 min-h-0 mt-4">
-          <ImportLogsPanel />
+          <div className="h-full">
+            <ImportLogsPanel />
+          </div>
         </TabsContent>
 
-        <TabsContent value="actions" className="flex-1 min-h-0 mt-4">
+        <TabsContent value="actions" className="mt-4">
           <div className="max-w-md">
             <DeleteActionsPanel
               availableVersions={availableVersions}

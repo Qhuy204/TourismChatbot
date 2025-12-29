@@ -63,9 +63,9 @@ export function ImportLogsPanel() {
           )}
         </div>
       </CardHeader>
-      <CardContent className="flex-1 min-h-0">
+      <CardContent className="flex-1 min-h-0 overflow-hidden">
         {logs.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
+          <div className="flex items-center justify-center py-8 text-muted-foreground">
             <div className="text-center">
               <Info className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p>Chưa có logs</p>
