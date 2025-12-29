@@ -347,7 +347,8 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRe
                     <TableCell>
                       <Button size="sm" variant="ghost" onClick={() => {
                         if (onNavigateToAnnotate) {
-                          onNavigateToAnnotate(record.id);
+                          // Use db_id for navigation (UUID from database)
+                          onNavigateToAnnotate(record.db_id || record.id);
                         } else {
                           setSelectedRecord(record);
                         }
