@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_model_configs: {
+        Row: {
+          created_at: string
+          id: string
+          is_default: boolean
+          is_enabled: boolean
+          model_id: string
+          model_name: string
+          model_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          is_enabled?: boolean
+          model_id: string
+          model_name: string
+          model_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          is_enabled?: boolean
+          model_id?: string
+          model_name?: string
+          model_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       anno_task_details: {
         Row: {
           annotator_id: string | null
@@ -91,6 +124,39 @@ export type Database = {
           status?: string
           task_id?: string
           task_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      api_keys: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          encrypted_key: string
+          id: string
+          is_active: boolean
+          key_name: string
+          provider: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          encrypted_key: string
+          id?: string
+          is_active?: boolean
+          key_name: string
+          provider?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          encrypted_key?: string
+          id?: string
+          is_active?: boolean
+          key_name?: string
+          provider?: string
           updated_at?: string
         }
         Relationships: []
