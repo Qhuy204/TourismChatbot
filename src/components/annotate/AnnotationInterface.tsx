@@ -262,8 +262,17 @@ export function AnnotationInterface({
   // Initialize to first pending or specified record
   useEffect(() => {
     if (initialRecordId) {
-      const idx = filteredSidebarItems.findIndex(r => r.id === initialRecordId);
-      if (idx !== -1) setCurrentIndex(idx);
+      // Match by id (which could be db_id or record_id depending on source)
+      const idx = filteredSidebarItems.findIndex(r => 
+        r.id === initialRecordId || r.record_id === initialRecordId
+      );
+      if (idx !== -1) {
+        setCurrentIndex(idx);
+        // Make sure the record is visible in the list
+        if (idx >= visibleCount) {
+          setVisibleCount(idx + 50);
+        }
+      }
     } else {
       const pendingIdx = filteredSidebarItems.findIndex(r => r.status === 'pending' || r.status === 'needs_review');
       if (pendingIdx !== -1) setCurrentIndex(pendingIdx);
