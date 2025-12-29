@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Search,
   ChevronLeft,
@@ -17,9 +18,13 @@ import {
   Trash2,
   ArrowUpDown,
   Eye,
+  FileText,
+  Settings,
 } from "lucide-react";
 import { DatasetRecord } from "@/types/dataset";
 import { RecordDetailModal } from "./RecordDetailModal";
+import { ImportLogsPanel } from "./ImportLogsPanel";
+import { DeleteActionsPanel } from "./DeleteActionsPanel";
 import { toast } from "sonner";
 
 interface DataBrowserProps {
@@ -30,6 +35,10 @@ interface DataBrowserProps {
   onRecordUpdate?: (record: DatasetRecord) => void;
   onRecordsUpdate?: (records: DatasetRecord[]) => void;
   onNavigateToAnnotate?: (recordId: string) => void;
+  onDeleteByVersion?: (version: number) => Promise<boolean>;
+  onDeleteByStatus?: (status: string) => Promise<boolean>;
+  onDeleteByDateRange?: (startDate: string, endDate: string) => Promise<boolean>;
+  onDeleteAll?: () => Promise<boolean>;
 }
 
 const ITEMS_PER_PAGE = 1000;
@@ -37,7 +46,7 @@ const ITEMS_PER_PAGE = 1000;
 type SortBy = "id" | "created" | "status" | "name";
 type SortOrder = "asc" | "desc";
 
-export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRecordUpdate, onRecordsUpdate, onNavigateToAnnotate }: DataBrowserProps) {
+export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRecordUpdate, onRecordsUpdate, onNavigateToAnnotate, onDeleteByVersion, onDeleteByStatus, onDeleteByDateRange, onDeleteAll }: DataBrowserProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -190,6 +199,24 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRe
           <p className="text-muted-foreground">Duyệt và quản lý dataset</p>
         </div>
       </div>
+
+      <Tabs defaultValue="data" className="flex-1 flex flex-col min-h-0">
+        <TabsList className="shrink-0 w-fit">
+          <TabsTrigger value="data" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Data
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            Logs
+          </TabsTrigger>
+          <TabsTrigger value="actions" className="flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Actions
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="data" className="flex-1 flex flex-col min-h-0 mt-4 space-y-4">
 
       {/* Filters */}
       <Card className="shrink-0">
@@ -423,6 +450,25 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRe
           </Button>
         </div>
       </div>
+        </TabsContent>
+
+        <TabsContent value="logs" className="flex-1 min-h-0 mt-4">
+          <ImportLogsPanel />
+        </TabsContent>
+
+        <TabsContent value="actions" className="flex-1 min-h-0 mt-4">
+          <div className="max-w-md">
+            <DeleteActionsPanel
+              availableVersions={availableVersions}
+              onDeleteByVersion={onDeleteByVersion || (async () => false)}
+              onDeleteByStatus={onDeleteByStatus || (async () => false)}
+              onDeleteByDateRange={onDeleteByDateRange || (async () => false)}
+              onDeleteAll={onDeleteAll || (async () => false)}
+              totalCount={totalCount || records.length}
+            />
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Detail Modal */}
       <RecordDetailModal
