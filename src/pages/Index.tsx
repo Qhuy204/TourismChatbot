@@ -196,6 +196,10 @@ const Index = () => {
             onRecordUpdate={handleRecordUpdate} 
             onRecordsUpdate={handleRecordsUpdate}
             onNavigateToAnnotate={handleNavigateToAnnotate}
+            onDeleteByVersion={deleteByVersion}
+            onDeleteByStatus={deleteByStatus}
+            onDeleteByDateRange={deleteByDateRange}
+            onDeleteAll={deleteAllRecords}
           />
         );
       case 'annotate':
