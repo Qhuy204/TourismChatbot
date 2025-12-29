@@ -71,29 +71,28 @@ export function RecordDetailModal({
     toast.success('Đã copy JSON vào clipboard');
   };
 
-  const handleApprove = () => {
+  const handleStatusChange = (newStatus: 'approved' | 'rejected' | 'needs_review' | 'pending') => {
     if (onUpdate) {
-      onUpdate({ ...record, status: 'approved', reviewedAt: new Date().toISOString() });
+      onUpdate({ ...record, status: newStatus, reviewedAt: new Date().toISOString() });
     }
-    toast.success('Đã phê duyệt record');
-    onClose();
+    const messages = {
+      approved: 'Đã phê duyệt record',
+      rejected: 'Đã từ chối record',
+      needs_review: 'Đã đánh dấu cần xem xét',
+      pending: 'Đã đặt lại về trạng thái chờ xử lý'
+    };
+    const toastFn = newStatus === 'approved' ? toast.success : 
+                    newStatus === 'rejected' ? toast.error : 
+                    toast.warning;
+    toastFn(messages[newStatus]);
   };
 
-  const handleReject = () => {
-    if (onUpdate) {
-      onUpdate({ ...record, status: 'rejected', reviewedAt: new Date().toISOString() });
-    }
-    toast.error('Đã từ chối record');
-    onClose();
-  };
+  const handleApprove = () => handleStatusChange('approved');
+  const handleReject = () => handleStatusChange('rejected');
+  const handleNeedsReview = () => handleStatusChange('needs_review');
+  const handleResetToPending = () => handleStatusChange('pending');
 
-  const handleNeedsReview = () => {
-    if (onUpdate) {
-      onUpdate({ ...record, status: 'needs_review', reviewedAt: new Date().toISOString() });
-    }
-    toast.warning('Đã đánh dấu cần xem xét');
-    onClose();
-  };
+  const isAlreadyReviewed = record.status === 'approved' || record.status === 'rejected';
 
   const getImageSrc = () => {
     const imagePath = record.paths?.image;
@@ -321,19 +320,32 @@ export function RecordDetailModal({
           </ScrollArea>
 
           {/* Action Bar */}
-          <div className="border-t px-6 py-4 shrink-0 flex items-center justify-end gap-3">
-            <Button variant="outline" onClick={handleNeedsReview}>
-              <AlertTriangle className="h-4 w-4 mr-2" />
-              Cần xem xét
-            </Button>
-            <Button variant="destructive" onClick={handleReject}>
-              <XCircle className="h-4 w-4 mr-2" />
-              Từ chối
-            </Button>
-            <Button onClick={handleApprove}>
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              Phê duyệt
-            </Button>
+          <div className="border-t px-6 py-4 shrink-0 flex items-center justify-between gap-3">
+            {/* Left side - Edit/Reset option for already reviewed records */}
+            <div>
+              {isAlreadyReviewed && (
+                <Button variant="ghost" onClick={handleResetToPending}>
+                  <AlertTriangle className="h-4 w-4 mr-2" />
+                  Đặt lại về Pending (Sửa lại)
+                </Button>
+              )}
+            </div>
+            
+            {/* Right side - Review actions */}
+            <div className="flex items-center gap-3">
+              <Button variant="outline" onClick={handleNeedsReview}>
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                Cần xem xét
+              </Button>
+              <Button variant="destructive" onClick={handleReject}>
+                <XCircle className="h-4 w-4 mr-2" />
+                Từ chối
+              </Button>
+              <Button onClick={handleApprove}>
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                Phê duyệt
+              </Button>
+            </div>
           </div>
         </div>
       </DialogContent>
