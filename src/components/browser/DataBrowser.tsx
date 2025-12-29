@@ -41,11 +41,21 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRe
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [versionFilter, setVersionFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedRecord, setSelectedRecord] = useState<DatasetRecord | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<SortBy>("id");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+
+  // Get unique versions from records
+  const availableVersions = useMemo(() => {
+    const versions = new Set<number>();
+    records.forEach(r => {
+      if (r.import_version) versions.add(r.import_version);
+    });
+    return Array.from(versions).sort((a, b) => b - a);
+  }, [records]);
 
   const filteredAndSortedRecords = useMemo(() => {
     let filtered = records.filter((record) => {
@@ -56,8 +66,10 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRe
 
       const matchesStatus = statusFilter === "all" || record.status === statusFilter;
       const matchesType = typeFilter === "all" || record.qa_pairs?.some((qa) => qa.type === typeFilter);
+      const matchesVersion = versionFilter === "all" || 
+        (record.import_version !== undefined && record.import_version.toString() === versionFilter);
 
-      return matchesSearch && matchesStatus && matchesType;
+      return matchesSearch && matchesStatus && matchesType && matchesVersion;
     });
 
     // Sort
@@ -81,7 +93,7 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRe
     });
 
     return filtered;
-  }, [records, searchQuery, statusFilter, typeFilter, sortBy, sortOrder]);
+  }, [records, searchQuery, statusFilter, typeFilter, versionFilter, sortBy, sortOrder]);
 
   const totalPages = Math.ceil(filteredAndSortedRecords.length / ITEMS_PER_PAGE);
   const paginatedRecords = filteredAndSortedRecords.slice(
@@ -232,6 +244,27 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRe
                 <SelectItem value="ask_both">ask_both</SelectItem>
               </SelectContent>
             </Select>
+            {availableVersions.length > 0 && (
+              <Select
+                value={versionFilter}
+                onValueChange={(v) => {
+                  setVersionFilter(v);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="w-36">
+                  <SelectValue placeholder="Version" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tất cả version</SelectItem>
+                  {availableVersions.map((v) => (
+                    <SelectItem key={v} value={v.toString()}>
+                      Version {v}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
               <SelectTrigger className="w-36">
                 <ArrowUpDown className="h-4 w-4 mr-2" />
