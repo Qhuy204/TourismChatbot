@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ interface DataBrowserProps {
   totalCount?: number;
   loadedCount?: number;
   onLoadMore?: () => void;
+  onLoadAll?: () => Promise<void>;
   onRecordUpdate?: (record: DatasetRecord) => void;
   onRecordsUpdate?: (records: DatasetRecord[]) => void;
   onNavigateToAnnotate?: (recordId: string) => void;
@@ -46,7 +47,7 @@ const ITEMS_PER_PAGE = 1000;
 type SortBy = "id" | "created" | "status" | "name";
 type SortOrder = "asc" | "desc";
 
-export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRecordUpdate, onRecordsUpdate, onNavigateToAnnotate, onDeleteByVersion, onDeleteByStatus, onDeleteByDateRange, onDeleteAll }: DataBrowserProps) {
+export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onLoadAll, onRecordUpdate, onRecordsUpdate, onNavigateToAnnotate, onDeleteByVersion, onDeleteByStatus, onDeleteByDateRange, onDeleteAll }: DataBrowserProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -56,6 +57,15 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRe
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<SortBy>("id");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
+  const [isLoadingAll, setIsLoadingAll] = useState(false);
+
+  // Auto-load all records when DataBrowser mounts
+  useEffect(() => {
+    if (onLoadAll && loadedCount !== undefined && totalCount !== undefined && loadedCount < totalCount && !isLoadingAll) {
+      setIsLoadingAll(true);
+      onLoadAll().finally(() => setIsLoadingAll(false));
+    }
+  }, [onLoadAll, loadedCount, totalCount, isLoadingAll]);
 
   // Get unique versions from records
   const availableVersions = useMemo(() => {
@@ -312,8 +322,8 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRe
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">
                 Hiển thị {paginatedRecords.length} / {filteredAndSortedRecords.length} records
-                {totalCount && totalCount > records.length && (
-                  <span className="text-muted-foreground/70"> (Tổng cộng: {totalCount.toLocaleString()})</span>
+                {isLoadingAll && totalCount && loadedCount !== undefined && loadedCount < totalCount && (
+                  <span className="text-primary ml-2">(Đang tải thêm... {loadedCount.toLocaleString()}/{totalCount.toLocaleString()})</span>
                 )}
               </span>
               <Button size="sm" variant="outline" onClick={selectAllDataset}>
