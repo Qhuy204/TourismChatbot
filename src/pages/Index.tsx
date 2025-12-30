@@ -79,27 +79,47 @@ const Index = () => {
   // Navigate to annotate from Task with task's record IDs
   const handleStartTaskAnnotation = useCallback(async (taskId: string) => {
     try {
-      // Fetch all image IDs for the task
-      const { data: taskDetails, error } = await supabase
-        .from('anno_task_details')
-        .select('image_id')
-        .eq('task_id', taskId);
+      // Fetch ALL image IDs for the task with pagination (bypass 1000 limit)
+      const allRecordIds: string[] = [];
+      const pageSize = 1000;
+      let offset = 0;
+      let hasMore = true;
 
-      if (error) {
-        toast.error('Không thể tải records của task');
-        return;
+      while (hasMore) {
+        const { data: batch, error } = await supabase
+          .from('anno_task_details')
+          .select('image_id')
+          .eq('task_id', taskId)
+          .range(offset, offset + pageSize - 1);
+
+        if (error) {
+          console.error('Error fetching task records batch:', error);
+          toast.error('Không thể tải records của task');
+          return;
+        }
+
+        if (!batch || batch.length === 0) {
+          hasMore = false;
+        } else {
+          allRecordIds.push(...batch.map(tr => tr.image_id));
+          if (batch.length < pageSize) {
+            hasMore = false;
+          } else {
+            offset += pageSize;
+          }
+        }
       }
 
-      const recordIds = taskDetails?.map(tr => tr.image_id) || [];
+      console.log(`Loaded ${allRecordIds.length} records for task ${taskId}`);
       
-      if (recordIds.length === 0) {
+      if (allRecordIds.length === 0) {
         toast.error('Task không có records nào');
         return;
       }
 
       // Navigate to annotate with task's record IDs
-      setAnnotateFilteredIds(recordIds);
-      setAnnotateRecordId(recordIds[0]);
+      setAnnotateFilteredIds(allRecordIds);
+      setAnnotateRecordId(allRecordIds[0]);
       setCurrentView('annotate');
     } catch (err) {
       console.error('Error starting task annotation:', err);

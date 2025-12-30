@@ -116,6 +116,23 @@ export function AnnotationInterface({
 
   // Batch load records when filteredRecordIds is provided (task-based annotation)
   const hasLoadedFilteredRecords = useRef(false);
+  const previousFilteredIdsRef = useRef<string[] | undefined>(undefined);
+  
+  // Reset when filteredRecordIds changes (switching tasks)
+  useEffect(() => {
+    const currentIds = filteredRecordIds?.join(',');
+    const previousIds = previousFilteredIdsRef.current?.join(',');
+    
+    if (currentIds !== previousIds) {
+      hasLoadedFilteredRecords.current = false;
+      previousFilteredIdsRef.current = filteredRecordIds;
+      // Clear cache when switching to different task
+      if (filteredRecordIds && filteredRecordIds.length > 0) {
+        setRecordCache(new Map());
+      }
+    }
+  }, [filteredRecordIds]);
+  
   useEffect(() => {
     if (!filteredRecordIds || filteredRecordIds.length === 0 || hasLoadedFilteredRecords.current) return;
     
@@ -129,18 +146,24 @@ export function AnnotationInterface({
       return;
     }
     
+    let isCancelled = false;
+    
     // Batch fetch records from database
     const fetchRecords = async () => {
       setLoadingRecordIds(prev => new Set([...prev, ...idsToFetch]));
       try {
-        // Fetch in batches of 100
-        const batchSize = 100;
+        // Fetch in batches of 500 for better performance
+        const batchSize = 500;
         for (let i = 0; i < idsToFetch.length; i += batchSize) {
+          if (isCancelled) break;
+          
           const batch = idsToFetch.slice(i, i + batchSize);
           const { data, error } = await supabase
             .from('dataset_records')
             .select('*')
             .in('id', batch);
+          
+          if (isCancelled) break;
           
           if (!error && data) {
             const mappedRecords = new Map<string, DatasetRecord>();
@@ -158,12 +181,18 @@ export function AnnotationInterface({
       } catch (err) {
         console.error('Error batch loading records:', err);
       } finally {
-        setLoadingRecordIds(new Set());
-        hasLoadedFilteredRecords.current = true;
+        if (!isCancelled) {
+          setLoadingRecordIds(new Set());
+          hasLoadedFilteredRecords.current = true;
+        }
       }
     };
     
     fetchRecords();
+    
+    return () => {
+      isCancelled = true;
+    };
   }, [filteredRecordIds, records, recordCache]);
 
   // Get sidebar items (minimal data) - create from records directly for efficiency
