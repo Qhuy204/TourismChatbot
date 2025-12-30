@@ -199,9 +199,7 @@ const Index = () => {
       case 'random-check':
         return (
           <RandomQACheck 
-            records={records} 
-            totalCount={totalCount}
-            onRecordUpdate={handleRecordUpdate}
+            tasks={isAdmin ? tasks || [] : userTasks}
             onStartAnnotation={handleStartQAAnnotation}
           />
         );
