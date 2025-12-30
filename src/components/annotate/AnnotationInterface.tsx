@@ -361,24 +361,61 @@ export function AnnotationInterface({
     toast.info('Đã reset về bản gốc');
   };
 
-  const handleNeedsRecheck = () => {
+  // Also update anno_task_details if this record belongs to any task
+  const syncTaskDetailStatus = async (recordDbId: string, status: 'pending' | 'approved' | 'rejected' | 'needs_review') => {
+    try {
+      // Check if this record is assigned to any task
+      const { data: taskDetails } = await supabase
+        .from('anno_task_details')
+        .select('id, task_id')
+        .eq('image_id', recordDbId);
+      
+      if (taskDetails && taskDetails.length > 0) {
+        // Update all task details that reference this record
+        await supabase
+          .from('anno_task_details')
+          .update({ 
+            status,
+            reviewed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('image_id', recordDbId);
+      }
+    } catch (err) {
+      console.error('Error syncing task detail status:', err);
+    }
+  };
+
+  const handleNeedsRecheck = async () => {
     const toUpdate = editedRecord || record;
+    const dbId = toUpdate?.db_id;
+    if (dbId) {
+      await syncTaskDetailStatus(dbId, 'needs_review');
+    }
     onRecordUpdate({ ...toUpdate, status: 'needs_review', reviewedAt: new Date().toISOString() });
     toast.warning('Đã đánh dấu cần kiểm tra lại');
     setEditedRecord(null);
     goNext();
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     const toUpdate = editedRecord || record;
+    const dbId = toUpdate?.db_id;
+    if (dbId) {
+      await syncTaskDetailStatus(dbId, 'rejected');
+    }
     onRecordUpdate({ ...toUpdate, status: 'rejected', reviewedAt: new Date().toISOString() });
     toast.error('Đã từ chối record');
     setEditedRecord(null);
     goNext();
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     const toUpdate = editedRecord || record;
+    const dbId = toUpdate?.db_id;
+    if (dbId) {
+      await syncTaskDetailStatus(dbId, 'approved');
+    }
     onRecordUpdate({ ...toUpdate, status: 'approved', reviewedAt: new Date().toISOString() });
     toast.success('Đã phê duyệt');
     setEditedRecord(null);
