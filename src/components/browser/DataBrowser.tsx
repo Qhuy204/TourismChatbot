@@ -443,7 +443,7 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onRe
             variant="outline"
             size="sm"
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages || totalPages === 0}
+            disabled={currentPage >= totalPages || totalPages <= 1}
           >
             Sau
             <ChevronRight className="h-4 w-4" />
