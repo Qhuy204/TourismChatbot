@@ -34,13 +34,36 @@ export function useTasks() {
         return;
       }
 
-      // Get progress for each task
+      // Get progress for each task using COUNT queries (avoid 1000 row limit)
       const tasksWithProgress: AnnotationTask[] = await Promise.all(
         (data || []).map(async (task: any) => {
-          const { data: taskDetails } = await supabase
-            .from('anno_task_details')
-            .select('status')
-            .eq('task_id', task.task_id);
+          // Use separate count queries for each status to avoid 1000 row limit
+          const [totalRes, approvedRes, pendingRes, needsReviewRes, rejectedRes] = await Promise.all([
+            supabase
+              .from('anno_task_details')
+              .select('*', { count: 'exact', head: true })
+              .eq('task_id', task.task_id),
+            supabase
+              .from('anno_task_details')
+              .select('*', { count: 'exact', head: true })
+              .eq('task_id', task.task_id)
+              .eq('status', 'approved'),
+            supabase
+              .from('anno_task_details')
+              .select('*', { count: 'exact', head: true })
+              .eq('task_id', task.task_id)
+              .eq('status', 'pending'),
+            supabase
+              .from('anno_task_details')
+              .select('*', { count: 'exact', head: true })
+              .eq('task_id', task.task_id)
+              .eq('status', 'needs_review'),
+            supabase
+              .from('anno_task_details')
+              .select('*', { count: 'exact', head: true })
+              .eq('task_id', task.task_id)
+              .eq('status', 'rejected'),
+          ]);
 
           // Fetch assignee name separately
           let assignee_name = undefined;
@@ -54,11 +77,11 @@ export function useTasks() {
           }
 
           const progress: TaskProgress = {
-            total: taskDetails?.length || 0,
-            approved: taskDetails?.filter(r => r.status === 'approved').length || 0,
-            pending: taskDetails?.filter(r => r.status === 'pending').length || 0,
-            needs_review: taskDetails?.filter(r => r.status === 'needs_review').length || 0,
-            rejected: taskDetails?.filter(r => r.status === 'rejected').length || 0,
+            total: totalRes.count || 0,
+            approved: approvedRes.count || 0,
+            pending: pendingRes.count || 0,
+            needs_review: needsReviewRes.count || 0,
+            rejected: rejectedRes.count || 0,
           };
 
           return {
