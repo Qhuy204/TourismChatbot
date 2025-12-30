@@ -143,8 +143,13 @@ const Index = () => {
   const totalRecordsCount = availableRecordsInfo.total;
 
   // Create task handler for admin
-  const handleCreateTask = useCallback(async (name: string, userId: string, percentage: number) => {
-    await createTask(name, userId, percentage);
+  const handleCreateTask = useCallback(async (
+    name: string, 
+    userId: string, 
+    percentage: number,
+    onProgress?: (stage: string, current: number, total: number) => void
+  ) => {
+    await createTask(name, userId, percentage, onProgress);
   }, [createTask]);
 
   // Delete task handler for admin
