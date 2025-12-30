@@ -164,6 +164,7 @@ const Index = () => {
             tasks={isAdmin ? tasks || [] : userTasks}
             onRecordUpdate={handleRecordUpdate}
             initialTaskId={selectedTaskId}
+            onTaskStatusUpdate={refetchTasks}
           />
         );
       case 'browser':
