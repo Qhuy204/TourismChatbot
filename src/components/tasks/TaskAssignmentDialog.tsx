@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
+import { Progress } from '@/components/ui/progress';
 import { UserWithRole } from '@/types/dataset';
 import { Loader2 } from 'lucide-react';
 
@@ -28,7 +29,13 @@ interface TaskAssignmentDialogProps {
   users: UserWithRole[];
   availableRecords: number;
   totalRecords: number;
-  onAssign: (name: string, userId: string, percentage: number, description?: string) => Promise<void>;
+  onAssign: (
+    name: string,
+    userId: string,
+    percentage: number,
+    description?: string,
+    onProgress?: (stage: string, current: number, total: number) => void
+  ) => Promise<void>;
 }
 
 export function TaskAssignmentDialog({
@@ -44,6 +51,7 @@ export function TaskAssignmentDialog({
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [percentage, setPercentage] = useState(10);
   const [loading, setLoading] = useState(false);
+  const [progressInfo, setProgressInfo] = useState<{ stage: string; current: number; total: number } | null>(null);
 
   const recordCount = Math.ceil((percentage / 100) * availableRecords);
   // Allow all users (including admins) to be assigned tasks
@@ -53,14 +61,21 @@ export function TaskAssignmentDialog({
     if (!name.trim() || !selectedUser) return;
 
     setLoading(true);
+    setProgressInfo(null);
+    
+    const handleProgress = (stage: string, current: number, total: number) => {
+      setProgressInfo({ stage, current, total });
+    };
+    
     try {
-      await onAssign(name, selectedUser, percentage, description || undefined);
+      await onAssign(name, selectedUser, percentage, description || undefined, handleProgress);
       onOpenChange(false);
       // Reset form
       setName('');
       setDescription('');
       setSelectedUser('');
       setPercentage(10);
+      setProgressInfo(null);
     } finally {
       setLoading(false);
     }
@@ -139,6 +154,16 @@ export function TaskAssignmentDialog({
               Records khả dụng: {availableRecords.toLocaleString()} / Tổng: {totalRecords.toLocaleString()}
             </p>
           </div>
+
+          {loading && progressInfo && (
+            <div className="space-y-2 p-3 rounded-lg bg-muted/50">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{progressInfo.stage}</span>
+                <span className="font-medium">{progressInfo.current}%</span>
+              </div>
+              <Progress value={progressInfo.current} className="h-2" />
+            </div>
+          )}
         </div>
 
         <DialogFooter>

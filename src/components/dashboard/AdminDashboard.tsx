@@ -30,7 +30,7 @@ interface AdminDashboardProps {
   tasks?: AnnotationTask[];
   availableRecords?: number;
   totalRecords?: number;
-  onCreateTask?: (name: string, userId: string, percentage: number) => Promise<void>;
+  onCreateTask?: (name: string, userId: string, percentage: number, onProgress?: (stage: string, current: number, total: number) => void) => Promise<void>;
   onDeleteTask?: (taskId: string) => Promise<boolean>;
 }
 
@@ -98,9 +98,15 @@ export function AdminDashboard({
     return Array.from(userMap.entries()).map(([id, data]) => ({ id, ...data }));
   }, [tasks]);
 
-  const handleCreateTask = async (name: string, userId: string, percentage: number) => {
+  const handleCreateTask = async (
+    name: string, 
+    userId: string, 
+    percentage: number, 
+    _description?: string,
+    onProgress?: (stage: string, current: number, total: number) => void
+  ) => {
     if (onCreateTask) {
-      await onCreateTask(name, userId, percentage);
+      await onCreateTask(name, userId, percentage, onProgress);
     }
   };
 

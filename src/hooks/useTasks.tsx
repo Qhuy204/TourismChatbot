@@ -104,12 +104,15 @@ export function useTasks() {
   const createTask = useCallback(async (
     name: string,
     assignedTo: string,
-    percentage: number
+    percentage: number,
+    onProgress?: (stage: string, current: number, total: number) => void
   ) => {
     if (!user || !isAdmin) {
       toast.error('Bạn không có quyền tạo task');
       return null;
     }
+
+    onProgress?.('Đang khởi tạo...', 0, 100);
 
     try {
       // Get TOTAL count of all records
@@ -163,6 +166,8 @@ export function useTasks() {
         return null;
       }
 
+      onProgress?.('Đang lấy danh sách records đã giao...', 10, 100);
+
       // Get records that are NOT already assigned to any task
       // Need to paginate through all assigned IDs first
       let allAssignedIds: string[] = [];
@@ -177,9 +182,12 @@ export function useTasks() {
         
         if (!batch || batch.length === 0) break;
         allAssignedIds = allAssignedIds.concat(batch.map(r => r.image_id));
+        onProgress?.(`Đã quét ${allAssignedIds.length} records đã giao...`, 15, 100);
         if (batch.length < pageSize) break;
         offset += pageSize;
       }
+
+      onProgress?.('Đang tìm records khả dụng...', 20, 100);
 
       // Convert to Set for O(1) lookup instead of O(n) includes
       const assignedIdsSet = new Set(allAssignedIds);
@@ -193,7 +201,8 @@ export function useTasks() {
       // Keep fetching until we have enough OR we've exhausted all records
       let hasMoreRecords = true;
       while (collectedRecords.length < recordsToAssign && hasMoreRecords) {
-        console.log(`Fetching batch at offset ${fetchOffset}, collected so far: ${collectedRecords.length}/${recordsToAssign}`);
+        const progressPercent = Math.min(20 + Math.floor((collectedRecords.length / recordsToAssign) * 50), 70);
+        onProgress?.(`Đang thu thập records: ${collectedRecords.length.toLocaleString()}/${recordsToAssign.toLocaleString()}`, progressPercent, 100);
         
         const { data: batch, error: fetchError } = await supabase
           .from('dataset_records')
@@ -225,8 +234,8 @@ export function useTasks() {
         
         fetchOffset += fetchPageSize;
       }
-      
       console.log(`Total collected: ${collectedRecords.length}, requested: ${recordsToAssign}`);
+      onProgress?.('Đang chuẩn bị ghi vào database...', 75, 100);
       
       // Dedupe and trim to exact count needed
       const uniqueIds = [...new Set(collectedRecords)];
@@ -235,7 +244,13 @@ export function useTasks() {
       if (recordsToInsert.length > 0) {
         // Insert in batches of 500 to avoid hitting limits
         const insertBatchSize = 500;
+        const totalBatches = Math.ceil(recordsToInsert.length / insertBatchSize);
+        
         for (let i = 0; i < recordsToInsert.length; i += insertBatchSize) {
+          const batchIndex = Math.floor(i / insertBatchSize) + 1;
+          const progressPercent = 75 + Math.floor((batchIndex / totalBatches) * 20);
+          onProgress?.(`Đang ghi batch ${batchIndex}/${totalBatches}...`, progressPercent, 100);
+          
           const insertBatch = recordsToInsert.slice(i, i + insertBatchSize);
           const taskDetails = insertBatch.map(record => ({
             task_id: task.task_id,
@@ -254,8 +269,9 @@ export function useTasks() {
       
       const actualInserted = recordsToInsert.length;
 
+      onProgress?.('Hoàn tất!', 100, 100);
       await fetchTasks();
-      toast.success(`Đã tạo task với ${actualInserted} records (${percentage}% của ${availableCount} khả dụng)`);
+      toast.success(`Đã tạo task với ${actualInserted.toLocaleString()} records (${percentage}% của ${availableCount.toLocaleString()} khả dụng)`);
       return task;
     } catch (error) {
       console.error('Error creating task:', error);
