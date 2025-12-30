@@ -10,6 +10,7 @@ import { AdminDashboard } from '@/components/dashboard/AdminDashboard';
 import { UserDashboard } from '@/components/dashboard/UserDashboard';
 import { DataBrowser } from '@/components/browser/DataBrowser';
 import { AnnotationInterface } from '@/components/annotate/AnnotationInterface';
+import { TaskAnnotationInterface } from '@/components/annotate/TaskAnnotationInterface';
 import { RandomQACheck } from '@/components/qa-check/RandomQACheck';
 import { CrawlInterface } from '@/components/crawl/CrawlInterface';
 import { ImportInterface } from '@/components/import/ImportInterface';
@@ -19,7 +20,6 @@ import { UserSettingsDialog } from '@/components/settings/UserSettingsDialog';
 import { DatasetRecord } from '@/types/dataset';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 const Index = () => {
@@ -36,6 +36,7 @@ const Index = () => {
   // Annotation navigation state
   const [annotateRecordId, setAnnotateRecordId] = useState<string | undefined>();
   const [annotateFilteredIds, setAnnotateFilteredIds] = useState<string[] | undefined>();
+  const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>();
   
   // User settings dialog
   const [showUserSettings, setShowUserSettings] = useState(false);
@@ -76,55 +77,10 @@ const Index = () => {
     setCurrentView('annotate');
   }, []);
 
-  // Navigate to annotate from Task with task's record IDs
-  const handleStartTaskAnnotation = useCallback(async (taskId: string) => {
-    try {
-      // Fetch ALL image IDs for the task with pagination (bypass 1000 limit)
-      const allRecordIds: string[] = [];
-      const pageSize = 1000;
-      let offset = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data: batch, error } = await supabase
-          .from('anno_task_details')
-          .select('image_id')
-          .eq('task_id', taskId)
-          .range(offset, offset + pageSize - 1);
-
-        if (error) {
-          console.error('Error fetching task records batch:', error);
-          toast.error('Không thể tải records của task');
-          return;
-        }
-
-        if (!batch || batch.length === 0) {
-          hasMore = false;
-        } else {
-          allRecordIds.push(...batch.map(tr => tr.image_id));
-          if (batch.length < pageSize) {
-            hasMore = false;
-          } else {
-            offset += pageSize;
-          }
-        }
-      }
-
-      console.log(`Loaded ${allRecordIds.length} records for task ${taskId}`);
-      
-      if (allRecordIds.length === 0) {
-        toast.error('Task không có records nào');
-        return;
-      }
-
-      // Navigate to annotate with task's record IDs
-      setAnnotateFilteredIds(allRecordIds);
-      setAnnotateRecordId(allRecordIds[0]);
-      setCurrentView('annotate');
-    } catch (err) {
-      console.error('Error starting task annotation:', err);
-      toast.error('Có lỗi xảy ra');
-    }
+  // Navigate to task annotation - just navigate to task-annotate view with taskId
+  const handleStartTaskAnnotation = useCallback((taskId: string) => {
+    setSelectedTaskId(taskId);
+    setCurrentView('task-annotate');
   }, []);
 
   // Handle view change - reset annotation state when going to annotate directly
@@ -197,18 +153,17 @@ const Index = () => {
           <UserDashboard 
             records={records}
             tasks={userTasks}
-            onNavigateToAnnotate={() => setCurrentView('annotate')}
+            onNavigateToAnnotate={() => setCurrentView('task-annotate')}
             onStartTask={handleStartTaskAnnotation}
           />
         );
       case 'task-annotate':
-        // Show My Tasks view - let user click "Bắt đầu" to start annotation
+        // Task-based annotation - use dedicated TaskAnnotationInterface
         return (
-          <UserDashboard 
-            records={records}
-            tasks={userTasks}
-            onNavigateToAnnotate={() => setCurrentView('annotate')}
-            onStartTask={handleStartTaskAnnotation}
+          <TaskAnnotationInterface 
+            tasks={isAdmin ? tasks || [] : userTasks}
+            onRecordUpdate={handleRecordUpdate}
+            initialTaskId={selectedTaskId}
           />
         );
       case 'browser':
@@ -281,7 +236,7 @@ const Index = () => {
             onDeleteTask={handleDeleteTask}
           />
         ) : (
-          <UserDashboard records={records} tasks={userTasks} onNavigateToAnnotate={() => setCurrentView('annotate')} onStartTask={handleStartTaskAnnotation} />
+          <UserDashboard records={records} tasks={userTasks} onNavigateToAnnotate={() => setCurrentView('task-annotate')} onStartTask={handleStartTaskAnnotation} />
         );
     }
   };
