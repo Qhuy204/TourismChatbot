@@ -44,6 +44,12 @@ interface TaskAnnotationInterfaceProps {
   tasks: AnnotationTask[];
   onRecordUpdate: (record: DatasetRecord) => void;
   initialTaskId?: string;
+  onTaskStatusUpdate?: () => void; // Callback to refresh task list
+}
+
+// Status from anno_task_details
+interface TaskDetailStatus {
+  [imageId: string]: 'pending' | 'approved' | 'rejected' | 'needs_review';
 }
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'needs_review';
@@ -51,7 +57,8 @@ type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'needs_review'
 export function TaskAnnotationInterface({ 
   tasks,
   onRecordUpdate, 
-  initialTaskId
+  initialTaskId,
+  onTaskStatusUpdate
 }: TaskAnnotationInterfaceProps) {
   // Selected task state
   const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>(initialTaskId);
@@ -63,24 +70,30 @@ export function TaskAnnotationInterface({
   // Cache for loaded records
   const [recordCache, setRecordCache] = useState<Map<string, DatasetRecord>>(new Map());
   const [loadingRecordIds, setLoadingRecordIds] = useState<Set<string>>(new Set());
+  
+  // Status from anno_task_details - separate from dataset_records status
+  const [taskDetailStatuses, setTaskDetailStatuses] = useState<TaskDetailStatus>({});
 
-  // Fetch task record IDs when task is selected
+  // Fetch task record IDs and statuses when task is selected
   useEffect(() => {
     if (!selectedTaskId) {
       setTaskRecordIds([]);
       setRecordCache(new Map());
+      setTaskDetailStatuses({});
       return;
     }
 
     let isCancelled = false;
 
-    const fetchTaskRecordIds = async () => {
+    const fetchTaskRecordIdsAndStatuses = async () => {
       setIsLoadingTaskRecords(true);
       setRecordCache(new Map()); // Clear cache when switching tasks
+      setTaskDetailStatuses({}); // Clear statuses
       
       try {
-        // Fetch ALL image IDs for the task with pagination
+        // Fetch ALL image IDs and statuses for the task with pagination
         const allRecordIds: string[] = [];
+        const statusMap: TaskDetailStatus = {};
         const pageSize = 1000;
         let offset = 0;
         let hasMore = true;
@@ -88,7 +101,7 @@ export function TaskAnnotationInterface({
         while (hasMore && !isCancelled) {
           const { data: batch, error } = await supabase
             .from('anno_task_details')
-            .select('image_id')
+            .select('image_id, status')
             .eq('task_id', selectedTaskId)
             .range(offset, offset + pageSize - 1);
 
@@ -101,7 +114,10 @@ export function TaskAnnotationInterface({
           if (!batch || batch.length === 0) {
             hasMore = false;
           } else {
-            allRecordIds.push(...batch.map(tr => tr.image_id));
+            batch.forEach(tr => {
+              allRecordIds.push(tr.image_id);
+              statusMap[tr.image_id] = tr.status as 'pending' | 'approved' | 'rejected' | 'needs_review';
+            });
             if (batch.length < pageSize) {
               hasMore = false;
             } else {
@@ -113,6 +129,7 @@ export function TaskAnnotationInterface({
         if (!isCancelled) {
           console.log(`Loaded ${allRecordIds.length} record IDs for task ${selectedTaskId}`);
           setTaskRecordIds(allRecordIds);
+          setTaskDetailStatuses(statusMap);
         }
       } catch (err) {
         console.error('Error fetching task record IDs:', err);
@@ -124,7 +141,7 @@ export function TaskAnnotationInterface({
       }
     };
 
-    fetchTaskRecordIds();
+    fetchTaskRecordIdsAndStatuses();
 
     return () => {
       isCancelled = true;
@@ -185,18 +202,18 @@ export function TaskAnnotationInterface({
     };
   }, [taskRecordIds]);
 
-  // Get sidebar items from cache
+  // Get sidebar items from cache - use taskDetailStatuses for status
   const allSidebarItems = useMemo(() => {
     return taskRecordIds.map(id => {
       const cached = recordCache.get(id);
       return {
         id,
         record_id: cached?.id || id,
-        status: cached?.status,
+        status: taskDetailStatuses[id] || 'pending', // Use task-specific status
         landmark_name: cached?.metadata?.landmark_name || 'Loading...',
       };
     });
-  }, [taskRecordIds, recordCache]);
+  }, [taskRecordIds, recordCache, taskDetailStatuses]);
 
   // Sidebar state
   const [searchQuery, setSearchQuery] = useState('');
@@ -276,6 +293,23 @@ export function TaskAnnotationInterface({
   const currentRecord = currentRecordId ? recordCache.get(currentRecordId) : undefined;
   const record = editedRecord || currentRecord;
 
+  // Calculate task progress stats from taskDetailStatuses
+  const taskStats = useMemo(() => {
+    const total = Object.keys(taskDetailStatuses).length;
+    let approved = 0, pending = 0, rejected = 0, needs_review = 0;
+    
+    Object.values(taskDetailStatuses).forEach(status => {
+      switch (status) {
+        case 'approved': approved++; break;
+        case 'rejected': rejected++; break;
+        case 'needs_review': needs_review++; break;
+        default: pending++; break;
+      }
+    });
+
+    return { total, approved, pending, rejected, needs_review };
+  }, [taskDetailStatuses]);
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -320,9 +354,47 @@ export function TaskAnnotationInterface({
     toast.info('Đã reset về bản gốc');
   };
 
-  const handleNeedsRecheck = () => {
+  // Update status in anno_task_details table
+  const updateTaskDetailStatus = useCallback(async (imageId: string, status: 'pending' | 'approved' | 'rejected' | 'needs_review') => {
+    if (!selectedTaskId) return false;
+    
+    try {
+      const { error } = await supabase
+        .from('anno_task_details')
+        .update({ 
+          status,
+          reviewed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('task_id', selectedTaskId)
+        .eq('image_id', imageId);
+
+      if (error) {
+        console.error('Error updating task detail status:', error);
+        toast.error('Không thể cập nhật trạng thái');
+        return false;
+      }
+
+      // Update local state immediately
+      setTaskDetailStatuses(prev => ({
+        ...prev,
+        [imageId]: status
+      }));
+      
+      // Notify parent to refresh task progress
+      onTaskStatusUpdate?.();
+      
+      return true;
+    } catch (err) {
+      console.error('Error updating task detail status:', err);
+      return false;
+    }
+  }, [selectedTaskId, onTaskStatusUpdate]);
+
+  const handleNeedsRecheck = async () => {
     const toUpdate = editedRecord || record;
-    if (toUpdate) {
+    if (toUpdate && currentRecordId) {
+      await updateTaskDetailStatus(currentRecordId, 'needs_review');
       onRecordUpdate({ ...toUpdate, status: 'needs_review', reviewedAt: new Date().toISOString() });
       toast.warning('Đã đánh dấu cần kiểm tra lại');
       setEditedRecord(null);
@@ -330,9 +402,10 @@ export function TaskAnnotationInterface({
     }
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     const toUpdate = editedRecord || record;
-    if (toUpdate) {
+    if (toUpdate && currentRecordId) {
+      await updateTaskDetailStatus(currentRecordId, 'rejected');
       onRecordUpdate({ ...toUpdate, status: 'rejected', reviewedAt: new Date().toISOString() });
       toast.error('Đã từ chối record');
       setEditedRecord(null);
@@ -340,9 +413,10 @@ export function TaskAnnotationInterface({
     }
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     const toUpdate = editedRecord || record;
-    if (toUpdate) {
+    if (toUpdate && currentRecordId) {
+      await updateTaskDetailStatus(currentRecordId, 'approved');
       onRecordUpdate({ ...toUpdate, status: 'approved', reviewedAt: new Date().toISOString() });
       toast.success('Đã phê duyệt');
       setEditedRecord(null);
@@ -522,11 +596,21 @@ export function TaskAnnotationInterface({
             Tasks
           </Button>
           <span className="text-muted-foreground">•</span>
-          <span className="font-semibold text-lg">Annotate</span>
+          <span className="font-semibold">{selectedTask?.task_name || 'Annotate'}</span>
           <span className="text-muted-foreground">•</span>
-          <span className="text-muted-foreground font-mono">{displayRecord.id}</span>
+          <span className="text-muted-foreground font-mono text-xs">{displayRecord.id}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* Progress Stats */}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-primary font-medium">{taskStats.approved} approved</span>
+            <span className="text-muted-foreground">|</span>
+            <span className="text-chart-4">{taskStats.needs_review} review</span>
+            <span className="text-muted-foreground">|</span>
+            <span className="text-destructive">{taskStats.rejected} rejected</span>
+            <span className="text-muted-foreground">|</span>
+            <span className="text-muted-foreground">{taskStats.pending} pending</span>
+          </div>
           <Badge variant="outline" className="text-xs">
             {currentIndex + 1} / {filteredSidebarItems.length}
           </Badge>
