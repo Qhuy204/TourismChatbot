@@ -538,12 +538,62 @@ export function useDataset() {
     await fetchInitialRecords(true);
   }, [fetchInitialRecords]);
 
+  // Load all records for browsing
+  const loadAllRecords = useCallback(async () => {
+    if (!user || loadedCount >= totalCount) return;
+
+    setLoading(true);
+    try {
+      // Load all remaining records in batches
+      const BATCH_SIZE = 1000;
+      let allRecords = [...records];
+      let offset = loadedCount;
+
+      while (offset < totalCount) {
+        const { data, error } = await supabase
+          .from('dataset_records')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(offset, offset + BATCH_SIZE - 1);
+
+        if (error) {
+          console.error('Error loading all records:', error);
+          break;
+        }
+
+        const mapped: DatasetRecord[] = (data || []).map((row: any) => ({
+          ...row.data,
+          status: row.status,
+          db_id: row.id,
+          import_version: row.import_version,
+          import_batch_id: row.import_batch_id,
+          imported_at: row.imported_at,
+        }));
+
+        if (mapped.length === 0) break;
+        
+        allRecords = [...allRecords, ...mapped];
+        offset += mapped.length;
+      }
+
+      setRecords(allRecords);
+      setLoadedCount(allRecords.length);
+      globalRecordsCache = allRecords;
+      lastFetchTime = Date.now();
+    } catch (error) {
+      console.error('Error loading all records:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user, loadedCount, totalCount, records]);
+
   return {
     records,
     loading,
     totalCount,
     loadedCount,
     loadMoreRecords,
+    loadAllRecords,
     addRecords,
     updateRecord,
     deleteRecords,
