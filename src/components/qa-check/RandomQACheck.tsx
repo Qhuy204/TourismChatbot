@@ -21,7 +21,7 @@ interface RandomQACheckProps {
   records: DatasetRecord[];
   totalCount?: number;
   onRecordUpdate: (record: DatasetRecord) => void;
-  onStartAnnotation?: (recordIds: string[]) => void;
+  onStartQACheck?: (recordIds: string[]) => void;
 }
 
 interface QACheckResult {
@@ -32,7 +32,7 @@ interface QACheckResult {
   checkedAt: string;
 }
 
-export function RandomQACheck({ records, totalCount, onRecordUpdate, onStartAnnotation }: RandomQACheckProps) {
+export function RandomQACheck({ records, totalCount, onRecordUpdate, onStartQACheck }: RandomQACheckProps) {
   const [sampledRecords, setSampledRecords] = useState<DatasetRecord[]>([]);
   const [checkResults, setCheckResults] = useState<QACheckResult[]>([]);
 
@@ -49,18 +49,15 @@ export function RandomQACheck({ records, totalCount, onRecordUpdate, onStartAnno
 
   const startCheck = () => {
     if (sampledRecords.length === 0) {
-      generateSample();
-    }
-    
-    // Navigate to Annotate with the sampled records
-    if (onStartAnnotation && sampledRecords.length > 0) {
-      onStartAnnotation(sampledRecords.map(r => r.id));
-    } else if (onStartAnnotation && records.length > 0) {
       // Generate sample first then navigate
       const shuffled = [...records].sort(() => Math.random() - 0.5);
       const sample = shuffled.slice(0, sampleSize);
       setSampledRecords(sample);
-      onStartAnnotation(sample.map(r => r.id));
+      if (onStartQACheck) {
+        onStartQACheck(sample.map(r => r.id));
+      }
+    } else if (onStartQACheck) {
+      onStartQACheck(sampledRecords.map(r => r.id));
     }
   };
 

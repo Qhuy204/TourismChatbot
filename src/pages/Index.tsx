@@ -12,6 +12,7 @@ import { DataBrowser } from '@/components/browser/DataBrowser';
 import { AnnotationInterface } from '@/components/annotate/AnnotationInterface';
 import { TaskAnnotationInterface } from '@/components/annotate/TaskAnnotationInterface';
 import { RandomQACheck } from '@/components/qa-check/RandomQACheck';
+import { QACheckInterface } from '@/components/qa-check/QACheckInterface';
 import { CrawlInterface } from '@/components/crawl/CrawlInterface';
 import { ImportInterface } from '@/components/import/ImportInterface';
 import { ExportInterface } from '@/components/export/ExportInterface';
@@ -37,6 +38,7 @@ const Index = () => {
   const [annotateRecordId, setAnnotateRecordId] = useState<string | undefined>();
   const [annotateFilteredIds, setAnnotateFilteredIds] = useState<string[] | undefined>();
   const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>();
+  const [qaCheckRecordIds, setQaCheckRecordIds] = useState<string[]>([]);
   
   // User settings dialog
   const [showUserSettings, setShowUserSettings] = useState(false);
@@ -70,11 +72,17 @@ const Index = () => {
     setCurrentView('annotate');
   }, []);
 
-  // Navigate to annotate from QA Check with filtered records
+  // Navigate to annotate from QA Check with filtered records - OLD (for Annotate All)
   const handleStartQAAnnotation = useCallback((recordIds: string[]) => {
     setAnnotateFilteredIds(recordIds);
     setAnnotateRecordId(recordIds[0]);
     setCurrentView('annotate');
+  }, []);
+
+  // Navigate to QA Check Interface with random sample
+  const handleStartQACheck = useCallback((recordIds: string[]) => {
+    setQaCheckRecordIds(recordIds);
+    setCurrentView('qa-check-interface');
   }, []);
 
   // Navigate to task annotation - just navigate to task-annotate view with taskId
@@ -202,7 +210,15 @@ const Index = () => {
             records={records} 
             totalCount={totalCount}
             onRecordUpdate={handleRecordUpdate}
-            onStartAnnotation={handleStartQAAnnotation}
+            onStartQACheck={handleStartQACheck}
+          />
+        );
+      case 'qa-check-interface':
+        return (
+          <QACheckInterface
+            recordIds={qaCheckRecordIds}
+            onRecordUpdate={handleRecordUpdate}
+            onBack={() => setCurrentView('random-check')}
           />
         );
       case 'import':
