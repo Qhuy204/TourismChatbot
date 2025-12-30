@@ -191,7 +191,10 @@ export function useTasks() {
       const fetchPageSize = 1000;
       
       // Keep fetching until we have enough OR we've exhausted all records
-      while (collectedRecords.length < recordsToAssign) {
+      let hasMoreRecords = true;
+      while (collectedRecords.length < recordsToAssign && hasMoreRecords) {
+        console.log(`Fetching batch at offset ${fetchOffset}, collected so far: ${collectedRecords.length}/${recordsToAssign}`);
+        
         const { data: batch, error: fetchError } = await supabase
           .from('dataset_records')
           .select('id')
@@ -203,21 +206,27 @@ export function useTasks() {
           break;
         }
         
-        if (!batch || batch.length === 0) break;
+        if (!batch || batch.length === 0) {
+          hasMoreRecords = false;
+          break;
+        }
         
         // Filter out already assigned records
         for (const record of batch) {
           if (!assignedIdsSet.has(record.id)) {
             collectedRecords.push(record.id);
-            // Stop early if we have enough
-            if (collectedRecords.length >= recordsToAssign) break;
           }
         }
         
-        // If we got less than page size, we've reached the end
-        if (batch.length < fetchPageSize) break;
+        // If we got less than page size, we've reached the end of all records
+        if (batch.length < fetchPageSize) {
+          hasMoreRecords = false;
+        }
+        
         fetchOffset += fetchPageSize;
       }
+      
+      console.log(`Total collected: ${collectedRecords.length}, requested: ${recordsToAssign}`);
       
       // Dedupe and trim to exact count needed
       const uniqueIds = [...new Set(collectedRecords)];
