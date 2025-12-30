@@ -157,13 +157,13 @@ export function useDataset() {
     }
   }, [user, loadedCount, totalCount, getBatchSize]);
 
-  // Initialize on mount - only fetch if not already cached
+  // Initialize on mount - fetch when user is available
   useEffect(() => {
-    if (!hasInitialized.current) {
+    if (user && !hasInitialized.current) {
       hasInitialized.current = true;
       fetchInitialRecords();
     }
-  }, [fetchInitialRecords]);
+  }, [user, fetchInitialRecords]);
 
   const addRecords = useCallback(async (newRecords: DatasetRecord[]) => {
     if (!user || !isAdmin) {
