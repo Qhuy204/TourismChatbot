@@ -39,23 +39,54 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
   
   const selectedTask = tasks.find(t => t.task_id === selectedTaskId);
   
-  // Fetch task details when task is selected
+  // Fetch task details when task is selected - with pagination to handle >1000 records
   useEffect(() => {
     if (!selectedTaskId) return;
+    
+    let isCancelled = false;
     
     const fetchTaskDetails = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
+        // First get total count
+        const { count: totalCount, error: countError } = await supabase
           .from('anno_task_details')
-          .select('*')
-          .eq('task_id', selectedTaskId)
-          .order('created_at', { ascending: true });
+          .select('*', { count: 'exact', head: true })
+          .eq('task_id', selectedTaskId);
         
-        if (error) throw error;
+        if (countError) throw countError;
         
-        // Cast to correct type (Supabase returns status as string)
-        const typedData = (data || []).map(d => ({
+        const total = totalCount || 0;
+        console.log(`Task ${selectedTaskId} has ${total} records`);
+        
+        // Fetch all records with pagination
+        const pageSize = 1000;
+        let allDetails: any[] = [];
+        let offset = 0;
+        
+        while (offset < total) {
+          if (isCancelled) return;
+          
+          const { data: batch, error } = await supabase
+            .from('anno_task_details')
+            .select('*')
+            .eq('task_id', selectedTaskId)
+            .order('created_at', { ascending: true })
+            .range(offset, offset + pageSize - 1);
+          
+          if (error) throw error;
+          if (!batch || batch.length === 0) break;
+          
+          allDetails = allDetails.concat(batch);
+          console.log(`Fetched ${allDetails.length}/${total} task details`);
+          
+          offset += pageSize;
+        }
+        
+        if (isCancelled) return;
+        
+        // Cast to correct type
+        const typedData = allDetails.map(d => ({
           ...d,
           status: d.status as AnnoTaskDetail['status'],
         })) as AnnoTaskDetail[];
@@ -73,11 +104,17 @@ export function TaskAnnotation({ tasks, onBack, onTaskUpdate }: TaskAnnotationPr
         console.error('Error fetching task details:', error);
         toast.error('Không thể tải task records');
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     };
     
     fetchTaskDetails();
+    
+    return () => {
+      isCancelled = true;
+    };
   }, [selectedTaskId]);
   
   // Load current record data
