@@ -181,11 +181,16 @@ export function useTasks() {
         offset += pageSize;
       }
 
+      // Convert to Set for O(1) lookup instead of O(n) includes
+      const assignedIdsSet = new Set(allAssignedIds);
+      
       // Fetch available records in batches (not in anno_task_details)
-      let collectedRecords: { id: string }[] = [];
+      // Need to keep fetching until we have enough available records
+      let collectedRecords: string[] = [];
       let fetchOffset = 0;
       const fetchPageSize = 1000;
       
+      // Keep fetching until we have enough OR we've exhausted all records
       while (collectedRecords.length < recordsToAssign) {
         const { data: batch, error: fetchError } = await supabase
           .from('dataset_records')
@@ -193,18 +198,29 @@ export function useTasks() {
           .order('created_at', { ascending: true })
           .range(fetchOffset, fetchOffset + fetchPageSize - 1);
         
-        if (fetchError || !batch || batch.length === 0) break;
+        if (fetchError) {
+          console.error('Error fetching records batch:', fetchError);
+          break;
+        }
+        
+        if (!batch || batch.length === 0) break;
         
         // Filter out already assigned records
-        const availableBatch = batch.filter(r => !allAssignedIds.includes(r.id));
-        collectedRecords = collectedRecords.concat(availableBatch);
+        for (const record of batch) {
+          if (!assignedIdsSet.has(record.id)) {
+            collectedRecords.push(record.id);
+            // Stop early if we have enough
+            if (collectedRecords.length >= recordsToAssign) break;
+          }
+        }
         
+        // If we got less than page size, we've reached the end
         if (batch.length < fetchPageSize) break;
         fetchOffset += fetchPageSize;
       }
       
-      // Trim to exact count needed and dedupe
-      const uniqueIds = [...new Set(collectedRecords.map(r => r.id))];
+      // Dedupe and trim to exact count needed
+      const uniqueIds = [...new Set(collectedRecords)];
       const recordsToInsert = uniqueIds.slice(0, recordsToAssign).map(id => ({ id }));
 
       if (recordsToInsert.length > 0) {
