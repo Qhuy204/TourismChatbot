@@ -210,10 +210,17 @@ export function TaskAnnotationInterface({
   
   // Audio state
   const [isPlaying, setIsPlaying] = useState(false);
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Visible count for infinite scroll
-  const [visibleCount, setVisibleCount] = useState(100);
+  // Infinite scroll state
+  const initialVisibleCount = useMemo(() => {
+    const fivePercent = Math.ceil(taskRecordIds.length * 0.05);
+    return Math.max(100, Math.min(fivePercent, taskRecordIds.length));
+  }, [taskRecordIds.length]);
+  
+  const [visibleCount, setVisibleCount] = useState(initialVisibleCount);
 
   // Filtered and sorted sidebar items
   const filteredSidebarItems = useMemo(() => {
@@ -242,8 +249,9 @@ export function TaskAnnotationInterface({
 
   // Reset visible count when filters change
   useEffect(() => {
-    setVisibleCount(100);
-  }, [searchQuery, statusFilter, sortAsc]);
+    const fivePercent = Math.ceil(filteredSidebarItems.length * 0.05);
+    setVisibleCount(Math.max(100, fivePercent));
+  }, [searchQuery, statusFilter, sortAsc, filteredSidebarItems.length]);
 
   // Reset index when task changes
   useEffect(() => {
@@ -257,9 +265,11 @@ export function TaskAnnotationInterface({
     const { scrollTop, scrollHeight, clientHeight } = target;
     
     if (scrollTop + clientHeight >= scrollHeight * 0.8) {
-      setVisibleCount(prev => Math.min(prev + 100, filteredSidebarItems.length));
+      const fivePercent = Math.ceil(taskRecordIds.length * 0.05);
+      const increment = Math.max(100, fivePercent);
+      setVisibleCount(prev => Math.min(prev + increment, filteredSidebarItems.length));
     }
-  }, [filteredSidebarItems.length]);
+  }, [filteredSidebarItems.length, taskRecordIds.length]);
 
   // Current record
   const currentRecordId = filteredSidebarItems[currentIndex]?.id;
@@ -360,6 +370,17 @@ export function TaskAnnotationInterface({
       setCurrentIndex(idx);
       setEditedRecord(null);
     }
+  };
+
+  // Audio controls
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
   };
 
   // Get image source
@@ -479,23 +500,31 @@ export function TaskAnnotationInterface({
   const displayRecord = record;
   const selectedTask = tasks.find(t => t.task_id === selectedTaskId);
 
+  // If no display record yet (loading)
+  if (!displayRecord) {
+    return (
+      <div className="h-full flex items-center justify-center bg-muted/30">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Đang tải dữ liệu...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col bg-muted/30">
-      {/* Header */}
+      {/* Header - Clone từ AnnotationInterface */}
       <div className="shrink-0 h-14 px-6 flex items-center justify-between border-b bg-background">
         <div className="flex items-center gap-2 text-sm">
-          <Button variant="ghost" size="sm" onClick={() => setSelectedTaskId(undefined)}>
-            <ChevronLeft className="h-4 w-4 mr-1" />
+          <Button variant="ghost" size="sm" onClick={() => setSelectedTaskId(undefined)} className="gap-1">
+            <ChevronLeft className="h-4 w-4" />
             Tasks
           </Button>
           <span className="text-muted-foreground">•</span>
-          <span className="font-semibold">{selectedTask?.task_name}</span>
-          {displayRecord && (
-            <>
-              <span className="text-muted-foreground">•</span>
-              <span className="text-muted-foreground font-mono">{displayRecord.id}</span>
-            </>
-          )}
+          <span className="font-semibold text-lg">Annotate</span>
+          <span className="text-muted-foreground">•</span>
+          <span className="text-muted-foreground font-mono">{displayRecord.id}</span>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs">
@@ -504,14 +533,14 @@ export function TaskAnnotationInterface({
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Main content with resizable panels - Clone từ AnnotationInterface */}
       <div className="flex-1 min-h-0 flex">
-        {/* Sidebar */}
+        {/* Panel 1: Data Sidebar */}
         <div className="w-72 shrink-0 border-r bg-background flex flex-col">
           <div className="p-4 space-y-3">
             <div>
-              <h3 className="font-semibold">Task Records</h3>
-              <p className="text-xs text-muted-foreground">{taskRecordIds.length} records in this task</p>
+              <h3 className="font-semibold">Data List</h3>
+              <p className="text-xs text-muted-foreground">Select a record to annotate</p>
             </div>
             
             {/* Search */}
@@ -525,214 +554,503 @@ export function TaskAnnotationInterface({
               />
             </div>
 
-            {/* Filters */}
+            {/* Filter & Sort */}
             <div className="flex gap-2">
               <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-                <SelectTrigger className="h-8 text-xs flex-1">
+                <SelectTrigger className="flex-1 text-sm h-9">
                   <Filter className="h-3 w-3 mr-1" />
-                  <SelectValue />
+                  <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="approved">Approved</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>
-                  <SelectItem value="needs_review">Needs Review</SelectItem>
+                  <SelectItem value="needs_review">Need Recheck</SelectItem>
                 </SelectContent>
               </Select>
               <Button 
                 variant="outline" 
-                size="sm" 
-                className="h-8 px-2"
+                size="icon" 
+                className="h-9 w-9 shrink-0"
                 onClick={() => setSortAsc(!sortAsc)}
               >
-                <ArrowUpDown className="h-3 w-3" />
+                <ArrowUpDown className={cn("h-4 w-4", !sortAsc && "rotate-180")} />
               </Button>
             </div>
           </div>
 
-          {/* Records list */}
-          <div className="flex-1 overflow-auto" onScroll={handleScroll}>
-            <div className="space-y-1 p-2">
-              {visibleSidebarItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => selectRecord(item.id)}
-                  className={cn(
-                    "w-full text-left p-2 rounded-lg transition-colors text-sm",
-                    item.id === currentRecordId
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted"
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    {getStatusIcon(item.status)}
-                    <span className="truncate flex-1">{item.landmark_name}</span>
-                  </div>
-                  <p className={cn(
-                    "text-xs truncate mt-0.5",
-                    item.id === currentRecordId ? "text-primary-foreground/70" : "text-muted-foreground"
-                  )}>
-                    {item.record_id}
-                  </p>
-                </button>
-              ))}
-              {visibleSidebarItems.length < filteredSidebarItems.length && (
-                <p className="text-xs text-center text-muted-foreground py-2">
-                  Scroll to load more...
-                </p>
+          {/* Record list with infinite scroll */}
+          <ScrollArea className="flex-1" onScrollCapture={handleScroll}>
+            <div className="p-2 space-y-1">
+              {visibleSidebarItems.length === 0 && filteredSidebarItems.length === 0 ? (
+                <div className="p-4 text-center text-muted-foreground text-sm">
+                  Không tìm thấy kết quả
+                </div>
+              ) : (
+                visibleSidebarItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => selectRecord(item.id)}
+                    className={cn(
+                      "w-full text-left p-3 rounded-lg transition-colors",
+                      item.id === (displayRecord?.db_id || displayRecord?.id)
+                        ? "bg-primary/10 border border-primary/20" 
+                        : "hover:bg-muted/50"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="font-mono text-xs truncate">{item.record_id}</span>
+                      </div>
+                      {getStatusIcon(item.status)}
+                    </div>
+                    <p className="font-medium text-sm mt-1 truncate">{item.landmark_name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {item.landmark_name.toLowerCase().replace(/\s+/g, '_')}
+                    </p>
+                  </button>
+                ))
+              )}
+              {visibleCount < filteredSidebarItems.length && (
+                <div className="p-3 text-center text-muted-foreground text-xs">
+                  Scroll để tải thêm...
+                </div>
               )}
             </div>
+          </ScrollArea>
+
+          {/* Footer */}
+          <div className="p-3 border-t text-xs text-muted-foreground">
+            Showing {Math.min(visibleCount, filteredSidebarItems.length).toLocaleString()} / {filteredSidebarItems.length.toLocaleString()} (total: {taskRecordIds.length.toLocaleString()})
           </div>
         </div>
 
-        {/* Main panel */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {!displayRecord ? (
-            <div className="flex-1 flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : (
-            <ResizablePanelGroup direction="horizontal" className="flex-1">
-              {/* Image panel */}
-              <ResizablePanel defaultSize={40} minSize={30}>
-                <div className="h-full flex flex-col p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium text-sm">Image Preview</span>
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={() => setShowMetadataDialog(true)}>
-                      <Info className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  
-                  <div className="flex-1 bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+        {/* Resizable area for Media Viewer and QA Editor */}
+        <ResizablePanelGroup direction="horizontal" className="flex-1 min-w-0">
+          {/* Panel 2: Media Viewer */}
+          <ResizablePanel defaultSize={40} minSize={30}>
+            <div className="h-full flex flex-col bg-background">
+              {/* Media Header */}
+              <div className="p-4 flex items-start justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold">{displayRecord.metadata?.landmark_name}</h2>
+                  <Badge variant="outline" className="mt-1 bg-blue-50 text-blue-700 border-blue-200">
+                    {displayRecord.metadata?.location?.city}
+                  </Badge>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => setShowMetadataDialog(true)}
+                >
+                  <Info className="h-5 w-5" />
+                </Button>
+              </div>
+
+              {/* Media Content */}
+              <ScrollArea className="flex-1 px-4">
+                <div className="space-y-4 pb-4">
+                  {/* Image */}
+                  <div className="rounded-xl overflow-hidden bg-muted">
                     {getImageSrc(displayRecord) ? (
-                      <img
-                        src={getImageSrc(displayRecord)!}
-                        alt={displayRecord.metadata?.landmark_name || 'Image'}
-                        className="max-w-full max-h-full object-contain"
+                      <img 
+                        src={getImageSrc(displayRecord)!} 
+                        alt={displayRecord.metadata?.landmark_name}
+                        className="w-full h-auto object-cover max-h-80"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/placeholder.svg';
+                        }}
                       />
                     ) : (
-                      <div className="text-muted-foreground text-sm">No image available</div>
+                      <div className="aspect-video flex items-center justify-center">
+                        <ImageIcon className="h-12 w-12 text-muted-foreground" />
+                      </div>
                     )}
                   </div>
-
-                  {displayRecord.metadata && (
-                    <div className="mt-3 p-3 bg-muted/50 rounded-lg">
-                      <div className="flex items-center gap-2 text-sm">
-                        <MapPin className="h-4 w-4 text-primary" />
-                        <span className="font-medium">{displayRecord.metadata.landmark_name}</span>
-                      </div>
-                      {displayRecord.metadata.location?.city && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {displayRecord.metadata.location.city}
-                        </p>
-                      )}
-                    </div>
+                  
+                  {displayRecord.metadata?.image_spec?.original_url && (
+                    <a 
+                      href={displayRecord.metadata.image_spec.original_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      View Source Image
+                    </a>
                   )}
-                </div>
-              </ResizablePanel>
 
-              <ResizableHandle withHandle />
-
-              {/* QA panel */}
-              <ResizablePanel defaultSize={60} minSize={40}>
-                <div className="h-full flex flex-col">
-                  <div className="flex items-center justify-between p-4 border-b">
+                  {/* Audio Evidence */}
+                  <div className="rounded-xl border p-4 space-y-3">
                     <div className="flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium text-sm">Q&A Pairs</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {displayRecord.qa_pairs?.length || 0}
-                      </Badge>
+                      <Mic className="h-4 w-4 text-primary" />
+                      <span className="text-xs font-semibold uppercase tracking-wider">Audio Evidence</span>
                     </div>
-                  </div>
 
-                  <ScrollArea className="flex-1 p-4">
-                    <div className="space-y-4">
-                      {displayRecord.qa_pairs?.map((qa, idx) => (
-                        <div key={idx} className="border rounded-lg p-4 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <Badge variant="outline" className={cn("text-xs", getTypeBadgeClass(qa.type))}>
-                              {qa.type}
+                    <div className="flex items-center gap-3">
+                      <Button
+                        size="icon"
+                        className="h-10 w-10 rounded-full bg-primary hover:bg-primary/90"
+                        onClick={togglePlay}
+                        disabled={!displayRecord.paths?.audio_evidence}
+                      >
+                        {isPlaying ? (
+                          <Pause className="h-5 w-5" />
+                        ) : (
+                          <Play className="h-5 w-5 ml-0.5" />
+                        )}
+                      </Button>
+                      <div className="flex-1 space-y-1">
+                        <p className="text-sm font-medium truncate">
+                          {displayRecord.paths?.audio_evidence?.split('/').pop() || 'No audio'}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1 bg-muted rounded-full">
+                            <div 
+                              className="h-full bg-primary rounded-full transition-all"
+                              style={{ width: `${audioProgress}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            00:00 / 03:00
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Transcript */}
+                    {displayRecord.metadata?.audio_spec?.transcript && (
+                      <div className="bg-blue-50/50 rounded-lg p-3">
+                        <p className="text-sm text-muted-foreground leading-relaxed line-clamp-6">
+                          {displayRecord.metadata.audio_spec.transcript}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ScrollArea>
+
+              {/* Action Bar */}
+              <div className="shrink-0 p-4 border-t flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={goPrev}
+                    disabled={currentIndex === 0}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={handleReset} className="text-muted-foreground">
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                    Reset
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="border-chart-4 text-chart-4 hover:bg-chart-4/10"
+                    onClick={handleNeedsRecheck}
+                  >
+                    <AlertTriangle className="h-4 w-4 mr-1" />
+                    Need Recheck
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="border-destructive text-destructive hover:bg-destructive/10"
+                    onClick={handleReject}
+                  >
+                    <XCircle className="h-4 w-4 mr-1" />
+                    Reject
+                  </Button>
+                  <Button 
+                    className="bg-primary hover:bg-primary/90"
+                    onClick={handleApprove}
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                    Approve
+                  </Button>
+                </div>
+
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={goNext}
+                  disabled={currentIndex === filteredSidebarItems.length - 1}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          {/* Panel 3: QA Editor */}
+          <ResizablePanel defaultSize={60} minSize={40}>
+            <div className="h-full flex flex-col bg-background">
+              <div className="p-4 flex items-center justify-between border-b">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold">QA Pairs</h3>
+                  <Badge variant="outline">{displayRecord.qa_pairs?.length || 0} samples</Badge>
+                </div>
+              </div>
+
+              <ScrollArea className="flex-1">
+                <div className="p-4 space-y-4">
+                  {displayRecord.qa_pairs?.map((qa, qaIndex) => (
+                    <div key={qaIndex} className="flex gap-3">
+                      {/* Index */}
+                      <div className="shrink-0 w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
+                        {qaIndex + 1}
+                      </div>
+
+                      {/* Card */}
+                      <div className="flex-1 rounded-lg border p-4 space-y-4">
+                        {/* Header */}
+                        <div className="flex items-center justify-between gap-2">
+                          <Select
+                            value={qa.type}
+                            onValueChange={(v) => handleFieldChange(`qa_pairs[${qaIndex}].type`, v)}
+                          >
+                            <SelectTrigger className={cn("w-28 h-7 text-xs font-medium", getTypeBadgeClass(qa.type))}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ask_image">ASK IMAGE</SelectItem>
+                              <SelectItem value="ask_audio">ASK AUDIO</SelectItem>
+                              <SelectItem value="ask_both">ASK BOTH</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <span className="text-xs text-muted-foreground truncate">
+                            {qa.paths?.question_audio?.split('/').pop()}
+                          </span>
+                        </div>
+
+                        {/* Question */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <MessageSquare className="h-4 w-4 text-blue-500" />
+                            <Textarea
+                              value={qa.q || ''}
+                              onChange={(e) => handleFieldChange(`qa_pairs[${qaIndex}].q`, e.target.value)}
+                              className="flex-1 min-h-[60px] text-sm resize-none"
+                              placeholder="Nhập câu hỏi..."
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 ml-6">
+                            <Badge variant="outline" className="bg-primary/10 text-primary text-xs">
+                              {qa.audio_meta?.q_voice?.id || 'vi-VN-HoaiMyNeural'}
                             </Badge>
-                            <span className="text-xs text-muted-foreground">#{idx + 1}</span>
-                          </div>
-                          
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Question</Label>
-                            <Textarea
-                              value={qa.q}
-                              onChange={(e) => handleFieldChange(`qa_pairs[${idx}].q`, e.target.value)}
-                              className="mt-1 text-sm min-h-[60px]"
-                            />
-                          </div>
-                          
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Answer</Label>
-                            <Textarea
-                              value={qa.a}
-                              onChange={(e) => handleFieldChange(`qa_pairs[${idx}].a`, e.target.value)}
-                              className="mt-1 text-sm min-h-[80px]"
-                            />
+                            {qa.audio_meta?.q_voice?.rate && (
+                              <Badge variant="outline" className="text-xs">
+                                🎵 {qa.audio_meta.q_voice.rate}
+                              </Badge>
+                            )}
+                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                              <Play className="h-3 w-3" />
+                            </Button>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
 
-                  {/* Action buttons */}
-                  <div className="p-4 border-t bg-background">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={goPrev} disabled={currentIndex === 0}>
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={goNext} disabled={currentIndex >= filteredSidebarItems.length - 1}>
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={handleReset}>
-                          <RotateCcw className="h-4 w-4 mr-1" />
-                          Reset
-                        </Button>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={handleNeedsRecheck} className="text-chart-4 border-chart-4">
-                          <AlertTriangle className="h-4 w-4 mr-1" />
-                          Needs Review
-                        </Button>
-                        <Button variant="destructive" size="sm" onClick={handleReject}>
-                          <XCircle className="h-4 w-4 mr-1" />
-                          Reject
-                        </Button>
-                        <Button size="sm" onClick={handleApprove}>
-                          <Check className="h-4 w-4 mr-1" />
-                          Approve
-                        </Button>
+                        {/* Answer */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Check className="h-4 w-4 text-primary" />
+                            <Textarea
+                              value={qa.a || ''}
+                              onChange={(e) => handleFieldChange(`qa_pairs[${qaIndex}].a`, e.target.value)}
+                              className="flex-1 min-h-[80px] text-sm resize-none"
+                              placeholder="Nhập câu trả lời..."
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 ml-6">
+                            <Badge variant="outline" className="bg-primary/10 text-primary text-xs">
+                              {qa.audio_meta?.a_voice?.id || 'vi-VN-HoaiMyNeural'}
+                            </Badge>
+                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                              <Play className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          )}
-        </div>
+              </ScrollArea>
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
 
-      {/* Metadata dialog */}
+      {/* Metadata Dialog - wider - Clone từ AnnotationInterface */}
       <Dialog open={showMetadataDialog} onOpenChange={setShowMetadataDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Record Metadata</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              Edit Metadata
+              <span className="text-muted-foreground font-normal text-sm">
+                {displayRecord.id} • {displayRecord.metadata?.landmark_name}
+              </span>
+            </DialogTitle>
           </DialogHeader>
-          <pre className="text-xs bg-muted p-4 rounded-lg overflow-auto max-h-96">
-            {JSON.stringify(displayRecord?.metadata, null, 2)}
-          </pre>
+
+          <div className="grid grid-cols-2 gap-6 mt-4">
+            {/* Location Details */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-primary">
+                <MapPin className="h-4 w-4" />
+                <span className="font-semibold">Location Details</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase text-muted-foreground">City</Label>
+                  <Input
+                    value={displayRecord.metadata?.location?.city || ''}
+                    onChange={(e) => handleFieldChange('metadata.location.city', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase text-muted-foreground">District</Label>
+                  <Input
+                    value={displayRecord.metadata?.location?.district || ''}
+                    onChange={(e) => handleFieldChange('metadata.location.district', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase text-muted-foreground">Latitude</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={displayRecord.metadata?.location?.gps?.lat || ''}
+                    onChange={(e) => handleFieldChange('metadata.location.gps.lat', parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase text-muted-foreground">Longitude (LON)</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={displayRecord.metadata?.location?.gps?.lon || ''}
+                    onChange={(e) => handleFieldChange('metadata.location.gps.lon', parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Image Specification */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-purple-600">
+                <ImageIcon className="h-4 w-4" />
+                <span className="font-semibold">Image Specification</span>
+              </div>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase text-muted-foreground">Original URL</Label>
+                  <Input
+                    value={displayRecord.metadata?.image_spec?.original_url || ''}
+                    onChange={(e) => handleFieldChange('metadata.image_spec.original_url', e.target.value)}
+                    className="bg-purple-50 border-purple-200"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase text-muted-foreground">Source</Label>
+                    <Input
+                      value={displayRecord.metadata?.image_spec?.source || ''}
+                      onChange={(e) => handleFieldChange('metadata.image_spec.source', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase text-muted-foreground">License</Label>
+                    <Input
+                      value={displayRecord.metadata?.image_spec?.license || ''}
+                      onChange={(e) => handleFieldChange('metadata.image_spec.license', e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase text-muted-foreground">Description</Label>
+                  <Input
+                    value={displayRecord.metadata?.image_spec?.description || ''}
+                    onChange={(e) => handleFieldChange('metadata.image_spec.description', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase text-muted-foreground">Match Info</Label>
+                  <Input
+                    value={displayRecord.metadata?.image_spec?.match_info || ''}
+                    onChange={(e) => handleFieldChange('metadata.image_spec.match_info', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Audio Specification - Full width */}
+            <div className="col-span-2 space-y-4">
+              <div className="flex items-center gap-2 text-primary">
+                <Volume2 className="h-4 w-4" />
+                <span className="font-semibold">Audio Specification</span>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-2 space-y-1.5">
+                  <Label className="text-xs uppercase text-muted-foreground">Transcript</Label>
+                  <Textarea
+                    value={displayRecord.metadata?.audio_spec?.transcript || ''}
+                    onChange={(e) => handleFieldChange('metadata.audio_spec.transcript', e.target.value)}
+                    rows={4}
+                    className="resize-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase text-muted-foreground">Voice ID</Label>
+                  <Input
+                    value={displayRecord.metadata?.audio_spec?.voice_id || ''}
+                    onChange={(e) => handleFieldChange('metadata.audio_spec.voice_id', e.target.value)}
+                  />
+                  <p className="text-xs text-orange-600 mt-2">
+                    <strong>Note:</strong> Changing the Voice ID affects generation parameters for future synthesis.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="outline" onClick={() => setShowMetadataDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              if (editedRecord) {
+                onRecordUpdate(editedRecord);
+              }
+              setShowMetadataDialog(false);
+              toast.success('Đã lưu thay đổi metadata');
+            }}>
+              Save Changes
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
+
+      {/* Hidden audio element */}
+      {displayRecord.paths?.audio_evidence && (
+        <audio 
+          ref={audioRef}
+          src={displayRecord.paths.audio_evidence}
+          onEnded={() => setIsPlaying(false)}
+          onTimeUpdate={(e) => {
+            const audio = e.target as HTMLAudioElement;
+            setAudioProgress((audio.currentTime / audio.duration) * 100);
+          }}
+          onLoadedMetadata={(e) => {
+            setAudioDuration((e.target as HTMLAudioElement).duration);
+          }}
+        />
+      )}
     </div>
   );
 }
