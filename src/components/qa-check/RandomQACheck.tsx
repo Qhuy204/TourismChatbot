@@ -1,8 +1,7 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
@@ -13,14 +12,14 @@ import {
   AlertTriangle,
   RefreshCw,
   BarChart3,
+  Loader2,
 } from 'lucide-react';
-import { DatasetRecord } from '@/types/dataset';
+import { AnnotationTask } from '@/types/dataset';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface RandomQACheckProps {
-  records: DatasetRecord[];
-  totalCount?: number;
-  onRecordUpdate: (record: DatasetRecord) => void;
+  tasks: AnnotationTask[];
   onStartAnnotation?: (recordIds: string[]) => void;
 }
 
@@ -32,35 +31,93 @@ interface QACheckResult {
   checkedAt: string;
 }
 
-export function RandomQACheck({ records, totalCount, onRecordUpdate, onStartAnnotation }: RandomQACheckProps) {
-  const [sampledRecords, setSampledRecords] = useState<DatasetRecord[]>([]);
+interface SampledRecord {
+  id: string;
+  image_id: string;
+  status: string;
+  task_name: string;
+}
+
+export function RandomQACheck({ tasks, onStartAnnotation }: RandomQACheckProps) {
+  const [sampledRecords, setSampledRecords] = useState<SampledRecord[]>([]);
   const [checkResults, setCheckResults] = useState<QACheckResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [totalTaskRecords, setTotalTaskRecords] = useState(0);
 
-  const actualTotal = totalCount || records.length;
-  const sampleSize = Math.ceil(actualTotal * 0.1);
+  // Calculate total records from all tasks
+  useEffect(() => {
+    const total = tasks.reduce((sum, task) => sum + (task.progress?.total || 0), 0);
+    setTotalTaskRecords(total);
+  }, [tasks]);
 
-  const generateSample = useCallback(() => {
-    const shuffled = [...records].sort(() => Math.random() - 0.5);
-    const sample = shuffled.slice(0, sampleSize);
-    setSampledRecords(sample);
-    setCheckResults([]);
-    toast.success(`Đã lấy mẫu ${sample.length} records (10%)`);
-  }, [records, sampleSize]);
+  const sampleSize = Math.ceil(totalTaskRecords * 0.1);
 
-  const startCheck = () => {
+  const generateSample = useCallback(async () => {
+    if (tasks.length === 0) {
+      toast.error('Bạn chưa có task nào được giao');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Get all task IDs
+      const taskIds = tasks.map(t => t.task_id);
+      
+      // Fetch all anno_task_details for user's tasks
+      let allDetails: { id: string; image_id: string; status: string; task_id: string }[] = [];
+      let offset = 0;
+      const pageSize = 1000;
+      
+      while (true) {
+        const { data: batch, error } = await supabase
+          .from('anno_task_details')
+          .select('id, image_id, status, task_id')
+          .in('task_id', taskIds)
+          .range(offset, offset + pageSize - 1);
+        
+        if (error) {
+          console.error('Error fetching task details:', error);
+          break;
+        }
+        
+        if (!batch || batch.length === 0) break;
+        allDetails = allDetails.concat(batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+      }
+
+      // Map task_id to task_name
+      const taskNameMap = new Map(tasks.map(t => [t.task_id, t.task_name]));
+
+      // Shuffle and sample 10%
+      const shuffled = [...allDetails].sort(() => Math.random() - 0.5);
+      const sampleCount = Math.ceil(allDetails.length * 0.1);
+      const sample = shuffled.slice(0, sampleCount).map(d => ({
+        id: d.id,
+        image_id: d.image_id,
+        status: d.status,
+        task_name: taskNameMap.get(d.task_id) || 'Unknown',
+      }));
+
+      setSampledRecords(sample);
+      setCheckResults([]);
+      toast.success(`Đã lấy mẫu ${sample.length} records (10% từ ${allDetails.length} records trong My Tasks)`);
+    } catch (error) {
+      console.error('Error generating sample:', error);
+      toast.error('Lỗi khi lấy mẫu');
+    } finally {
+      setLoading(false);
+    }
+  }, [tasks]);
+
+  const startCheck = async () => {
     if (sampledRecords.length === 0) {
-      generateSample();
+      await generateSample();
     }
     
-    // Navigate to Annotate with the sampled records
+    // Navigate to task-annotate with the sampled image IDs
     if (onStartAnnotation && sampledRecords.length > 0) {
-      onStartAnnotation(sampledRecords.map(r => r.id));
-    } else if (onStartAnnotation && records.length > 0) {
-      // Generate sample first then navigate
-      const shuffled = [...records].sort(() => Math.random() - 0.5);
-      const sample = shuffled.slice(0, sampleSize);
-      setSampledRecords(sample);
-      onStartAnnotation(sample.map(r => r.id));
+      onStartAnnotation(sampledRecords.map(r => r.image_id));
     }
   };
 
@@ -88,9 +145,9 @@ export function RandomQACheck({ records, totalCount, onRecordUpdate, onStartAnno
         <Card>
           <CardContent className="p-6 text-center">
             <BarChart3 className="h-12 w-12 mx-auto text-chart-1 mb-4" />
-            <h3 className="text-lg font-semibold">Total Dataset</h3>
-            <p className="text-3xl font-bold text-chart-1 mt-2">{actualTotal.toLocaleString()}</p>
-            <p className="text-sm text-muted-foreground">total records</p>
+            <h3 className="text-lg font-semibold">Total trong My Tasks</h3>
+            <p className="text-3xl font-bold text-chart-1 mt-2">{totalTaskRecords.toLocaleString()}</p>
+            <p className="text-sm text-muted-foreground">records từ {tasks.length} tasks</p>
           </CardContent>
         </Card>
 
@@ -124,21 +181,21 @@ export function RandomQACheck({ records, totalCount, onRecordUpdate, onStartAnno
           </Alert>
 
           <div className="flex gap-4">
-            <Button onClick={generateSample} variant="outline">
-              <RefreshCw className="h-4 w-4 mr-2" />
+            <Button onClick={generateSample} variant="outline" disabled={loading || tasks.length === 0}>
+              {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
               Lấy mẫu mới
             </Button>
-            <Button onClick={startCheck} className="flex-1" disabled={records.length === 0}>
+            <Button onClick={startCheck} className="flex-1" disabled={tasks.length === 0 || loading}>
               <Play className="h-4 w-4 mr-2" />
               Bắt đầu kiểm tra ({sampledRecords.length || sampleSize} records)
             </Button>
           </div>
 
-          {records.length === 0 && (
+          {tasks.length === 0 && (
             <Alert>
               <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Chưa có data</AlertTitle>
-              <AlertDescription>Vui lòng import data trước khi chạy QA Check.</AlertDescription>
+              <AlertTitle>Chưa có task</AlertTitle>
+              <AlertDescription>Bạn chưa được giao task nào. Vui lòng liên hệ Admin để được giao việc.</AlertDescription>
             </Alert>
           )}
 
@@ -148,7 +205,7 @@ export function RandomQACheck({ records, totalCount, onRecordUpdate, onStartAnno
               <div className="flex flex-wrap gap-2">
                 {sampledRecords.slice(0, 10).map(r => (
                   <Badge key={r.id} variant="outline" className="text-xs">
-                    {r.metadata.landmark_name}
+                    {r.task_name}
                   </Badge>
                 ))}
                 {sampledRecords.length > 10 && (
