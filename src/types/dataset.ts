@@ -77,6 +77,14 @@ export interface DatasetRecord {
   import_version?: number;
   import_batch_id?: string;
   imported_at?: string;
+  // Edit tracking
+  updated_at?: string;
+  updated_by?: string;
+  edit_count?: number;
+  // Soft delete
+  is_deleted?: boolean;
+  deleted_at?: string;
+  deleted_by?: string;
 }
 
 export interface DatasetStats {

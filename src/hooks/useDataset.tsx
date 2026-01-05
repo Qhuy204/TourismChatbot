@@ -48,10 +48,11 @@ export function useDataset() {
 
     setLoading(true);
     try {
-      // Get total count first
+      // Get total count first (excluding soft-deleted)
       const { count: total, error: countError } = await supabase
         .from('dataset_records')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('is_deleted', false);
 
       if (countError) {
         console.error('Error getting count:', countError);
@@ -62,12 +63,12 @@ export function useDataset() {
       setTotalCount(totalRecords);
       globalTotalCount = totalRecords;
 
-      // Get counts by status for accurate stats
+      // Get counts by status for accurate stats (excluding soft-deleted)
       const [pendingRes, approvedRes, rejectedRes, needsReviewRes] = await Promise.all([
-        supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
-        supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'rejected'),
-        supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'needs_review'),
+        supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('is_deleted', false),
+        supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('is_deleted', false),
+        supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'rejected').eq('is_deleted', false),
+        supabase.from('dataset_records').select('*', { count: 'exact', head: true }).eq('status', 'needs_review').eq('is_deleted', false),
       ]);
 
       const stats: DatasetStats = {
@@ -81,11 +82,12 @@ export function useDataset() {
       setStatsFromDB(stats);
       globalStatsCache = stats;
 
-      // Fetch initial batch (5% of total or minimum 100)
+      // Fetch initial batch (5% of total or minimum 100) - excluding soft-deleted
       const batchSize = getBatchSize(totalRecords);
       const { data, error } = await supabase
         .from('dataset_records')
         .select('*')
+        .eq('is_deleted', false)
         .order('created_at', { ascending: false })
         .range(0, batchSize - 1);
 
@@ -102,6 +104,9 @@ export function useDataset() {
         import_version: row.import_version,
         import_batch_id: row.import_batch_id,
         imported_at: row.imported_at,
+        updated_at: row.updated_at,
+        updated_by: row.updated_by,
+        edit_count: row.edit_count,
       }));
 
       setRecords(mapped);
@@ -125,6 +130,7 @@ export function useDataset() {
       const { data, error } = await supabase
         .from('dataset_records')
         .select('*')
+        .eq('is_deleted', false)
         .order('created_at', { ascending: false })
         .range(loadedCount, loadedCount + batchSize - 1);
 
@@ -140,6 +146,9 @@ export function useDataset() {
         import_version: row.import_version,
         import_batch_id: row.import_batch_id,
         imported_at: row.imported_at,
+        updated_at: row.updated_at,
+        updated_by: row.updated_by,
+        edit_count: row.edit_count,
       }));
 
       if (mapped.length > 0) {
@@ -323,6 +332,7 @@ export function useDataset() {
     }
   }, [user]);
 
+  // Soft delete records (mark as deleted instead of removing)
   const deleteRecords = useCallback(async (recordIds: string[]) => {
     if (!user || !isAdmin) {
       toast.error('Bạn không có quyền xóa dữ liệu');
@@ -332,7 +342,11 @@ export function useDataset() {
     try {
       const { error } = await supabase
         .from('dataset_records')
-        .delete()
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+          deleted_by: user.id,
+        })
         .in('record_id', recordIds);
 
       if (error) {
@@ -348,7 +362,7 @@ export function useDataset() {
       });
       setTotalCount(prev => prev - recordIds.length);
       globalTotalCount = (globalTotalCount || 0) - recordIds.length;
-      toast.success(`Đã xóa ${recordIds.length} records`);
+      toast.success(`Đã chuyển ${recordIds.length} records vào thùng rác`);
       return true;
     } catch (error) {
       console.error('Error deleting records:', error);
@@ -356,7 +370,7 @@ export function useDataset() {
     }
   }, [user, isAdmin]);
 
-  // Delete by version
+  // Soft delete by version
   const deleteByVersion = useCallback(async (version: number) => {
     if (!user || !isAdmin) {
       toast.error('Bạn không có quyền xóa dữ liệu');
@@ -366,8 +380,13 @@ export function useDataset() {
     try {
       const { error } = await supabase
         .from('dataset_records')
-        .delete()
-        .eq('import_version', version);
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+          deleted_by: user.id,
+        })
+        .eq('import_version', version)
+        .eq('is_deleted', false);
 
       if (error) {
         console.error('Error deleting by version:', error);
@@ -380,7 +399,7 @@ export function useDataset() {
       lastFetchTime = null;
       await fetchInitialRecords(true);
       
-      toast.success(`Đã xóa tất cả records của Version ${version}`);
+      toast.success(`Đã chuyển tất cả records của Version ${version} vào thùng rác`);
       return true;
     } catch (error) {
       console.error('Error deleting by version:', error);
@@ -388,7 +407,7 @@ export function useDataset() {
     }
   }, [user, isAdmin, fetchInitialRecords]);
 
-  // Delete by status
+  // Soft delete by status
   const deleteByStatus = useCallback(async (status: string) => {
     if (!user || !isAdmin) {
       toast.error('Bạn không có quyền xóa dữ liệu');
@@ -398,8 +417,13 @@ export function useDataset() {
     try {
       const { error } = await supabase
         .from('dataset_records')
-        .delete()
-        .eq('status', status);
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+          deleted_by: user.id,
+        })
+        .eq('status', status)
+        .eq('is_deleted', false);
 
       if (error) {
         console.error('Error deleting by status:', error);
@@ -412,7 +436,7 @@ export function useDataset() {
       lastFetchTime = null;
       await fetchInitialRecords(true);
       
-      toast.success(`Đã xóa tất cả records có trạng thái "${status}"`);
+      toast.success(`Đã chuyển tất cả records có trạng thái "${status}" vào thùng rác`);
       return true;
     } catch (error) {
       console.error('Error deleting by status:', error);
@@ -420,7 +444,7 @@ export function useDataset() {
     }
   }, [user, isAdmin, fetchInitialRecords]);
 
-  // Delete by date range
+  // Soft delete by date range
   const deleteByDateRange = useCallback(async (startDate: string, endDate: string) => {
     if (!user || !isAdmin) {
       toast.error('Bạn không có quyền xóa dữ liệu');
@@ -430,9 +454,14 @@ export function useDataset() {
     try {
       const { error } = await supabase
         .from('dataset_records')
-        .delete()
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+          deleted_by: user.id,
+        })
         .gte('imported_at', startDate)
-        .lte('imported_at', endDate);
+        .lte('imported_at', endDate)
+        .eq('is_deleted', false);
 
       if (error) {
         console.error('Error deleting by date:', error);
@@ -445,7 +474,7 @@ export function useDataset() {
       lastFetchTime = null;
       await fetchInitialRecords(true);
       
-      toast.success(`Đã xóa records từ ${startDate} đến ${endDate}`);
+      toast.success(`Đã chuyển records từ ${startDate} đến ${endDate} vào thùng rác`);
       return true;
     } catch (error) {
       console.error('Error deleting by date:', error);
@@ -453,7 +482,7 @@ export function useDataset() {
     }
   }, [user, isAdmin, fetchInitialRecords]);
 
-  // Delete all records
+  // Soft delete all records
   const deleteAllRecords = useCallback(async () => {
     if (!user || !isAdmin) {
       toast.error('Bạn không có quyền xóa dữ liệu');
@@ -461,11 +490,15 @@ export function useDataset() {
     }
 
     try {
-      // Delete in batches to avoid timeout
+      // Soft delete all records
       const { error } = await supabase
         .from('dataset_records')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+        .update({
+          is_deleted: true,
+          deleted_at: new Date().toISOString(),
+          deleted_by: user.id,
+        })
+        .eq('is_deleted', false);
 
       if (error) {
         console.error('Error deleting all records:', error);
@@ -478,7 +511,7 @@ export function useDataset() {
       globalRecordsCache = [];
       globalTotalCount = 0;
       
-      toast.success('Đã xóa toàn bộ dataset');
+      toast.success('Đã chuyển toàn bộ dataset vào thùng rác');
       return true;
     } catch (error) {
       console.error('Error deleting all records:', error);
@@ -553,6 +586,7 @@ export function useDataset() {
         const { data, error } = await supabase
           .from('dataset_records')
           .select('*')
+          .eq('is_deleted', false)
           .order('created_at', { ascending: false })
           .range(offset, offset + BATCH_SIZE - 1);
 
@@ -568,6 +602,9 @@ export function useDataset() {
           import_version: row.import_version,
           import_batch_id: row.import_batch_id,
           imported_at: row.imported_at,
+          updated_at: row.updated_at,
+          updated_by: row.updated_by,
+          edit_count: row.edit_count,
         }));
 
         if (mapped.length === 0) break;

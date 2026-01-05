@@ -166,37 +166,52 @@ export type Database = {
           created_at: string
           created_by: string | null
           data: Json
+          deleted_at: string | null
+          deleted_by: string | null
+          edit_count: number
           id: string
           import_batch_id: string | null
           import_version: number | null
           imported_at: string | null
+          is_deleted: boolean
           record_id: string
           status: string
           updated_at: string
+          updated_by: string | null
         }
         Insert: {
           created_at?: string
           created_by?: string | null
           data: Json
+          deleted_at?: string | null
+          deleted_by?: string | null
+          edit_count?: number
           id?: string
           import_batch_id?: string | null
           import_version?: number | null
           imported_at?: string | null
+          is_deleted?: boolean
           record_id: string
           status?: string
           updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           created_at?: string
           created_by?: string | null
           data?: Json
+          deleted_at?: string | null
+          deleted_by?: string | null
+          edit_count?: number
           id?: string
           import_batch_id?: string | null
           import_version?: number | null
           imported_at?: string | null
+          is_deleted?: boolean
           record_id?: string
           status?: string
           updated_at?: string
+          updated_by?: string | null
         }
         Relationships: []
       }
@@ -230,6 +245,39 @@ export type Database = {
           qa_checks_count?: number | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      system_usage: {
+        Row: {
+          created_at: string
+          current_value: number
+          id: string
+          last_checked_at: string
+          max_limit: number
+          updated_at: string
+          usage_type: string
+          warning_threshold: number
+        }
+        Insert: {
+          created_at?: string
+          current_value?: number
+          id?: string
+          last_checked_at?: string
+          max_limit?: number
+          updated_at?: string
+          usage_type: string
+          warning_threshold?: number
+        }
+        Update: {
+          created_at?: string
+          current_value?: number
+          id?: string
+          last_checked_at?: string
+          max_limit?: number
+          updated_at?: string
+          usage_type?: string
+          warning_threshold?: number
         }
         Relationships: []
       }
