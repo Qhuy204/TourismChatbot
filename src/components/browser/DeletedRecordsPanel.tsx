@@ -22,9 +22,10 @@ interface DeletedRecord {
 
 interface DeletedRecordsPanelProps {
   onRestoreComplete?: () => void;
+  onRefreshVersions?: () => void;
 }
 
-export function DeletedRecordsPanel({ onRestoreComplete }: DeletedRecordsPanelProps) {
+export function DeletedRecordsPanel({ onRestoreComplete, onRefreshVersions }: DeletedRecordsPanelProps) {
   const [deletedRecords, setDeletedRecords] = useState<DeletedRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -100,6 +101,7 @@ export function DeletedRecordsPanel({ onRestoreComplete }: DeletedRecordsPanelPr
       setSelectedIds(new Set());
       await fetchDeletedRecords();
       onRestoreComplete?.();
+      onRefreshVersions?.();
     } catch (error) {
       console.error('Error:', error);
       toast.error('Lỗi khi khôi phục');

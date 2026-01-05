@@ -190,6 +190,7 @@ const Index = () => {
             onDeleteByStatus={deleteByStatus}
             onDeleteByDateRange={deleteByDateRange}
             onDeleteAll={deleteAllRecords}
+            onRefreshData={refetch}
           />
         );
       case 'annotate':
