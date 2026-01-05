@@ -142,6 +142,7 @@ const Index = () => {
   }, [deleteTask]);
 
   const renderContent = () => {
+    // Only render active view - others are unmounted to save resources
     switch (currentView) {
       case 'dashboard':
         return isAdmin ? (
@@ -166,9 +167,9 @@ const Index = () => {
           />
         );
       case 'task-annotate':
-        // Task-based annotation - use dedicated TaskAnnotationInterface
         return (
           <TaskAnnotationInterface 
+            key="task-annotate"
             tasks={isAdmin ? tasks || [] : userTasks}
             onRecordUpdate={handleRecordUpdate}
             initialTaskId={selectedTaskId}
@@ -178,6 +179,7 @@ const Index = () => {
       case 'browser':
         return (
           <DataBrowser 
+            key="browser"
             records={records} 
             totalCount={totalCount}
             loadedCount={loadedCount}
@@ -196,6 +198,7 @@ const Index = () => {
       case 'annotate':
         return (
           <AnnotationInterface 
+            key="annotate"
             records={records} 
             totalCount={totalCount}
             loadedCount={loadedCount}
@@ -208,6 +211,7 @@ const Index = () => {
       case 'random-check':
         return (
           <RandomQACheck 
+            key="random-check"
             records={records} 
             totalCount={totalCount}
             onRecordUpdate={handleRecordUpdate}
@@ -217,29 +221,28 @@ const Index = () => {
       case 'qa-check-interface':
         return (
           <QACheckInterface
+            key="qa-check-interface"
             recordIds={qaCheckRecordIds}
             onRecordUpdate={handleRecordUpdate}
             onBack={() => setCurrentView('random-check')}
           />
         );
       case 'import':
-        // Only admin can import
         return isAdmin ? (
-          <ImportInterface onAddRecords={handleAddRecords} />
+          <ImportInterface key="import" onAddRecords={handleAddRecords} />
         ) : (
           <AccessDenied />
         );
       case 'crawl':
-        // Only admin can crawl
         return isAdmin ? (
-          <CrawlInterface onAddRecords={handleAddRecords} />
+          <CrawlInterface key="crawl" onAddRecords={handleAddRecords} />
         ) : (
           <AccessDenied />
         );
       case 'export':
-        return <ExportInterface records={records} stats={stats} />;
+        return <ExportInterface key="export" records={records} stats={stats} />;
       case 'settings':
-        return <SettingsInterface />;
+        return <SettingsInterface key="settings" />;
       default:
         return isAdmin ? (
           <AdminDashboard 
