@@ -44,6 +44,7 @@ interface DataBrowserProps {
   onDeleteByStatus?: (status: string) => Promise<boolean>;
   onDeleteByDateRange?: (startDate: string, endDate: string) => Promise<boolean>;
   onDeleteAll?: () => Promise<boolean>;
+  onRefreshData?: () => void;
 }
 
 const ITEMS_PER_PAGE = 1000;
@@ -51,7 +52,7 @@ const ITEMS_PER_PAGE = 1000;
 type SortBy = "id" | "created" | "status" | "name" | "updated" | "edit_count";
 type SortOrder = "asc" | "desc";
 
-export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onLoadAll, onRecordUpdate, onRecordsUpdate, onNavigateToAnnotate, onDeleteByVersion, onDeleteByStatus, onDeleteByDateRange, onDeleteAll }: DataBrowserProps) {
+export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onLoadAll, onRecordUpdate, onRecordsUpdate, onNavigateToAnnotate, onDeleteByVersion, onDeleteByStatus, onDeleteByDateRange, onDeleteAll, onRefreshData }: DataBrowserProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -481,7 +482,10 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onLo
         </TabsContent>
 
         <TabsContent value="trash" className="flex-1 min-h-0 mt-4">
-          <DeletedRecordsPanel />
+          <DeletedRecordsPanel 
+            onRestoreComplete={onRefreshData}
+            onRefreshVersions={onRefreshData}
+          />
         </TabsContent>
 
         <TabsContent value="actions" className="mt-4">

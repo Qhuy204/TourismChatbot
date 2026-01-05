@@ -388,11 +388,14 @@ export function AnnotationInterface({
 
   const handleNeedsRecheck = async () => {
     const toUpdate = editedRecord || record;
+    if (!toUpdate) return;
+    
     const dbId = toUpdate?.db_id;
     if (dbId) {
       await syncTaskDetailStatus(dbId, 'needs_review');
     }
-    onRecordUpdate({ ...toUpdate, status: 'needs_review', reviewedAt: new Date().toISOString() });
+    const finalRecord = { ...toUpdate, status: 'needs_review' as const, reviewedAt: new Date().toISOString() };
+    onRecordUpdate(finalRecord);
     toast.warning('Đã đánh dấu cần kiểm tra lại');
     setEditedRecord(null);
     goNext();
@@ -400,11 +403,14 @@ export function AnnotationInterface({
 
   const handleReject = async () => {
     const toUpdate = editedRecord || record;
+    if (!toUpdate) return;
+    
     const dbId = toUpdate?.db_id;
     if (dbId) {
       await syncTaskDetailStatus(dbId, 'rejected');
     }
-    onRecordUpdate({ ...toUpdate, status: 'rejected', reviewedAt: new Date().toISOString() });
+    const finalRecord = { ...toUpdate, status: 'rejected' as const, reviewedAt: new Date().toISOString() };
+    onRecordUpdate(finalRecord);
     toast.error('Đã từ chối record');
     setEditedRecord(null);
     goNext();
@@ -412,12 +418,16 @@ export function AnnotationInterface({
 
   const handleApprove = async () => {
     const toUpdate = editedRecord || record;
+    if (!toUpdate) return;
+    
     const dbId = toUpdate?.db_id;
     if (dbId) {
       await syncTaskDetailStatus(dbId, 'approved');
     }
-    onRecordUpdate({ ...toUpdate, status: 'approved', reviewedAt: new Date().toISOString() });
-    toast.success('Đã phê duyệt');
+    // Save edited data including QA Pairs, Metadata, and audio paths
+    const finalRecord = { ...toUpdate, status: 'approved' as const, reviewedAt: new Date().toISOString() };
+    onRecordUpdate(finalRecord);
+    toast.success('Đã phê duyệt và lưu thay đổi');
     setEditedRecord(null);
     goNext();
   };
@@ -530,101 +540,103 @@ export function AnnotationInterface({
       </div>
 
       {/* Main content with resizable panels */}
-      <div className="flex-1 min-h-0 flex">
-        {/* Panel 1: Data Sidebar */}
-        <div className="w-72 shrink-0 border-r bg-background flex flex-col">
-          <div className="p-4 space-y-3">
-            <div>
-              <h3 className="font-semibold">Data List</h3>
-              <p className="text-xs text-muted-foreground">Select a record to annotate</p>
-            </div>
-            
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search ID, landmark..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 text-sm"
-              />
-            </div>
-
-            {/* Filter & Sort */}
-            <div className="flex gap-2">
-              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-                <SelectTrigger className="flex-1 text-sm h-9">
-                  <Filter className="h-3 w-3 mr-1" />
-                  <SelectValue placeholder="All Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                  <SelectItem value="needs_review">Need Recheck</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button 
-                variant="outline" 
-                size="icon" 
-                className="h-9 w-9 shrink-0"
-                onClick={() => setSortAsc(!sortAsc)}
-              >
-                <ArrowUpDown className={cn("h-4 w-4", !sortAsc && "rotate-180")} />
-              </Button>
-            </div>
-          </div>
-
-          {/* Record list with infinite scroll */}
-          <ScrollArea className="flex-1" onScrollCapture={handleScroll}>
-            <div className="p-2 space-y-1">
-              {visibleSidebarItems.length === 0 && filteredSidebarItems.length === 0 ? (
-                <div className="p-4 text-center text-muted-foreground text-sm">
-                  Không tìm thấy kết quả
+      <div className="flex-1 min-h-0">
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          {/* Panel 1: Data Sidebar - Resizable */}
+          <ResizablePanel defaultSize={20} minSize={15} maxSize={35}>
+            <div className="h-full border-r bg-background flex flex-col">
+              <div className="p-4 space-y-3">
+                <div>
+                  <h3 className="font-semibold">Data List</h3>
+                  <p className="text-xs text-muted-foreground">Select a record to annotate</p>
                 </div>
-              ) : (
-                visibleSidebarItems.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => selectRecord(item.id)}
-                    className={cn(
-                      "w-full text-left p-3 rounded-lg transition-colors",
-                      item.id === (displayRecord?.db_id || displayRecord?.id)
-                        ? "bg-primary/10 border border-primary/20" 
-                        : "hover:bg-muted/50"
-                    )}
+                
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search ID, landmark..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 text-sm"
+                  />
+                </div>
+
+                {/* Filter & Sort */}
+                <div className="flex gap-2">
+                  <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+                    <SelectTrigger className="flex-1 text-sm h-9">
+                      <Filter className="h-3 w-3 mr-1" />
+                      <SelectValue placeholder="All Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="needs_review">Need Recheck</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => setSortAsc(!sortAsc)}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="font-mono text-xs truncate">{item.record_id}</span>
-                      </div>
-                      {getStatusIcon(item.status)}
-                    </div>
-                    <p className="font-medium text-sm mt-1 truncate">{item.landmark_name}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {item.landmark_name.toLowerCase().replace(/\s+/g, '_')}
-                    </p>
-                  </button>
-                ))
-              )}
-              {visibleCount < filteredSidebarItems.length && (
-                <div className="p-3 text-center text-muted-foreground text-xs">
-                  Scroll để tải thêm...
+                    <ArrowUpDown className={cn("h-4 w-4", !sortAsc && "rotate-180")} />
+                  </Button>
                 </div>
-              )}
+              </div>
+
+              {/* Record list with infinite scroll */}
+              <ScrollArea className="flex-1" onScrollCapture={handleScroll}>
+                <div className="p-2 space-y-1">
+                  {visibleSidebarItems.length === 0 && filteredSidebarItems.length === 0 ? (
+                    <div className="p-4 text-center text-muted-foreground text-sm">
+                      Không tìm thấy kết quả
+                    </div>
+                  ) : (
+                    visibleSidebarItems.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => selectRecord(item.id)}
+                        className={cn(
+                          "w-full text-left p-3 rounded-lg transition-colors",
+                          item.id === (displayRecord?.db_id || displayRecord?.id)
+                            ? "bg-primary/10 border border-primary/20" 
+                            : "hover:bg-muted/50"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <span className="font-mono text-xs truncate">{item.record_id}</span>
+                          </div>
+                          {getStatusIcon(item.status)}
+                        </div>
+                        <p className="font-medium text-sm mt-1 truncate">{item.landmark_name}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {item.landmark_name.toLowerCase().replace(/\s+/g, '_')}
+                        </p>
+                      </button>
+                    ))
+                  )}
+                  {visibleCount < filteredSidebarItems.length && (
+                    <div className="p-3 text-center text-muted-foreground text-xs">
+                      Scroll để tải thêm...
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+
+              {/* Footer */}
+              <div className="p-3 border-t text-xs text-muted-foreground">
+                Showing {Math.min(visibleCount, filteredSidebarItems.length).toLocaleString()} / {loadedCount > 0 ? loadedCount.toLocaleString() : filteredSidebarItems.length.toLocaleString()} (total: {(totalCount || workingRecordIds.length).toLocaleString()})
+              </div>
             </div>
-          </ScrollArea>
+          </ResizablePanel>
 
-          {/* Footer */}
-          <div className="p-3 border-t text-xs text-muted-foreground">
-            Showing {Math.min(visibleCount, filteredSidebarItems.length).toLocaleString()} / {loadedCount > 0 ? loadedCount.toLocaleString() : filteredSidebarItems.length.toLocaleString()} (total: {(totalCount || workingRecordIds.length).toLocaleString()})
-          </div>
-        </div>
-
-        {/* Resizable area for Media Viewer and QA Editor */}
-        <ResizablePanelGroup direction="horizontal" className="flex-1 min-w-0">
+          <ResizableHandle withHandle />
           {/* Panel 2: Media Viewer */}
           <ResizablePanel defaultSize={40} minSize={30}>
             <div className="h-full flex flex-col bg-background">
@@ -683,6 +695,17 @@ export function AnnotationInterface({
                 <div className="flex items-center gap-2">
                   <Mic className="h-4 w-4 text-primary" />
                   <span className="text-xs font-semibold uppercase tracking-wider">Audio Evidence</span>
+                </div>
+
+                {/* Audio Path Input */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase text-muted-foreground">Audio Path</Label>
+                  <Input
+                    value={displayRecord.paths?.audio_evidence || ''}
+                    onChange={(e) => handleFieldChange('paths.audio_evidence', e.target.value)}
+                    placeholder="Enter audio path..."
+                    className="text-sm font-mono"
+                  />
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -821,9 +844,28 @@ export function AnnotationInterface({
                               <SelectItem value="ask_both">ASK BOTH</SelectItem>
                             </SelectContent>
                           </Select>
-                          <span className="text-xs text-muted-foreground truncate">
-                            {qa.paths?.question_audio?.split('/').pop()}
-                          </span>
+                        </div>
+
+                        {/* Audio Paths */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-xs uppercase text-muted-foreground">Question Audio Path</Label>
+                            <Input
+                              value={qa.paths?.question_audio || ''}
+                              onChange={(e) => handleFieldChange(`qa_pairs[${qaIndex}].paths.question_audio`, e.target.value)}
+                              placeholder="Enter question audio path..."
+                              className="text-xs font-mono"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs uppercase text-muted-foreground">Answer Audio Path</Label>
+                            <Input
+                              value={qa.paths?.answer_audio || ''}
+                              onChange={(e) => handleFieldChange(`qa_pairs[${qaIndex}].paths.answer_audio`, e.target.value)}
+                              placeholder="Enter answer audio path..."
+                              className="text-xs font-mono"
+                            />
+                          </div>
                         </div>
 
                         {/* Question */}
