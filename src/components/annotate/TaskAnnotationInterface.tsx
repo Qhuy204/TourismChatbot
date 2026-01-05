@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -23,8 +23,6 @@ import {
   FolderOpen,
   Info,
   ExternalLink,
-  Play,
-  Pause,
   Mic,
   MessageSquare,
   Check,
@@ -39,6 +37,38 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { QAAudioPlayer } from './QAAudioPlayer';
+
+// Memoized sidebar item for better performance
+const SidebarItem = memo(({ 
+  item, 
+  isSelected, 
+  onClick, 
+  getStatusIcon 
+}: { 
+  item: { id: string; record_id: string; status?: string; landmark_name: string };
+  isSelected: boolean;
+  onClick: () => void;
+  getStatusIcon: (status?: string) => React.ReactNode;
+}) => (
+  <button
+    onClick={onClick}
+    className={cn(
+      "w-full p-3 text-left rounded-lg border transition-all",
+      isSelected
+        ? "border-primary bg-primary/5 ring-1 ring-primary"
+        : "border-transparent hover:bg-muted"
+    )}
+  >
+    <div className="flex items-center gap-2">
+      {getStatusIcon(item.status)}
+      <span className="text-xs text-muted-foreground font-mono truncate flex-1">
+        {item.record_id.slice(0, 8)}...
+      </span>
+    </div>
+    <p className="font-medium text-sm mt-1 truncate">{item.landmark_name}</p>
+  </button>
+));
 
 interface TaskAnnotationInterfaceProps {
   tasks: AnnotationTask[];
@@ -225,11 +255,6 @@ export function TaskAnnotationInterface({
   const [editedRecord, setEditedRecord] = useState<DatasetRecord | null>(null);
   const [showMetadataDialog, setShowMetadataDialog] = useState(false);
   
-  // Audio state
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [audioProgress, setAudioProgress] = useState(0);
-  const [audioDuration, setAudioDuration] = useState(0);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Infinite scroll state
   const initialVisibleCount = useMemo(() => {
@@ -452,16 +477,6 @@ export function TaskAnnotationInterface({
     }
   };
 
-  // Audio controls
-  const togglePlay = () => {
-    if (!audioRef.current) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
-    }
-    setIsPlaying(!isPlaying);
-  };
 
   // Get image source
   const getImageSrc = (rec: DatasetRecord | undefined) => {
@@ -681,28 +696,13 @@ export function TaskAnnotationInterface({
                     </div>
                   ) : (
                     visibleSidebarItems.map((item) => (
-                      <button
+                      <SidebarItem
                         key={item.id}
+                        item={item}
+                        isSelected={item.id === (displayRecord?.db_id || displayRecord?.id)}
                         onClick={() => selectRecord(item.id)}
-                        className={cn(
-                          "w-full text-left p-3 rounded-lg transition-colors",
-                          item.id === (displayRecord?.db_id || displayRecord?.id)
-                            ? "bg-primary/10 border border-primary/20" 
-                            : "hover:bg-muted/50"
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
-                            <span className="font-mono text-xs truncate">{item.record_id}</span>
-                          </div>
-                          {getStatusIcon(item.status)}
-                        </div>
-                        <p className="font-medium text-sm mt-1 truncate">{item.landmark_name}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {item.landmark_name.toLowerCase().replace(/\s+/g, '_')}
-                        </p>
-                      </button>
+                        getStatusIcon={getStatusIcon}
+                      />
                     ))
                   )}
                   {visibleCount < filteredSidebarItems.length && (
@@ -793,36 +793,11 @@ export function TaskAnnotationInterface({
                       />
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <Button
-                        size="icon"
-                        className="h-10 w-10 rounded-full bg-primary hover:bg-primary/90"
-                        onClick={togglePlay}
-                        disabled={!displayRecord.paths?.audio_evidence}
-                      >
-                        {isPlaying ? (
-                          <Pause className="h-5 w-5" />
-                        ) : (
-                          <Play className="h-5 w-5 ml-0.5" />
-                        )}
-                      </Button>
-                      <div className="flex-1 space-y-1">
-                        <p className="text-sm font-medium truncate">
-                          {displayRecord.paths?.audio_evidence?.split('/').pop() || 'No audio'}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1 bg-muted rounded-full">
-                            <div 
-                              className="h-full bg-primary rounded-full transition-all"
-                              style={{ width: `${audioProgress}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            00:00 / 03:00
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    <QAAudioPlayer 
+                      src={displayRecord.paths?.audio_evidence}
+                      label={displayRecord.paths?.audio_evidence?.split('/').pop() || 'No audio'}
+                      compact={false}
+                    />
 
                     {/* Transcript */}
                     {displayRecord.metadata?.audio_spec?.transcript && (
@@ -973,9 +948,11 @@ export function TaskAnnotationInterface({
                                 🎵 {qa.audio_meta.q_voice.rate}
                               </Badge>
                             )}
-                            <Button variant="ghost" size="icon" className="h-6 w-6">
-                              <Play className="h-3 w-3" />
-                            </Button>
+                            <QAAudioPlayer 
+                              src={qa.paths?.question_audio}
+                              label="Question"
+                              compact={true}
+                            />
                           </div>
                         </div>
 
@@ -994,9 +971,11 @@ export function TaskAnnotationInterface({
                             <Badge variant="outline" className="bg-primary/10 text-primary text-xs">
                               {qa.audio_meta?.a_voice?.id || 'vi-VN-HoaiMyNeural'}
                             </Badge>
-                            <Button variant="ghost" size="icon" className="h-6 w-6">
-                              <Play className="h-3 w-3" />
-                            </Button>
+                            <QAAudioPlayer 
+                              src={qa.paths?.answer_audio}
+                              label="Answer"
+                              compact={true}
+                            />
                           </div>
                         </div>
                       </div>
@@ -1159,21 +1138,6 @@ export function TaskAnnotationInterface({
         </DialogContent>
       </Dialog>
 
-      {/* Hidden audio element */}
-      {displayRecord.paths?.audio_evidence && (
-        <audio 
-          ref={audioRef}
-          src={displayRecord.paths.audio_evidence}
-          onEnded={() => setIsPlaying(false)}
-          onTimeUpdate={(e) => {
-            const audio = e.target as HTMLAudioElement;
-            setAudioProgress((audio.currentTime / audio.duration) * 100);
-          }}
-          onLoadedMetadata={(e) => {
-            setAudioDuration((e.target as HTMLAudioElement).duration);
-          }}
-        />
-      )}
     </div>
   );
 }
