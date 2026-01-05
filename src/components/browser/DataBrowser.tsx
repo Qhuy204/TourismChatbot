@@ -20,12 +20,16 @@ import {
   Eye,
   FileText,
   Settings,
+  History,
+  RotateCcw,
 } from "lucide-react";
 import { DatasetRecord } from "@/types/dataset";
 import { RecordDetailModal } from "./RecordDetailModal";
 import { ImportLogsPanel } from "./ImportLogsPanel";
 import { DeleteActionsPanel } from "./DeleteActionsPanel";
+import { DeletedRecordsPanel } from "./DeletedRecordsPanel";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 interface DataBrowserProps {
   records: DatasetRecord[];
@@ -44,7 +48,7 @@ interface DataBrowserProps {
 
 const ITEMS_PER_PAGE = 1000;
 
-type SortBy = "id" | "created" | "status" | "name";
+type SortBy = "id" | "created" | "status" | "name" | "updated" | "edit_count";
 type SortOrder = "asc" | "desc";
 
 export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onLoadAll, onRecordUpdate, onRecordsUpdate, onNavigateToAnnotate, onDeleteByVersion, onDeleteByStatus, onDeleteByDateRange, onDeleteAll }: DataBrowserProps) {
@@ -106,6 +110,12 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onLo
           break;
         case "status":
           comparison = (a.status || "pending").localeCompare(b.status || "pending");
+          break;
+        case "updated":
+          comparison = (a.updated_at || "").localeCompare(b.updated_at || "");
+          break;
+        case "edit_count":
+          comparison = (a.edit_count || 0) - (b.edit_count || 0);
           break;
       }
       return sortOrder === "asc" ? comparison : -comparison;
@@ -217,8 +227,12 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onLo
             Data
           </TabsTrigger>
           <TabsTrigger value="logs" className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" />
+            <History className="h-4 w-4" />
             Logs
+          </TabsTrigger>
+          <TabsTrigger value="trash" className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4" />
+            Thùng rác
           </TabsTrigger>
           <TabsTrigger value="actions" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
@@ -303,7 +317,7 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onLo
               </Select>
             )}
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="w-40">
                 <ArrowUpDown className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Sắp xếp" />
               </SelectTrigger>
@@ -312,6 +326,8 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onLo
                 <SelectItem value="name">Tên</SelectItem>
                 <SelectItem value="created">Ngày tạo</SelectItem>
                 <SelectItem value="status">Trạng thái</SelectItem>
+                <SelectItem value="updated">Cập nhật gần nhất</SelectItem>
+                <SelectItem value="edit_count">Số lần chỉnh sửa</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" size="icon" onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}>
@@ -373,16 +389,14 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onLo
                 <TableHead className="min-w-[120px]">City</TableHead>
                 <TableHead className="min-w-[100px]">Status</TableHead>
                 <TableHead className="min-w-[80px]">QA</TableHead>
-                <TableHead className="min-w-[80px]">Image</TableHead>
-                <TableHead className="min-w-[80px]">Audio</TableHead>
+                <TableHead className="min-w-[100px]">Cập nhật</TableHead>
+                <TableHead className="min-w-[60px]">Edits</TableHead>
                 <TableHead className="w-20">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedRecords.map((record, index) => {
                 const rowNumber = (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
-                const hasImage = !!record.paths?.image;
-                const hasAudio = !!record.paths?.audio_evidence;
 
                 return (
                   <TableRow key={record.id} className={selectedIds.has(record.id) ? "bg-primary/5" : ""}>
@@ -400,16 +414,14 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onLo
                       <Badge className={getStatusColor(record.status)}>{record.status || "pending"}</Badge>
                     </TableCell>
                     <TableCell className="text-center text-sm">{record.qa_pairs?.length || 0}</TableCell>
-                    <TableCell className="text-center">
-                      {hasImage ? (
-                        <span className="text-accent-foreground">✓</span>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
+                    <TableCell className="text-xs text-muted-foreground">
+                      {record.updated_at ? format(new Date(record.updated_at), 'dd/MM HH:mm') : '-'}
                     </TableCell>
                     <TableCell className="text-center">
-                      {hasAudio ? (
-                        <span className="text-accent-foreground">✓</span>
+                      {record.edit_count && record.edit_count > 0 ? (
+                        <Badge variant="secondary" className="text-xs">
+                          {record.edit_count}
+                        </Badge>
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
@@ -466,6 +478,10 @@ export function DataBrowser({ records, totalCount, loadedCount, onLoadMore, onLo
           <div className="h-full">
             <ImportLogsPanel />
           </div>
+        </TabsContent>
+
+        <TabsContent value="trash" className="flex-1 min-h-0 mt-4">
+          <DeletedRecordsPanel />
         </TabsContent>
 
         <TabsContent value="actions" className="mt-4">

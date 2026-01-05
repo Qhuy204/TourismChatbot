@@ -12,6 +12,7 @@ import {
   Plus
 } from 'lucide-react';
 import { StatsCard } from './StatsCard';
+import { SystemWarnings } from './SystemWarnings';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
@@ -225,8 +226,8 @@ export function AdminDashboard({
         onDeleteTask={handleDeleteTask}
       />
 
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Charts and System Status Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Status Pie Chart */}
         <Card>
           <CardHeader>
@@ -275,6 +276,9 @@ export function AdminDashboard({
             </div>
           </CardContent>
         </Card>
+
+        {/* System Warnings */}
+        <SystemWarnings />
       </div>
 
       {/* Task Assignment Dialog */}

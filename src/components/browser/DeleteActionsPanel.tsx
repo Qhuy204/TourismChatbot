@@ -107,7 +107,7 @@ export function DeleteActionsPanel({
                   </AlertDialogTitle>
                   <AlertDialogDescription>
                     Bạn có chắc muốn xóa tất cả records của Version {selectedVersion}?
-                    Hành động này không thể hoàn tác.
+                    Records sẽ được chuyển vào thùng rác và có thể khôi phục.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -160,7 +160,7 @@ export function DeleteActionsPanel({
                   </AlertDialogTitle>
                   <AlertDialogDescription>
                     Bạn có chắc muốn xóa tất cả records có trạng thái "{selectedStatus}"?
-                    Hành động này không thể hoàn tác.
+                    Records sẽ được chuyển vào thùng rác và có thể khôi phục.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -217,7 +217,7 @@ export function DeleteActionsPanel({
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   Bạn có chắc muốn xóa tất cả records được import từ {startDate} đến {endDate}?
-                  Hành động này không thể hoàn tác.
+                  Records sẽ được chuyển vào thùng rác và có thể khôi phục.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -256,8 +256,8 @@ export function DeleteActionsPanel({
                   <p>
                     Bạn có chắc chắn muốn xóa <strong>TẤT CẢ {totalCount.toLocaleString()} records</strong>?
                   </p>
-                  <p className="text-destructive font-medium">
-                    Hành động này KHÔNG THỂ hoàn tác!
+                  <p className="text-chart-4 font-medium">
+                    Records sẽ được chuyển vào thùng rác và có thể khôi phục.
                   </p>
                 </AlertDialogDescription>
               </AlertDialogHeader>
