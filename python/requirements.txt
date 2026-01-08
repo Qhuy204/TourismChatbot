@@ -1,0 +1,23 @@
+# AutoCrawler API Server Dependencies
+
+# Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# HTTP Client
+aiohttp>=3.9.0
+
+# Browser Automation for Crawling
+playwright>=1.40.0
+
+# Text Processing
+unidecode>=1.3.0
+
+# Pydantic for data validation
+pydantic>=2.0.0
+
+# System monitoring
+psutil>=5.9.0
+
+# Gemini API (use new package)
+google-genai>=1.0.0
