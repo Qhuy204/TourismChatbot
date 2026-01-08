@@ -9,9 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  ChevronLeft,
+  ChevronRight,
   RotateCcw,
   CheckCircle2,
   XCircle,
@@ -36,14 +36,15 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { QAAudioPlayer } from './QAAudioPlayer';
+import { useEventTracking } from '@/hooks/useEventTracking';
 
 // Memoized sidebar item for better performance
-const SidebarItem = memo(({ 
-  item, 
-  isSelected, 
-  onClick, 
-  getStatusIcon 
-}: { 
+const SidebarItem = memo(({
+  item,
+  isSelected,
+  onClick,
+  getStatusIcon
+}: {
   item: { id: string; record_id: string; status?: string; landmark_name: string };
   isSelected: boolean;
   onClick: () => void;
@@ -80,15 +81,19 @@ interface AnnotationInterfaceProps {
 
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'needs_review';
 
-export function AnnotationInterface({ 
-  records, 
+export function AnnotationInterface({
+  records,
   totalCount = 0,
   loadedCount = 0,
   onLoadMore,
-  onRecordUpdate, 
+  onRecordUpdate,
   initialRecordId,
-  filteredRecordIds 
+  filteredRecordIds
 }: AnnotationInterfaceProps) {
+  // Event tracking for sample views
+  const { startViewSession, endViewSession, trackClick } = useEventTracking();
+  const previousRecordRef = useRef<{ id: string; name: string } | null>(null);
+
   // Get working records - only IDs for sidebar, load full data on demand
   // filteredRecordIds are UUIDs (db_id), records.id is record_id (string from data)
   const workingRecordIds = useMemo(() => {
@@ -107,14 +112,14 @@ export function AnnotationInterface({
   // Load record data when needed (recordId could be db_id or record.id)
   const loadRecord = useCallback(async (recordId: string) => {
     if (recordCache.has(recordId) || loadingRecordIds.has(recordId)) return;
-    
+
     // Try to find by db_id first (for task-based annotation), then by id
     const record = records.find(r => r.db_id === recordId || r.id === recordId);
     if (record) {
       setRecordCache(prev => new Map(prev).set(recordId, record));
       return;
     }
-    
+
     // If not found in local records, fetch from database (for task-based annotation)
     setLoadingRecordIds(prev => new Set(prev).add(recordId));
     try {
@@ -123,7 +128,7 @@ export function AnnotationInterface({
         .select('*')
         .eq('id', recordId)
         .single();
-      
+
       if (!error && data) {
         const recordData = data.data as unknown as DatasetRecord;
         const mapped: DatasetRecord = {
@@ -147,12 +152,12 @@ export function AnnotationInterface({
   // Batch load records when filteredRecordIds is provided (task-based annotation)
   const hasLoadedFilteredRecords = useRef(false);
   const previousFilteredIdsRef = useRef<string[] | undefined>(undefined);
-  
+
   // Reset when filteredRecordIds changes (switching tasks)
   useEffect(() => {
     const currentIds = filteredRecordIds?.join(',');
     const previousIds = previousFilteredIdsRef.current?.join(',');
-    
+
     if (currentIds !== previousIds) {
       hasLoadedFilteredRecords.current = false;
       previousFilteredIdsRef.current = filteredRecordIds;
@@ -162,22 +167,22 @@ export function AnnotationInterface({
       }
     }
   }, [filteredRecordIds]);
-  
+
   useEffect(() => {
     if (!filteredRecordIds || filteredRecordIds.length === 0 || hasLoadedFilteredRecords.current) return;
-    
+
     // Check which IDs need to be fetched from DB
-    const idsToFetch = filteredRecordIds.filter(id => 
+    const idsToFetch = filteredRecordIds.filter(id =>
       !recordCache.has(id) && !records.find(r => r.db_id === id)
     );
-    
+
     if (idsToFetch.length === 0) {
       hasLoadedFilteredRecords.current = true;
       return;
     }
-    
+
     let isCancelled = false;
-    
+
     // Batch fetch records from database
     const fetchRecords = async () => {
       setLoadingRecordIds(prev => new Set([...prev, ...idsToFetch]));
@@ -186,15 +191,15 @@ export function AnnotationInterface({
         const batchSize = 500;
         for (let i = 0; i < idsToFetch.length; i += batchSize) {
           if (isCancelled) break;
-          
+
           const batch = idsToFetch.slice(i, i + batchSize);
           const { data, error } = await supabase
             .from('dataset_records')
             .select('*')
             .in('id', batch);
-          
+
           if (isCancelled) break;
-          
+
           if (!error && data) {
             const mappedRecords = new Map<string, DatasetRecord>();
             for (const row of data) {
@@ -217,9 +222,9 @@ export function AnnotationInterface({
         }
       }
     };
-    
+
     fetchRecords();
-    
+
     return () => {
       isCancelled = true;
     };
@@ -250,26 +255,26 @@ export function AnnotationInterface({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [editedRecord, setEditedRecord] = useState<DatasetRecord | null>(null);
   const [showMetadataDialog, setShowMetadataDialog] = useState(false);
-  
+
 
   // Infinite scroll state - start with 5% of total
   const initialVisibleCount = useMemo(() => {
     const fivePercent = Math.ceil((totalCount || records.length) * 0.05);
     return Math.max(100, Math.min(fivePercent, records.length));
   }, [totalCount, records.length]);
-  
+
   const [visibleCount, setVisibleCount] = useState(initialVisibleCount);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Filtered and sorted sidebar items (full list for navigation)
   const filteredSidebarItems = useMemo(() => {
     let filtered = allSidebarItems.filter(item => {
-      const matchesSearch = 
+      const matchesSearch =
         item.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.landmark_name.toLowerCase().includes(searchQuery.toLowerCase());
-      
+
       const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-      
+
       return matchesSearch && matchesStatus;
     });
 
@@ -296,13 +301,13 @@ export function AnnotationInterface({
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const target = e.target as HTMLDivElement;
     const { scrollTop, scrollHeight, clientHeight } = target;
-    
+
     // Load more when scrolled to 80% of the list
     if (scrollTop + clientHeight >= scrollHeight * 0.8) {
       const fivePercent = Math.ceil((totalCount || records.length) * 0.05);
       const increment = Math.max(100, fivePercent);
       setVisibleCount(prev => Math.min(prev + increment, filteredSidebarItems.length));
-      
+
       // Also trigger loading more from database if needed
       if (onLoadMore && loadedCount < (totalCount || 0) && visibleCount >= loadedCount * 0.8) {
         onLoadMore();
@@ -317,7 +322,7 @@ export function AnnotationInterface({
   useEffect(() => {
     if (initialRecordId) {
       // Match by id (which could be db_id or record_id depending on source)
-      const idx = filteredSidebarItems.findIndex(r => 
+      const idx = filteredSidebarItems.findIndex(r =>
         r.id === initialRecordId || r.record_id === initialRecordId
       );
       if (idx !== -1) {
@@ -342,12 +347,36 @@ export function AnnotationInterface({
   const currentRecord = currentRecordId ? (recordCache.get(currentRecordId) || records.find(r => r.db_id === currentRecordId || r.id === currentRecordId)) : undefined;
   const record = editedRecord || currentRecord;
 
+  // Track view sessions for analytics
+  useEffect(() => {
+    if (!currentRecord) return;
+
+    const recordId = currentRecord.db_id || currentRecord.id;
+    const landmarkName = currentRecord.metadata?.landmark_name || 'Unknown';
+
+    // End previous session if exists
+    if (previousRecordRef.current && previousRecordRef.current.id !== recordId) {
+      endViewSession('sample', previousRecordRef.current.id, previousRecordRef.current.name);
+    }
+
+    // Start new session
+    startViewSession('sample', recordId);
+    previousRecordRef.current = { id: recordId, name: landmarkName };
+
+    // Cleanup on unmount
+    return () => {
+      if (previousRecordRef.current) {
+        endViewSession('sample', previousRecordRef.current.id, previousRecordRef.current.name);
+      }
+    };
+  }, [currentRecord?.db_id, currentRecord?.id, startViewSession, endViewSession]);
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-      
+
       if (e.key === 'ArrowLeft') {
         goPrev();
       } else if (e.key === 'ArrowRight') {
@@ -363,7 +392,7 @@ export function AnnotationInterface({
     const updated = JSON.parse(JSON.stringify(editedRecord || currentRecord));
     const keys = path.split('.');
     let obj: any = updated;
-    
+
     for (let i = 0; i < keys.length - 1; i++) {
       if (keys[i].includes('[')) {
         const [key, indexStr] = keys[i].split('[');
@@ -376,7 +405,7 @@ export function AnnotationInterface({
         obj = obj[keys[i]];
       }
     }
-    
+
     obj[keys[keys.length - 1]] = value;
     setEditedRecord(updated);
   }, [editedRecord, currentRecord]);
@@ -394,12 +423,12 @@ export function AnnotationInterface({
         .from('anno_task_details')
         .select('id, task_id')
         .eq('image_id', recordDbId);
-      
+
       if (taskDetails && taskDetails.length > 0) {
         // Update all task details that reference this record
         await supabase
           .from('anno_task_details')
-          .update({ 
+          .update({
             status,
             reviewed_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
@@ -414,7 +443,7 @@ export function AnnotationInterface({
   const handleNeedsRecheck = async () => {
     const toUpdate = editedRecord || record;
     if (!toUpdate) return;
-    
+
     const dbId = toUpdate?.db_id;
     if (dbId) {
       await syncTaskDetailStatus(dbId, 'needs_review');
@@ -429,7 +458,7 @@ export function AnnotationInterface({
   const handleReject = async () => {
     const toUpdate = editedRecord || record;
     if (!toUpdate) return;
-    
+
     const dbId = toUpdate?.db_id;
     if (dbId) {
       await syncTaskDetailStatus(dbId, 'rejected');
@@ -444,7 +473,7 @@ export function AnnotationInterface({
   const handleApprove = async () => {
     const toUpdate = editedRecord || record;
     if (!toUpdate) return;
-    
+
     const dbId = toUpdate?.db_id;
     if (dbId) {
       await syncTaskDetailStatus(dbId, 'approved');
@@ -474,6 +503,10 @@ export function AnnotationInterface({
   const selectRecord = (recordId: string) => {
     const idx = filteredSidebarItems.findIndex(r => r.id === recordId);
     if (idx !== -1) {
+      // Track click on sample
+      const item = filteredSidebarItems[idx];
+      trackClick('sample', recordId, item?.landmark_name);
+
       setCurrentIndex(idx);
       setEditedRecord(null);
     }
@@ -565,7 +598,7 @@ export function AnnotationInterface({
                   <h3 className="font-semibold">Data List</h3>
                   <p className="text-xs text-muted-foreground">Select a record to annotate</p>
                 </div>
-                
+
                 {/* Search */}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -592,9 +625,9 @@ export function AnnotationInterface({
                       <SelectItem value="needs_review">Need Recheck</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button 
-                    variant="outline" 
-                    size="icon" 
+                  <Button
+                    variant="outline"
+                    size="icon"
                     className="h-9 w-9 shrink-0"
                     onClick={() => setSortAsc(!sortAsc)}
                   >
@@ -640,145 +673,145 @@ export function AnnotationInterface({
           {/* Panel 2: Media Viewer */}
           <ResizablePanel defaultSize={40} minSize={30}>
             <div className="h-full flex flex-col bg-background">
-          {/* Media Header */}
-          <div className="p-4 flex items-start justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">{displayRecord.metadata.landmark_name}</h2>
-              <Badge variant="outline" className="mt-1 bg-blue-50 text-blue-700 border-blue-200">
-                {displayRecord.metadata.location.city}
-              </Badge>
-            </div>
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => setShowMetadataDialog(true)}
-            >
-              <Info className="h-5 w-5" />
-            </Button>
-          </div>
-
-          {/* Media Content */}
-          <ScrollArea className="flex-1 px-4">
-            <div className="space-y-4 pb-4">
-              {/* Image */}
-              <div className="rounded-xl overflow-hidden bg-muted">
-                {getImageSrc(displayRecord) ? (
-                  <img 
-                    src={getImageSrc(displayRecord)!} 
-                    alt={displayRecord.metadata.landmark_name}
-                    className="w-full h-auto object-cover max-h-80"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/placeholder.svg';
-                    }}
-                  />
-                ) : (
-                  <div className="aspect-video flex items-center justify-center">
-                    <ImageIcon className="h-12 w-12 text-muted-foreground" />
-                  </div>
-                )}
-              </div>
-              
-              {displayRecord.metadata.image_spec?.original_url && (
-                <a 
-                  href={displayRecord.metadata.image_spec.original_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"
+              {/* Media Header */}
+              <div className="p-4 flex items-start justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold">{displayRecord.metadata.landmark_name}</h2>
+                  <Badge variant="outline" className="mt-1 bg-blue-50 text-blue-700 border-blue-200">
+                    {displayRecord.metadata.location.city}
+                  </Badge>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowMetadataDialog(true)}
                 >
-                  <ExternalLink className="h-4 w-4" />
-                  View Source Image
-                </a>
-              )}
+                  <Info className="h-5 w-5" />
+                </Button>
+              </div>
 
-              {/* Audio Evidence */}
-              <div className="rounded-xl border p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Mic className="h-4 w-4 text-primary" />
-                  <span className="text-xs font-semibold uppercase tracking-wider">Audio Evidence</span>
-                </div>
-
-                {/* Audio Path Input */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs uppercase text-muted-foreground">Audio Path</Label>
-                  <Input
-                    value={displayRecord.paths?.audio_evidence || ''}
-                    onChange={(e) => handleFieldChange('paths.audio_evidence', e.target.value)}
-                    placeholder="Enter audio path..."
-                    className="text-sm font-mono"
-                  />
-                </div>
-
-                <QAAudioPlayer 
-                  src={displayRecord.paths?.audio_evidence}
-                  label={displayRecord.paths?.audio_evidence?.split('/').pop() || 'No audio'}
-                  compact={false}
-                />
-
-                {/* Transcript */}
-                {displayRecord.metadata.audio_spec?.transcript && (
-                  <div className="bg-blue-50/50 rounded-lg p-3">
-                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-6">
-                      {displayRecord.metadata.audio_spec.transcript}
-                    </p>
+              {/* Media Content */}
+              <ScrollArea className="flex-1 px-4">
+                <div className="space-y-4 pb-4">
+                  {/* Image */}
+                  <div className="rounded-xl overflow-hidden bg-muted">
+                    {getImageSrc(displayRecord) ? (
+                      <img
+                        src={getImageSrc(displayRecord)!}
+                        alt={displayRecord.metadata.landmark_name}
+                        className="w-full h-auto object-cover max-h-80"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/placeholder.svg';
+                        }}
+                      />
+                    ) : (
+                      <div className="aspect-video flex items-center justify-center">
+                        <ImageIcon className="h-12 w-12 text-muted-foreground" />
+                      </div>
+                    )}
                   </div>
-                )}
+
+                  {displayRecord.metadata.image_spec?.original_url && (
+                    <a
+                      href={displayRecord.metadata.image_spec.original_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      View Source Image
+                    </a>
+                  )}
+
+                  {/* Audio Evidence */}
+                  <div className="rounded-xl border p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Mic className="h-4 w-4 text-primary" />
+                      <span className="text-xs font-semibold uppercase tracking-wider">Audio Evidence</span>
+                    </div>
+
+                    {/* Audio Path Input */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs uppercase text-muted-foreground">Audio Path</Label>
+                      <Input
+                        value={displayRecord.paths?.audio_evidence || ''}
+                        onChange={(e) => handleFieldChange('paths.audio_evidence', e.target.value)}
+                        placeholder="Enter audio path..."
+                        className="text-sm font-mono"
+                      />
+                    </div>
+
+                    <QAAudioPlayer
+                      src={displayRecord.paths?.audio_evidence}
+                      label={displayRecord.paths?.audio_evidence?.split('/').pop() || 'No audio'}
+                      compact={false}
+                    />
+
+                    {/* Transcript */}
+                    {displayRecord.metadata.audio_spec?.transcript && (
+                      <div className="bg-blue-50/50 rounded-lg p-3">
+                        <p className="text-sm text-muted-foreground leading-relaxed line-clamp-6">
+                          {displayRecord.metadata.audio_spec.transcript}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ScrollArea>
+
+              {/* Action Bar */}
+              <div className="shrink-0 p-4 border-t flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={goPrev}
+                    disabled={currentIndex === 0}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={handleReset} className="text-muted-foreground">
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                    Reset
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="border-chart-4 text-chart-4 hover:bg-chart-4/10"
+                    onClick={handleNeedsRecheck}
+                  >
+                    <AlertTriangle className="h-4 w-4 mr-1" />
+                    Need Recheck
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-destructive text-destructive hover:bg-destructive/10"
+                    onClick={handleReject}
+                  >
+                    <XCircle className="h-4 w-4 mr-1" />
+                    Reject
+                  </Button>
+                  <Button
+                    className="bg-primary hover:bg-primary/90"
+                    onClick={handleApprove}
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                    Approve
+                  </Button>
+                </div>
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goNext}
+                  disabled={currentIndex === filteredSidebarItems.length - 1}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
               </div>
             </div>
-          </ScrollArea>
-
-          {/* Action Bar */}
-          <div className="shrink-0 p-4 border-t flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="icon"
-                onClick={goPrev}
-                disabled={currentIndex === 0}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="sm" onClick={handleReset} className="text-muted-foreground">
-                <RotateCcw className="h-4 w-4 mr-1" />
-                Reset
-              </Button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                className="border-chart-4 text-chart-4 hover:bg-chart-4/10"
-                onClick={handleNeedsRecheck}
-              >
-                <AlertTriangle className="h-4 w-4 mr-1" />
-                Need Recheck
-              </Button>
-              <Button 
-                variant="outline" 
-                className="border-destructive text-destructive hover:bg-destructive/10"
-                onClick={handleReject}
-              >
-                <XCircle className="h-4 w-4 mr-1" />
-                Reject
-              </Button>
-              <Button 
-                className="bg-primary hover:bg-primary/90"
-                onClick={handleApprove}
-              >
-                <CheckCircle2 className="h-4 w-4 mr-1" />
-                Approve
-              </Button>
-            </div>
-
-            <Button 
-              variant="outline" 
-              size="icon"
-              onClick={goNext}
-              disabled={currentIndex === filteredSidebarItems.length - 1}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
           </ResizablePanel>
 
           <ResizableHandle withHandle />
@@ -863,7 +896,7 @@ export function AnnotationInterface({
                                 🎵 {qa.audio_meta.q_voice.rate}
                               </Badge>
                             )}
-                            <QAAudioPlayer 
+                            <QAAudioPlayer
                               src={qa.paths?.question_audio}
                               label="Question"
                               compact={true}
@@ -886,7 +919,7 @@ export function AnnotationInterface({
                             <Badge variant="outline" className="bg-primary/10 text-primary text-xs">
                               {qa.audio_meta?.a_voice?.id || 'vi-VN-HoaiMyNeural'}
                             </Badge>
-                            <QAAudioPlayer 
+                            <QAAudioPlayer
                               src={qa.paths?.answer_audio}
                               label="Answer"
                               compact={true}

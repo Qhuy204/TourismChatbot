@@ -852,6 +852,123 @@ async def dashboard():
     mem = psutil.virtual_memory()
     return {"memory": {"percent": mem.percent}, "gemini": {}, "huggingface": {}}
 
+@app.post("/api-keys/validate")
+async def validate_api_key(req: APIKeyRequest):
+    """Validate an API key by making a test request"""
+    import aiohttp
+    
+    if req.provider == "gemini":
+        # Test Gemini API key with a simple request
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={req.api_key}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=10) as response:
+                    if response.status == 200:
+                        return {"valid": True, "message": "Gemini API key hợp lệ"}
+                    elif response.status == 400:
+                        error_data = await response.json()
+                        return {"valid": False, "message": error_data.get("error", {}).get("message", "Invalid API key")}
+                    elif response.status == 403:
+                        return {"valid": False, "message": "API key không có quyền truy cập"}
+                    else:
+                        return {"valid": False, "message": f"Lỗi HTTP {response.status}"}
+        except asyncio.TimeoutError:
+            return {"valid": False, "message": "Timeout - kiểm tra kết nối mạng"}
+        except Exception as e:
+            return {"valid": False, "message": str(e)}
+    
+    elif req.provider == "huggingface":
+        # Test HuggingFace API key
+        try:
+            url = "https://huggingface.co/api/whoami-v2"
+            headers = {"Authorization": f"Bearer {req.api_key}"}
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, timeout=10) as response:
+                    if response.status == 200:
+                        return {"valid": True, "message": "HuggingFace API key hợp lệ"}
+                    else:
+                        return {"valid": False, "message": "Invalid HuggingFace API key"}
+        except Exception as e:
+            return {"valid": False, "message": str(e)}
+    
+    return {"valid": False, "message": f"Provider không hỗ trợ: {req.provider}"}
+
+@app.post("/api-keys/add")
+async def add_api_key(req: APIKeyRequest):
+    """Add API key to tracking (stored in memory for this session)"""
+    # Store in memory for use by chat endpoint
+    if not hasattr(app.state, 'api_keys'):
+        app.state.api_keys = {}
+    app.state.api_keys[req.provider] = req.api_key
+    return {"success": True, "message": f"Key added for {req.provider}"}
+
+# Chat Generation
+class ChatRequest(BaseModel):
+    prompt: str
+    model: Optional[str] = "gemini-2.5-flash"
+    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = 1024
+    api_key: Optional[str] = None  # API key passed from frontend
+
+# Model mapping - use actual available model names
+GEMINI_MODELS = {
+    "gemini-2.5-flash": "gemini-2.0-flash",  
+    "gemini-2.0-flash": "gemini-2.0-flash",
+    "gemini-1.5-flash": "gemini-1.5-flash",
+    "gemini-1.5-pro": "gemini-1.5-pro",
+}
+
+@app.post("/chat/generate")
+async def chat_generate(req: ChatRequest):
+    """Generate chat response using Gemini API"""
+    import aiohttp
+    
+    # Get API key from request, then memory, then environment
+    api_key = req.api_key
+    
+    if not api_key and hasattr(app.state, 'api_keys') and 'gemini' in app.state.api_keys:
+        api_key = app.state.api_keys['gemini']
+    
+    if not api_key:
+        api_key = os.environ.get('GEMINI_API_KEY')
+    
+    if not api_key:
+        return {"error": "No Gemini API key configured. Please add one in Settings or set GEMINI_API_KEY environment variable."}
+    
+    # Map model name
+    model_id = GEMINI_MODELS.get(req.model, req.model)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
+    
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": req.prompt}]}],
+        "generationConfig": {
+            "temperature": req.temperature,
+            "maxOutputTokens": req.max_tokens,
+        }
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=60) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    print(f"Gemini API error: {error_text}")
+                    return {"error": f"Gemini API error: {response.status}"}
+                
+                result = await response.json()
+                text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                
+                return {
+                    "text": text,
+                    "model": model_id,
+                    "usage": result.get("usageMetadata", {})
+                }
+    except asyncio.TimeoutError:
+        return {"error": "Request timeout - please try again"}
+    except Exception as e:
+        print(f"Chat generate error: {e}")
+        return {"error": str(e)}
+
 @app.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()

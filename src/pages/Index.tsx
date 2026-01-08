@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { useDataset } from '@/hooks/useDataset';
@@ -18,6 +18,7 @@ import { ImportInterface } from '@/components/import/ImportInterface';
 import { ExportInterface } from '@/components/export/ExportInterface';
 import { SettingsInterface } from '@/components/settings/SettingsInterface';
 import { UserSettingsDialog } from '@/components/settings/UserSettingsDialog';
+import { ChatbotInterface } from '@/components/chatbot/ChatbotInterface';
 import { DatasetRecord } from '@/types/dataset';
 import { Loader2, ShieldAlert } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,21 +28,58 @@ const Index = () => {
   const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: roleLoading } = useRole();
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState('dashboard');
-  
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Initialize state from URL params
+  const initialTab = searchParams.get('tab') || 'dashboard';
+  const initialTaskId = searchParams.get('task') || undefined;
+  const initialSampleId = searchParams.get('sample') || undefined;
+
+  const [currentView, setCurrentView] = useState(initialTab);
+
   // Use database-synced data
   const { records, loading: dataLoading, totalCount, loadedCount, loadMoreRecords, loadAllRecords, addRecords, updateRecord, deleteRecords, deleteByVersion, deleteByStatus, deleteByDateRange, deleteAllRecords, refetch, calculateStats } = useDataset();
   const { users } = useUsers();
   const { tasks, createTask, deleteTask, getTaskImageIds, availableRecordsInfo, refetch: refetchTasks } = useTasks();
-  
-  // Annotation navigation state
-  const [annotateRecordId, setAnnotateRecordId] = useState<string | undefined>();
+
+  // Annotation navigation state - initialize from URL
+  const [annotateRecordId, setAnnotateRecordId] = useState<string | undefined>(initialSampleId);
+  const [annotateLocation, setAnnotateLocation] = useState<string | undefined>(searchParams.get('location') || undefined);
   const [annotateFilteredIds, setAnnotateFilteredIds] = useState<string[] | undefined>();
-  const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>();
+  const [selectedTaskId, setSelectedTaskId] = useState<string | undefined>(initialTaskId);
   const [qaCheckRecordIds, setQaCheckRecordIds] = useState<string[]>([]);
-  
+
   // User settings dialog
   const [showUserSettings, setShowUserSettings] = useState(false);
+
+  // Sync URL with state changes
+  useEffect(() => {
+    const params = new URLSearchParams();
+
+    if (currentView && currentView !== 'dashboard') {
+      params.set('tab', currentView);
+    }
+
+    if (selectedTaskId) {
+      params.set('task', selectedTaskId);
+    }
+
+    if (annotateLocation) {
+      params.set('location', annotateLocation);
+    }
+
+    if (annotateRecordId) {
+      params.set('id', annotateRecordId);
+    }
+
+    // Update URL without navigation
+    const newSearch = params.toString();
+    const currentSearch = searchParams.toString();
+
+    if (newSearch !== currentSearch) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [currentView, selectedTaskId, annotateRecordId, annotateLocation, setSearchParams, searchParams]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -66,8 +104,9 @@ const Index = () => {
   }, [addRecords]);
 
   // Navigate to annotate from DataBrowser
-  const handleNavigateToAnnotate = useCallback((recordId: string) => {
+  const handleNavigateToAnnotate = useCallback((recordId: string, locationName?: string) => {
     setAnnotateRecordId(recordId);
+    setAnnotateLocation(locationName);
     setAnnotateFilteredIds(undefined);
     setCurrentView('annotate');
   }, []);
@@ -76,6 +115,7 @@ const Index = () => {
   const handleStartQAAnnotation = useCallback((recordIds: string[]) => {
     setAnnotateFilteredIds(recordIds);
     setAnnotateRecordId(recordIds[0]);
+    setAnnotateLocation(undefined);
     setCurrentView('annotate');
   }, []);
 
@@ -88,6 +128,8 @@ const Index = () => {
   // Navigate to task annotation - just navigate to task-annotate view with taskId
   const handleStartTaskAnnotation = useCallback((taskId: string) => {
     setSelectedTaskId(taskId);
+    setAnnotateLocation(undefined);
+    setAnnotateRecordId(undefined);
     setCurrentView('task-annotate');
   }, []);
 
@@ -96,6 +138,10 @@ const Index = () => {
     if (view === 'annotate' && currentView !== 'annotate') {
       setAnnotateRecordId(undefined);
       setAnnotateFilteredIds(undefined);
+      setAnnotateLocation(undefined);
+    }
+    if (view !== 'task-annotate') {
+      setSelectedTaskId(undefined);
     }
     setCurrentView(view);
   }, [currentView]);
@@ -128,8 +174,8 @@ const Index = () => {
 
   // Create task handler for admin
   const handleCreateTask = useCallback(async (
-    name: string, 
-    userId: string, 
+    name: string,
+    userId: string,
     percentage: number,
     onProgress?: (stage: string, current: number, total: number) => void
   ) => {
@@ -146,9 +192,9 @@ const Index = () => {
     switch (currentView) {
       case 'dashboard':
         return isAdmin ? (
-          <AdminDashboard 
-            records={records} 
-            stats={stats} 
+          <AdminDashboard
+            records={records}
+            stats={stats}
             usersCount={users?.length || 0}
             tasksCount={tasks?.length || 0}
             users={users}
@@ -159,7 +205,7 @@ const Index = () => {
             onDeleteTask={handleDeleteTask}
           />
         ) : (
-          <UserDashboard 
+          <UserDashboard
             records={records}
             tasks={userTasks}
             onNavigateToAnnotate={() => setCurrentView('task-annotate')}
@@ -168,7 +214,7 @@ const Index = () => {
         );
       case 'task-annotate':
         return (
-          <TaskAnnotationInterface 
+          <TaskAnnotationInterface
             key="task-annotate"
             tasks={isAdmin ? tasks || [] : userTasks}
             onRecordUpdate={handleRecordUpdate}
@@ -178,14 +224,14 @@ const Index = () => {
         );
       case 'browser':
         return (
-          <DataBrowser 
+          <DataBrowser
             key="browser"
-            records={records} 
+            records={records}
             totalCount={totalCount}
             loadedCount={loadedCount}
             onLoadMore={loadMoreRecords}
             onLoadAll={loadAllRecords}
-            onRecordUpdate={handleRecordUpdate} 
+            onRecordUpdate={handleRecordUpdate}
             onRecordsUpdate={handleRecordsUpdate}
             onNavigateToAnnotate={handleNavigateToAnnotate}
             onDeleteByVersion={deleteByVersion}
@@ -197,9 +243,9 @@ const Index = () => {
         );
       case 'annotate':
         return (
-          <AnnotationInterface 
+          <AnnotationInterface
             key="annotate"
-            records={records} 
+            records={records}
             totalCount={totalCount}
             loadedCount={loadedCount}
             onLoadMore={loadMoreRecords}
@@ -210,9 +256,9 @@ const Index = () => {
         );
       case 'random-check':
         return (
-          <RandomQACheck 
+          <RandomQACheck
             key="random-check"
-            records={records} 
+            records={records}
             totalCount={totalCount}
             onRecordUpdate={handleRecordUpdate}
             onStartQACheck={handleStartQACheck}
@@ -241,17 +287,19 @@ const Index = () => {
         );
       case 'export':
         return <ExportInterface key="export" records={records} stats={stats} />;
+      case 'chatbot':
+        return <ChatbotInterface key="chatbot" />;
       case 'settings':
         return <SettingsInterface key="settings" />;
       default:
         return isAdmin ? (
-          <AdminDashboard 
-            records={records} 
-            stats={stats} 
-            usersCount={users?.length || 0} 
-            tasksCount={tasks?.length || 0} 
-            users={users} 
-            tasks={tasks} 
+          <AdminDashboard
+            records={records}
+            stats={stats}
+            usersCount={users?.length || 0}
+            tasksCount={tasks?.length || 0}
+            users={users}
+            tasks={tasks}
             availableRecords={availableRecords}
             totalRecords={totalRecordsCount}
             onCreateTask={handleCreateTask}
@@ -281,8 +329,8 @@ const Index = () => {
 
   return (
     <div className="flex min-h-screen h-screen bg-background overflow-hidden">
-      <Sidebar 
-        currentView={currentView} 
+      <Sidebar
+        currentView={currentView}
         onViewChange={handleViewChange}
         onOpenSettings={() => setShowUserSettings(true)}
         isAdmin={isAdmin}
@@ -290,10 +338,10 @@ const Index = () => {
       <main className="flex-1 overflow-auto">
         {renderContent()}
       </main>
-      
-      <UserSettingsDialog 
-        open={showUserSettings} 
-        onOpenChange={setShowUserSettings} 
+
+      <UserSettingsDialog
+        open={showUserSettings}
+        onOpenChange={setShowUserSettings}
       />
     </div>
   );

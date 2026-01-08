@@ -1,8 +1,8 @@
 import { cn } from '@/lib/utils';
-import { 
-  LayoutDashboard, 
-  Database, 
-  Tags, 
+import {
+  LayoutDashboard,
+  Database,
+  Tags,
   FolderOpen,
   Shuffle,
   Download,
@@ -13,7 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
-  ClipboardList
+  ClipboardList,
+  MessageCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -32,6 +33,7 @@ interface SidebarProps {
 const allNavItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, adminOnly: false },
   { id: 'task-annotate', label: 'My Tasks', icon: ClipboardList, adminOnly: false },
+  { id: 'chatbot', label: 'Chatbot', icon: MessageCircle, adminOnly: false },
   { id: 'browser', label: 'Data Browser', icon: FolderOpen, adminOnly: true },
   { id: 'annotate', label: 'Annotate All', icon: Tags, adminOnly: true },
   { id: 'random-check', label: 'QA Check (10%)', icon: Shuffle, adminOnly: true },
@@ -64,7 +66,7 @@ export function Sidebar({ currentView, onViewChange, onOpenSettings, isAdmin = f
 
   return (
     <TooltipProvider delayDuration={0}>
-      <aside 
+      <aside
         className={cn(
           "bg-card border-r border-border h-screen flex flex-col shrink-0 sticky top-0 transition-all duration-300",
           isCollapsed ? "w-16" : "w-64"
@@ -161,8 +163,8 @@ export function Sidebar({ currentView, onViewChange, onOpenSettings, isAdmin = f
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 className={cn(
                   "w-full h-10 text-muted-foreground hover:text-foreground",
                   isCollapsed ? "justify-center px-2" : "justify-start gap-3 px-3"

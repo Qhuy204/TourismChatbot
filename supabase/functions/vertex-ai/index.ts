@@ -16,7 +16,7 @@ async function deriveKey(secret: string, salt: Uint8Array): Promise<CryptoKey> {
     false,
     ["deriveKey"]
   );
-  
+
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
@@ -35,38 +35,40 @@ async function decryptApiKey(encryptedKey: string, encryptionSecret: string): Pr
   if (!encryptedKey.startsWith("enc_v1_")) {
     throw new Error("Invalid encrypted key format");
   }
-  
+
   const combined = Uint8Array.from(atob(encryptedKey.slice(7)), c => c.charCodeAt(0));
   const salt = combined.slice(0, 16);
   const iv = combined.slice(16, 28);
   const encryptedData = combined.slice(28);
-  
+
   const key = await deriveKey(encryptionSecret, salt);
-  
+
   const decrypted = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv },
     key,
     encryptedData
   );
-  
+
   const decoder = new TextDecoder();
   const base64Key = decoder.decode(decrypted);
-  
+
   return atob(base64Key);
 }
 
 // Get active API key from database
 async function getActiveApiKey(supabaseClient: any, encryptionSecret: string): Promise<string> {
+  // Try 'gemini' provider first (used by frontend), then 'vertex_ai' (legacy)
   const { data: key, error } = await supabaseClient
     .from('api_keys')
     .select('encrypted_key')
-    .eq('provider', 'vertex_ai')
+    .in('provider', ['gemini', 'vertex_ai'])
     .eq('is_active', true)
     .limit(1)
     .single();
 
   if (error || !key) {
-    throw new Error('No active Vertex AI API key found. Please add one in Settings.');
+    console.error('No API key found:', error);
+    throw new Error('No active Gemini API key found. Please add one in Settings.');
   }
 
   return await decryptApiKey(key.encrypted_key, encryptionSecret);
@@ -93,7 +95,7 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const encryptionSecret = Deno.env.get('API_KEY_ENCRYPTION_SECRET')!;
-    
+
     if (!encryptionSecret) {
       throw new Error("Encryption secret not configured");
     }
@@ -105,7 +107,7 @@ serve(async (req) => {
     if (authHeader) {
       const token = authHeader.replace('Bearer ', '');
       const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
-      
+
       if (authError || !user) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401,
@@ -122,14 +124,14 @@ serve(async (req) => {
 
     switch (action) {
       case 'text_generation': {
-        const { 
-          prompt, 
+        const {
+          prompt,
           model = 'gemini-2.5-flash',
           temperature = 0.7,
           max_tokens = 1024,
           system_prompt
         } = params;
-        
+
         if (!prompt) {
           return new Response(JSON.stringify({ error: 'prompt is required' }), {
             status: 400,
@@ -139,7 +141,7 @@ serve(async (req) => {
 
         const modelId = TEXT_MODELS[model] || model;
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
-        
+
         const contents = [];
         if (system_prompt) {
           contents.push({
@@ -176,9 +178,9 @@ serve(async (req) => {
 
         const result = await response.json();
         const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        
+
         console.log(`Text generation completed for model: ${modelId}`);
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
           text,
           model: modelId,
           usage: result.usageMetadata
@@ -188,13 +190,13 @@ serve(async (req) => {
       }
 
       case 'text_to_speech': {
-        const { 
-          text, 
+        const {
+          text,
           model = 'gemini-2.5-flash-tts',
           voice = 'Kore',
           language = 'vi-VN'
         } = params;
-        
+
         if (!text) {
           return new Response(JSON.stringify({ error: 'text is required' }), {
             status: 400,
@@ -204,7 +206,7 @@ serve(async (req) => {
 
         const modelId = TTS_MODELS[model] || model;
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
-        
+
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -233,13 +235,13 @@ serve(async (req) => {
 
         const result = await response.json();
         const audioData = result.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-        
+
         if (!audioData) {
           throw new Error('No audio data in response');
         }
 
         console.log(`TTS completed for model: ${modelId}, voice: ${voice}`);
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
           audio: audioData.data,
           mimeType: audioData.mimeType,
           model: modelId,
@@ -250,13 +252,13 @@ serve(async (req) => {
       }
 
       case 'chat': {
-        const { 
+        const {
           messages,
           model = 'gemini-2.5-flash',
           temperature = 0.7,
           max_tokens = 1024
         } = params;
-        
+
         if (!messages || !Array.isArray(messages)) {
           return new Response(JSON.stringify({ error: 'messages array is required' }), {
             status: 400,
@@ -266,7 +268,7 @@ serve(async (req) => {
 
         const modelId = TEXT_MODELS[model] || model;
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
-        
+
         // Convert messages to Gemini format
         const contents = messages.map((msg: { role: string; content: string }) => ({
           role: msg.role === 'assistant' ? 'model' : 'user',
@@ -293,9 +295,9 @@ serve(async (req) => {
 
         const result = await response.json();
         const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        
+
         console.log(`Chat completed for model: ${modelId}`);
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
           text,
           model: modelId,
           usage: result.usageMetadata
