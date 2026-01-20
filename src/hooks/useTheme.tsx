@@ -156,59 +156,40 @@ export function useTheme() {
         }
     }, [user?.id]);
 
-    // Detect and update emotion from chat messages
-    const detectEmotion = useCallback(async (messages: string[]) => {
-        if (messages.length === 0) return;
+    // Update emotion manually (from LangGraph backend)
+    const setEmotion = useCallback(async (emotion: EmotionTheme, confidence: number = 1.0) => {
+        const colors = THEME_COLORS[emotion] || THEME_COLORS.neutral;
 
-        try {
-            // Get API key
-            let apiKey: string | null = null;
+        setConfig(prev => ({
+            ...prev,
+            emotion,
+            emotionConfidence: confidence,
+            primaryColor: colors.primary,
+            accentColor: colors.accent,
+        }));
+
+        // Persist to database
+        if (user?.id) {
             try {
-                const { data: keyData } = await supabase.functions.invoke('manage-api-keys', {
-                    body: { action: 'get_active', provider: 'gemini' }
-                });
-                if (keyData?.api_key) apiKey = keyData.api_key;
-            } catch { /* use server-side key */ }
-
-            const response = await fetch('http://localhost:3001/chat/detect-emotion', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages, api_key: apiKey }),
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                const emotion = data.emotion as EmotionTheme;
-                const confidence = data.confidence || 0;
-
-                if (emotion && confidence > 0.5) {
-                    const colors = THEME_COLORS[emotion] || THEME_COLORS.neutral;
-
-                    setConfig(prev => ({
-                        ...prev,
-                        emotion,
-                        emotionConfidence: confidence,
-                        primaryColor: colors.primary,
-                        accentColor: colors.accent,
-                    }));
-
-                    // Persist to database
-                    if (user?.id) {
-                        await supabase
-                            .from('user_preferences')
-                            .upsert({
-                                user_id: user.id,
-                                last_detected_emotion: emotion,
-                                emotion_confidence: confidence,
-                                updated_at: new Date().toISOString(),
-                            }, { onConflict: 'user_id' });
-                    }
-                }
+                await supabase
+                    .from('user_preferences')
+                    .upsert({
+                        user_id: user.id,
+                        last_detected_emotion: emotion,
+                        emotion_confidence: confidence,
+                        updated_at: new Date().toISOString(),
+                    }, { onConflict: 'user_id' });
+            } catch (err) {
+                console.error('Failed to save emotion preference:', err);
             }
-        } catch (err) {
-            console.warn('Emotion detection failed:', err);
         }
     }, [user?.id]);
+
+    // Legacy detectEmotion removed. Transitioning to backend-driven emotion detection.
+    const detectEmotion = useCallback(async (messages: string[]) => {
+        // NOP - Backend now handles this via LangGraph
+        console.log('Legacy detectEmotion called, but frontend is now backend-driven.');
+    }, []);
 
     // Get theme-specific background class
     const getBackgroundClass = useCallback(() => {
@@ -230,6 +211,7 @@ export function useTheme() {
         setTheme,
         setAnimationLevel,
         detectEmotion,
+        setEmotion,
         getBackgroundClass,
         getAnimationMultiplier,
         themeColors: THEME_COLORS,

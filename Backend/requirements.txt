@@ -1,0 +1,38 @@
+# LangGraph Chatbot Backend - Requirements
+# Python 3.12 (conda environment: chatbot)
+
+# ============== Core Framework ==============
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+
+# ============== LangGraph & LangChain ==============
+langgraph>=0.0.40
+langchain>=0.1.0
+langchain-google-genai>=0.0.6
+
+# ============== Google Gemini API ==============
+google-generativeai>=0.3.0
+
+# ============== Vector Store (Local) ==============
+chromadb>=0.4.22
+sentence-transformers>=2.2.2
+
+# ============== ML / NLP ==============
+transformers>=4.36.0
+torch>=2.1.0  # CPU version, use torch-cuda for GPU
+
+# ============== Database ==============
+supabase>=2.3.0
+redis>=5.0.0
+
+# ============== Utilities ==============
+python-dotenv>=1.0.0
+httpx>=0.26.0
+tenacity>=8.2.0  # Retry logic
+
+# ============== Development ==============
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+black>=23.12.0
+ruff>=0.1.9
