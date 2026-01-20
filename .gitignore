@@ -26,3 +26,28 @@ dist-ssr
 # Environment files
 .env
 .env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+*.egg
+.pytest_cache/
+.mypy_cache/
+
+# Data files (large datasets)
+Data/
+data/
+*.jsonl
+*.parquet
+*.csv
+!requirements.txt
+
+# Vector databases
+chroma_vqa/
+Backend/data/chroma_vqa/
+*.sqlite3
