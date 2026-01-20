@@ -902,13 +902,267 @@ async def add_api_key(req: APIKeyRequest):
     app.state.api_keys[req.provider] = req.api_key
     return {"success": True, "message": f"Key added for {req.provider}"}
 
-# Chat Generation
+# External Search (Fallback when DB has no results)
+class ExternalSearchRequest(BaseModel):
+    query: str
+    api_key: Optional[str] = None
+
+@app.post("/search/external")
+async def search_external(req: ExternalSearchRequest):
+    """Search for location info using Gemini when local DB returns no results.
+    Returns structured data that can be used by the chatbot."""
+    import aiohttp
+    
+    # Get API key
+    api_key = req.api_key
+    if not api_key and hasattr(app.state, 'api_keys') and 'gemini' in app.state.api_keys:
+        api_key = app.state.api_keys['gemini']
+    if not api_key:
+        api_key = os.environ.get('GEMINI_API_KEY')
+    
+    if not api_key:
+        return {"error": "No Gemini API key", "locations": []}
+    
+    # Build prompt to extract structured location info
+    prompt = f"""Bạn là chuyên gia du lịch Việt Nam. Với câu hỏi sau, hãy trả về thông tin địa điểm dưới dạng JSON.
+
+Câu hỏi: {req.query}
+
+Trả về JSON với format sau (CHỈ trả về JSON, không giải thích):
+{{
+  "locations": [
+    {{
+      "landmark_name": "Tên địa điểm",
+      "city": "Tên thành phố/tỉnh",
+      "district": "Quận/Huyện (nếu có)",
+      "description": "Mô tả ngắn 2-3 câu",
+      "qa_pairs": [
+        {{"q": "Câu hỏi thường gặp 1?", "a": "Câu trả lời"}},
+        {{"q": "Giờ mở cửa?", "a": "Thông tin giờ mở cửa nếu biết"}}
+      ],
+      "is_external": true
+    }}
+  ],
+  "has_results": true/false
+}}
+
+Nếu không tìm thấy địa điểm liên quan, trả về {{"locations": [], "has_results": false}}
+"""
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 2048}
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=30) as response:
+                if response.status != 200:
+                    return {"error": f"Gemini API error: {response.status}", "locations": []}
+                
+                result = await response.json()
+                text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                
+                # Parse JSON from response
+                try:
+                    # Clean up response (remove markdown code blocks if present)
+                    clean_text = text.strip()
+                    if clean_text.startswith("```"):
+                        clean_text = clean_text.split("\n", 1)[1]  # Remove first line
+                        clean_text = clean_text.rsplit("```", 1)[0]  # Remove last ```
+                    
+                    data = json.loads(clean_text)
+                    return {
+                        "locations": data.get("locations", []),
+                        "has_results": data.get("has_results", len(data.get("locations", [])) > 0),
+                        "source": "gemini_generated"
+                    }
+                except json.JSONDecodeError:
+                    # If JSON parse fails, return raw text for debugging
+                    return {"error": "Failed to parse Gemini response", "raw": text[:500], "locations": []}
+                    
+    except asyncio.TimeoutError:
+        return {"error": "Search timeout", "locations": []}
+    except Exception as e:
+        return {"error": str(e), "locations": []}
+
+# Emotion Detection via Gemini
+class EmotionDetectRequest(BaseModel):
+    messages: List[str]  # Recent messages to analyze
+    api_key: Optional[str] = None
+
+@app.post("/chat/detect-emotion")
+async def detect_emotion(req: EmotionDetectRequest):
+    """Detect user emotion from chat messages using Gemini.
+    Returns: calm, excited, curious, frustrated, neutral"""
+    import aiohttp
+    
+    api_key = req.api_key
+    if not api_key and hasattr(app.state, 'api_keys') and 'gemini' in app.state.api_keys:
+        api_key = app.state.api_keys['gemini']
+    if not api_key:
+        api_key = os.environ.get('GEMINI_API_KEY')
+    
+    if not api_key:
+        return {"emotion": "neutral", "confidence": 0}
+    
+    messages_text = "\n".join(req.messages[-5:])  # Last 5 messages
+    
+    prompt = f"""Phân tích cảm xúc của người dùng từ các tin nhắn sau:
+
+{messages_text}
+
+Trả về JSON (CHỈ JSON, không giải thích):
+{{
+  "emotion": "calm" | "excited" | "curious" | "frustrated" | "neutral",
+  "confidence": 0.0-1.0,
+  "reason": "Giải thích ngắn gọn"
+}}
+"""
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 256}
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=15) as response:
+                if response.status != 200:
+                    return {"emotion": "neutral", "confidence": 0}
+                
+                result = await response.json()
+                text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                
+                try:
+                    clean_text = text.strip()
+                    if clean_text.startswith("```"):
+                        clean_text = clean_text.split("\n", 1)[1]
+                        clean_text = clean_text.rsplit("```", 1)[0]
+                    
+                    data = json.loads(clean_text)
+                    return data
+                except:
+                    return {"emotion": "neutral", "confidence": 0}
+                    
+    except:
+        return {"emotion": "neutral", "confidence": 0}
+
+# ===== NEW RAG PIPELINE =====
+# Import RAG module for query rewriting and context management
+try:
+    from rag import rewrite_query, is_affirmative, process_rag_query
+    from rag.memory import ConversationSummaryBufferMemory
+    HAS_RAG_MODULE = True
+    print("✅ RAG module loaded successfully")
+except ImportError as e:
+    HAS_RAG_MODULE = False
+    print(f"⚠️ RAG module not loaded: {e}")
+
+# Session-based memory manager (per conversation)
+session_memories: Dict[str, Any] = {}
+
+def get_session_memory(session_id: str, api_key: str = None) -> Any:
+    """Get or create memory for a session"""
+    if not HAS_RAG_MODULE:
+        return None
+    
+    if session_id not in session_memories:
+        session_memories[session_id] = ConversationSummaryBufferMemory(
+            api_key=api_key,
+            buffer_size=4,  # Keep last 4 raw messages
+            summary_threshold=8  # Summarize when > 8 messages
+        )
+        print(f"📝 Created new memory for session: {session_id[:8]}...")
+    
+    return session_memories[session_id]
+
+class RAGRequest(BaseModel):
+    query: str
+    history: List[Dict[str, str]] = []  # [{role, content}, ...]
+    session_id: Optional[str] = None  # Session ID for memory management
+    api_key: Optional[str] = None
+
+@app.post("/rag/process")
+async def process_rag(req: RAGRequest):
+    """
+    New RAG pipeline with Query Rewriting + Session Memory.
+    
+    Flow:
+    1. Load/create session memory (SummaryBufferMemory)
+    2. Add current message to memory
+    3. Detect if query is affirmative/short follow-up
+    4. Rewrite query using memory context
+    5. Return rewritten query + memory context
+    """
+    if not HAS_RAG_MODULE:
+        return {
+            "original_query": req.query,
+            "rewritten_query": req.query,
+            "skip_retrieval": False,
+            "error": "RAG module not available"
+        }
+    
+    # Get API key
+    api_key = req.api_key
+    if not api_key and hasattr(app.state, 'api_keys') and 'gemini' in app.state.api_keys:
+        api_key = app.state.api_keys['gemini']
+    if not api_key:
+        api_key = os.environ.get('GEMINI_API_KEY')
+    
+    if not api_key:
+        return {
+            "original_query": req.query,
+            "rewritten_query": req.query,
+            "skip_retrieval": False,
+            "error": "No API key"
+        }
+    
+    # Get or create session memory
+    memory = None
+    memory_context = ""
+    if req.session_id:
+        memory = get_session_memory(req.session_id, api_key)
+        if memory:
+            # Add user message to memory
+            memory.add_message("user", req.query)
+            # Get context from memory (includes summary + buffer + entities)
+            memory_context = memory.get_context_for_prompt()
+            print(f"📝 Memory context: topic={memory.current_topic}, entities={list(memory.entities.keys())[:3]}")
+    
+    # Process through RAG pipeline
+    try:
+        result = await process_rag_query(
+            query=req.query,
+            history=req.history,
+            api_key=api_key
+        )
+        
+        # Add memory context to result
+        result["memory_context"] = memory_context
+        result["current_topic"] = memory.current_topic if memory else None
+        result["entities"] = list(memory.entities.keys()) if memory else []
+        
+        return result
+    except Exception as e:
+        print(f"RAG process error: {e}")
+        return {
+            "original_query": req.query,
+            "rewritten_query": req.query,
+            "skip_retrieval": False,
+            "memory_context": memory_context,
+            "error": str(e)
+        }
+
 class ChatRequest(BaseModel):
     prompt: str
     model: Optional[str] = "gemini-2.5-flash"
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = 1024
     api_key: Optional[str] = None  # API key passed from frontend
+    image_urls: Optional[List[str]] = None  # For multimodal (Vision) requests
 
 # Model mapping - use actual available model names
 GEMINI_MODELS = {
@@ -920,8 +1174,9 @@ GEMINI_MODELS = {
 
 @app.post("/chat/generate")
 async def chat_generate(req: ChatRequest):
-    """Generate chat response using Gemini API"""
+    """Generate chat response using Gemini API (supports multimodal with images)"""
     import aiohttp
+    import base64
     
     # Get API key from request, then memory, then environment
     api_key = req.api_key
@@ -939,8 +1194,68 @@ async def chat_generate(req: ChatRequest):
     model_id = GEMINI_MODELS.get(req.model, req.model)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
     
+    # Build content parts - text first
+    parts = [{"text": req.prompt}]
+    
+    # Add images if present (multimodal/Vision request)
+    if req.image_urls and len(req.image_urls) > 0:
+        print(f"Processing {len(req.image_urls)} images for Vision API...")
+        
+        for img_url in req.image_urls[:3]:  # Limit to 3 images
+            try:
+                # Handle base64 data URLs (from frontend fallback when storage fails)
+                if img_url.startswith('data:'):
+                    # Parse data URL: data:image/png;base64,iVBORw0...
+                    try:
+                        header, data = img_url.split(',', 1)
+                        # Extract mime type from header like "data:image/png;base64"
+                        mime_part = header.split(':')[1].split(';')[0]
+                        mime_type = mime_part if mime_part else 'image/png'
+                        
+                        parts.append({
+                            "inline_data": {
+                                "mime_type": mime_type,
+                                "data": data  # Already base64 encoded
+                            }
+                        })
+                        print(f"Added base64 image: {mime_type} ({len(data)} chars)")
+                    except Exception as e:
+                        print(f"Failed to parse data URL: {e}")
+                        
+                # Handle HTTP/HTTPS URLs (fetch and convert to base64)
+                elif img_url.startswith('http://') or img_url.startswith('https://'):
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(img_url, timeout=15) as img_response:
+                            if img_response.status == 200:
+                                img_data = await img_response.read()
+                                img_base64 = base64.b64encode(img_data).decode('utf-8')
+                                
+                                # Detect mime type from content-type header or URL
+                                content_type = img_response.headers.get('content-type', 'image/jpeg')
+                                if 'png' in content_type or img_url.endswith('.png'):
+                                    mime_type = 'image/png'
+                                elif 'gif' in content_type or img_url.endswith('.gif'):
+                                    mime_type = 'image/gif'
+                                elif 'webp' in content_type or img_url.endswith('.webp'):
+                                    mime_type = 'image/webp'
+                                else:
+                                    mime_type = 'image/jpeg'
+                                
+                                parts.append({
+                                    "inline_data": {
+                                        "mime_type": mime_type,
+                                        "data": img_base64
+                                    }
+                                })
+                                print(f"Added HTTP image: {img_url[:50]}... ({mime_type})")
+                else:
+                    print(f"Unknown image URL format: {img_url[:30]}...")
+                    
+            except Exception as e:
+                print(f"Failed to process image: {e}")
+    
     payload = {
-        "contents": [{"role": "user", "parts": [{"text": req.prompt}]}],
+        "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {
             "temperature": req.temperature,
             "maxOutputTokens": req.max_tokens,
@@ -961,7 +1276,8 @@ async def chat_generate(req: ChatRequest):
                 return {
                     "text": text,
                     "model": model_id,
-                    "usage": result.get("usageMetadata", {})
+                    "usage": result.get("usageMetadata", {}),
+                    "has_images": len(req.image_urls or []) > 0
                 }
     except asyncio.TimeoutError:
         return {"error": "Request timeout - please try again"}
