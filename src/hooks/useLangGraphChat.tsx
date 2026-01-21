@@ -124,10 +124,11 @@ export function useLangGraphChat(initialSessionId?: string) {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    user_id: memoryShareEnabled ? user.id : `${user.id}_${sessionIdRef.current}`,
+                    user_id: user.id,
                     session_id: sessionIdRef.current,
                     message: content.trim(),
                     history: history,
+                    memory_scope: memoryShareEnabled ? 'global' : 'session',
                 }),
             });
 

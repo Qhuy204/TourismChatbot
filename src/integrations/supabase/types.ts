@@ -392,6 +392,39 @@ export type Database = {
         }
         Relationships: []
       }
+      user_preferences: {
+        Row: {
+          id: string
+          user_id: string
+          theme: string | null
+          animation_level: string | null
+          last_detected_emotion: string | null
+          emotion_confidence: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          theme?: string | null
+          animation_level?: string | null
+          last_detected_emotion?: string | null
+          emotion_confidence?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          theme?: string | null
+          animation_level?: string | null
+          last_detected_emotion?: string | null
+          emotion_confidence?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

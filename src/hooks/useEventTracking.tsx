@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import type { Json } from '@/integrations/supabase/types';
 
 // Event types with their default scores
 const EVENT_SCORES: Record<string, number> = {
@@ -73,7 +74,7 @@ export function useEventTracking() {
                 object_id: params.objectId || null,
                 duration_ms: params.durationMs || null,
                 score: totalScore,
-                payload: params.payload || null,
+                payload: (params.payload as Json) || null,
                 session_id: getOrCreateSessionId(),
             });
 
