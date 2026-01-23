@@ -1,7 +1,3 @@
-"""
-Response Generator Node
-Generates final response using Gemini with context
-"""
 from typing import List, Dict
 
 from ..state import MessageProcessingState, UserContextState, OutputState, EmotionType, IntentType

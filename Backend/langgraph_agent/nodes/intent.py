@@ -1,7 +1,3 @@
-"""
-Intent Classification Node
-Categorizes user messages for routing
-"""
 from typing import Tuple, List
 
 from ..state import MessageProcessingState, IntentType

@@ -208,7 +208,7 @@ export function ChatbotInterface() {
                                 Trợ lý Du lịch AI
                             </h2>
                             <p className="text-muted-foreground">
-                                Hỏi đáp về địa điểm du lịch Việt Nam - Powered by LangGraph
+                                Hỏi đáp về địa điểm du lịch Việt Nam
                             </p>
                         </div>
                     </div>

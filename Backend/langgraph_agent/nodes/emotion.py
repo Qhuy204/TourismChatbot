@@ -1,7 +1,3 @@
-"""
-Emotion Detection Node
-Detects user emotions for response adaptation
-"""
 from typing import Tuple
 
 from ..state import MessageProcessingState, EmotionType
