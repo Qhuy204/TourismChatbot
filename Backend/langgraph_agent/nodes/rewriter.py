@@ -9,26 +9,20 @@ from ..state import MessageProcessingState
 from ..utils.gemini_client import gemini_fast
 
 
-# Short reply patterns for rule-based rewrite
-SHORT_REPLIES = {
-    "có": "Có, tôi muốn biết thêm về {topic}",
-    "ok": "Đồng ý, cho tôi thêm thông tin về {topic}",
-    "tiếp": "Tiếp tục về {topic}",
-    "được": "Được, hãy cho tôi biết thêm về {topic}",
-    "ừ": "Vâng, tôi quan tâm đến {topic}",
-    "vâng": "Vâng, tôi muốn biết về {topic}",
-    "đúng": "Đúng vậy, hãy nói thêm về {topic}",
-    "thêm": "Cho tôi thêm thông tin về {topic}",
-    "chi tiết": "Cho tôi chi tiết hơn về {topic}",
-}
+import os
+import yaml
 
-# Travel entities for detecting complete queries
-TRAVEL_ENTITIES = [
-    "hà nội", "sài gòn", "đà nẵng", "hội an", "huế", "nha trang",
-    "phú quốc", "đà lạt", "sapa", "hạ long", "ninh bình", "quy nhơn",
-    "khách sạn", "resort", "tour", "vé máy bay", "nhà hàng",
-    "bãi biển", "núi", "chùa", "đền", "phố cổ", "viện bảo tàng"
-]
+# Initialize configs from YAML
+_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "rewriter.yaml")
+try:
+    with open(_config_path, "r", encoding="utf-8") as f:
+        _config = yaml.safe_load(f)
+except Exception as e:
+    print(f"⚠️ Error loading rewriter config: {e}")
+    _config = {"short_replies": {}, "travel_entities": []}
+
+SHORT_REPLIES = _config.get("short_replies", {})
+TRAVEL_ENTITIES = _config.get("travel_entities", [])
 
 
 def needs_rewrite(message: str) -> bool:

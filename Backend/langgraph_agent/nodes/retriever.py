@@ -50,14 +50,17 @@ def format_context_for_prompt(context: List[Dict]) -> str:
     if not context:
         return ""
     
-    lines = ["Thông tin tham khảo:"]
+    lines = ["Thông tin tham khảo (bạn có thể dùng các URL ảnh này để hiển thị ảnh cho người dùng bằng Markdown):"]
     for i, item in enumerate(context, 1):
         q = item.get("question", "")
         a = item.get("answer", "")
+        img = item.get("image_url", "")
         score = item.get("score", 0)
         
         lines.append(f"\n[{i}] (relevance: {score:.2f})")
         lines.append(f"Q: {q}")
         lines.append(f"A: {a}")
+        if img:
+            lines.append(f"Image URL: {img}")
     
     return "\n".join(lines)

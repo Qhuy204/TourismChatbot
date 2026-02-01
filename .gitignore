@@ -51,3 +51,5 @@ data/
 chroma_vqa/
 Backend/data/chroma_vqa/
 *.sqlite3
+
+Backend/model/

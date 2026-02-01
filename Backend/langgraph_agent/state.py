@@ -41,7 +41,7 @@ class UserContextState:
     
     # Behavioral data
     recent_searches: List[str] = field(default_factory=list)
-    top_interests: List[str] = field(default_factory=list)
+    interests: List[str] = field(default_factory=list)
     
     # Cache metadata
     cached_at: Optional[float] = None

@@ -16,17 +16,9 @@ CACHE_TTL = 1800  # 30 minutes
 async def load_from_database(user_id: str) -> Dict:
     """
     Load user data from Supabase.
-    TODO: Implement actual Supabase queries.
     """
-    # Placeholder - will be implemented when Supabase is connected
-    # For now, return mock data
-    return {
-        "preferred_cities": ["Đà Nẵng", "Hội An"],
-        "travel_style": "adventure",
-        "budget_range": "medium",
-        "recent_searches": ["bãi biển", "phố cổ"],
-        "top_interests": ["biển", "văn hóa", "ẩm thực"]
-    }
+    from ..memory.store import get_user_memory
+    return await get_user_memory(user_id)
 
 
 def get_cached_profile(user_id: str) -> Optional[UserContextState]:
@@ -53,7 +45,7 @@ def invalidate_cache(user_id: str) -> None:
         del _profile_cache[user_id]
 
 
-def extract_top_interests(events: List[Dict]) -> List[str]:
+def extract_interests(events: List[Dict]) -> List[str]:
     """Extract top interests from user events"""
     # Count interest occurrences
     interest_counts = {}
@@ -94,18 +86,18 @@ async def load_user_profile(state: UserContextState) -> UserContextState:
         state.travel_style = cached.travel_style
         state.budget_range = cached.budget_range
         state.recent_searches = cached.recent_searches
-        state.top_interests = cached.top_interests
+        state.interests = cached.interests
         state.cached_at = cached.cached_at
         return state
     
     # Load from database
     data = await load_from_database(state.user_id)
     
-    state.preferred_cities = data.get("preferred_cities", [])
-    state.travel_style = data.get("travel_style", "")
-    state.budget_range = data.get("budget_range", "")
-    state.recent_searches = data.get("recent_searches", [])
-    state.top_interests = data.get("top_interests", [])
+    state.preferred_cities = data.get("preferred_cities") or []
+    state.travel_style = data.get("travel_style", "") or ""
+    state.budget_range = data.get("budget_range", "") or ""
+    state.recent_searches = data.get("recent_searches") or []
+    state.interests = data.get("interests") or []
     
     # Cache the profile
     cache_profile(state)

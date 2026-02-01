@@ -4,24 +4,22 @@ from ..state import MessageProcessingState, EmotionType
 from ..utils.gemini_client import gemini_fast
 
 
-# Simple keyword-based emotion detection
+import os
+import yaml
+
+# Initialize configs from YAML
+_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "emotion.yaml")
+try:
+    with open(_config_path, "r", encoding="utf-8") as f:
+        _config = yaml.safe_load(f)
+except Exception as e:
+    print(f"⚠️ Error loading emotion config: {e}")
+    _config = {"emotion_keywords": {}}
+
+# Convert string mapping from YAML to Enum mapping
+_raw_keywords = _config.get("emotion_keywords", {})
 EMOTION_KEYWORDS = {
-    EmotionType.EXCITED: [
-        "tuyệt vời", "tuyệt", "quá đẹp", "háo hức", "mong chờ",
-        "thích quá", "wow", "amazing", "!!", "yay", "haha"
-    ],
-    EmotionType.FRUSTRATED: [
-        "chán", "bực", "khó chịu", "tệ", "sai", "không hiểu",
-        "lại", "mãi", "???", "zzz", "ugh"
-    ],
-    EmotionType.CURIOUS: [
-        "tại sao", "vì sao", "như thế nào", "thế nào", "là gì",
-        "ở đâu", "bao nhiêu", "khi nào", "?", "cho hỏi"
-    ],
-    EmotionType.CALM: [
-        "ok", "được", "ừ", "vâng", "cảm ơn", "thanks",
-        "tốt", "hay", "đẹp"
-    ],
+    EmotionType(k): v for k, v in _raw_keywords.items()
 }
 
 

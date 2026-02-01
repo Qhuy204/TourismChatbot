@@ -27,7 +27,7 @@ interface SessionManagerState {
     memoryShareEnabled: boolean;
 }
 
-const STORAGE_KEY = 'chatbot_sessions';
+const LANGGRAPH_API_URL = import.meta.env.VITE_LANGGRAPH_API_URL || 'http://localhost:8000';
 const MEMORY_KEY = 'chatbot_memory_share';
 
 export function useSessionManager() {
@@ -37,96 +37,172 @@ export function useSessionManager() {
         activeSessionId: null,
         memoryShareEnabled: false,
     });
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Load from localStorage on mount
+    // Load from Backend on mount or user change
     useEffect(() => {
-        if (!user?.id) return;
-
-        const stored = localStorage.getItem(`${STORAGE_KEY}_${user.id}`);
-        const memoryShare = localStorage.getItem(`${MEMORY_KEY}_${user.id}`);
-
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                setState(prev => ({
-                    ...prev,
-                    sessions: parsed.sessions.map((s: any) => ({
-                        ...s,
-                        createdAt: new Date(s.createdAt),
-                        updatedAt: new Date(s.updatedAt),
-                    })),
-                    activeSessionId: parsed.activeSessionId,
-                }));
-            } catch (e) {
-                console.error('Failed to parse sessions:', e);
-            }
+        if (!user?.id) {
+            setIsLoading(false);
+            return;
         }
 
+        const fetchSessions = async () => {
+            setIsLoading(true);
+            try {
+                // Fetch sessions from Backend
+                const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/${user.id}`);
+                if (!response.ok) throw new Error('Failed to fetch sessions');
+                const data = await response.json();
+
+                const sessions: ChatSession[] = (data.sessions || []).map((s: any) => ({
+                    id: s.id,
+                    name: s.title,
+                    createdAt: new Date(s.created_at),
+                    updatedAt: new Date(s.updated_at),
+                    isPinned: s.is_pinned || false,
+                    messageCount: s.message_count || 0,
+                    preview: s.first_message || '',
+                }));
+
+                // Load active session from cookie/local preference if exists
+                const lastSessionId = localStorage.getItem(`active_session_${user.id}`);
+
+                setState(prev => ({
+                    ...prev,
+                    sessions,
+                    activeSessionId: lastSessionId && sessions.find(s => s.id === lastSessionId)
+                        ? lastSessionId
+                        : (sessions[0]?.id || null),
+                }));
+            } catch (e) {
+                console.error('Failed to load sessions:', e);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        const memoryShare = localStorage.getItem(`${MEMORY_KEY}_${user.id}`);
         if (memoryShare) {
             setState(prev => ({ ...prev, memoryShareEnabled: memoryShare === 'true' }));
         }
+
+        fetchSessions();
     }, [user?.id]);
 
-    // Persist to localStorage on change
+    // Persist memory share to localStorage (keep it local for now)
     useEffect(() => {
         if (!user?.id) return;
-
-        localStorage.setItem(`${STORAGE_KEY}_${user.id}`, JSON.stringify({
-            sessions: state.sessions,
-            activeSessionId: state.activeSessionId,
-        }));
         localStorage.setItem(`${MEMORY_KEY}_${user.id}`, String(state.memoryShareEnabled));
-    }, [state, user?.id]);
+    }, [state.memoryShareEnabled, user?.id]);
 
-    // Create new session
-    const createSession = useCallback((name?: string) => {
-        const newSession: ChatSession = {
-            id: crypto.randomUUID(),
-            name: name || `Cuộc trò chuyện ${state.sessions.length + 1}`,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            isPinned: false,
-            messageCount: 0,
-            preview: '',
-        };
+    // Persist active session to localStorage
+    useEffect(() => {
+        if (!user?.id || !state.activeSessionId) return;
+        localStorage.setItem(`active_session_${user.id}`, state.activeSessionId);
+    }, [state.activeSessionId, user?.id]);
 
-        setState(prev => ({
-            ...prev,
-            sessions: [newSession, ...prev.sessions],
-            activeSessionId: newSession.id,
-        }));
+    // Create new session via Backend
+    const createSession = useCallback(async (name?: string) => {
+        if (!user?.id) return null;
 
-        return newSession.id;
-    }, [state.sessions.length]);
+        const newId = crypto.randomUUID();
+        const title = name || `Cuộc hội thoại mới`;
 
-    // Delete session
-    const deleteSession = useCallback((sessionId: string) => {
-        setState(prev => {
-            const newSessions = prev.sessions.filter(s => s.id !== sessionId);
-            const newActiveId = prev.activeSessionId === sessionId
-                ? (newSessions[0]?.id || null)
-                : prev.activeSessionId;
+        try {
+            const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: user.id,
+                    session_id: newId,
+                    title: title,
+                }),
+            });
 
-            return {
-                ...prev,
-                sessions: newSessions,
-                activeSessionId: newActiveId,
+            if (!response.ok) throw new Error('Failed to create session');
+
+            const newSession: ChatSession = {
+                id: newId,
+                name: title,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                isPinned: false,
+                messageCount: 0,
+                preview: '',
             };
-        });
-    }, []);
 
-    // Rename session
-    const renameSession = useCallback((sessionId: string, newName: string) => {
-        setState(prev => ({
-            ...prev,
-            sessions: prev.sessions.map(s =>
-                s.id === sessionId ? { ...s, name: newName, updatedAt: new Date() } : s
-            ),
-        }));
-    }, []);
+            setState(prev => ({
+                ...prev,
+                sessions: [newSession, ...prev.sessions],
+                activeSessionId: newId,
+            }));
 
-    // Pin/Unpin session
+            return newId;
+        } catch (e) {
+            console.error('Create session error:', e);
+            return null;
+        }
+    }, [user?.id]);
+
+    // Delete session via Backend
+    const deleteSession = useCallback(async (sessionId: string) => {
+        if (!user?.id) return;
+
+        try {
+            const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/${sessionId}`, {
+                method: 'DELETE',
+            });
+
+            if (!response.ok) throw new Error('Failed to delete session');
+
+            setState(prev => {
+                const newSessions = prev.sessions.filter(s => s.id !== sessionId);
+                const newActiveId = prev.activeSessionId === sessionId
+                    ? (newSessions[0]?.id || null)
+                    : prev.activeSessionId;
+
+                return {
+                    ...prev,
+                    sessions: newSessions,
+                    activeSessionId: newActiveId,
+                };
+            });
+        } catch (e) {
+            console.error('Delete session error:', e);
+        }
+    }, [user?.id]);
+
+    // Rename session via Backend
+    const renameSession = useCallback(async (sessionId: string, newName: string) => {
+        if (!user?.id) return;
+
+        try {
+            const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/sessions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: user.id,
+                    session_id: sessionId,
+                    title: newName,
+                }),
+            });
+
+            if (!response.ok) throw new Error('Failed to rename session');
+
+            setState(prev => ({
+                ...prev,
+                sessions: prev.sessions.map(s =>
+                    s.id === sessionId ? { ...s, name: newName, updatedAt: new Date() } : s
+                ),
+            }));
+        } catch (e) {
+            console.error('Rename session error:', e);
+        }
+    }, [user?.id]);
+
+    // Pin/Unpin session (Backend doesn't support yet, keeping local or adding to API soon)
     const togglePin = useCallback((sessionId: string) => {
+        // For now just local until we add is_pinned to chat_sessions table
         setState(prev => ({
             ...prev,
             sessions: prev.sessions.map(s =>
@@ -140,7 +216,7 @@ export function useSessionManager() {
         setState(prev => ({ ...prev, activeSessionId: sessionId }));
     }, []);
 
-    // Update session metadata (message count, preview)
+    // Update session metadata (local update after message send)
     const updateSessionMeta = useCallback((sessionId: string, messageCount: number, preview: string) => {
         setState(prev => ({
             ...prev,
@@ -165,6 +241,7 @@ export function useSessionManager() {
         sessions: sortedSessions,
         activeSessionId: state.activeSessionId,
         memoryShareEnabled: state.memoryShareEnabled,
+        isLoading,
         createSession,
         deleteSession,
         renameSession,

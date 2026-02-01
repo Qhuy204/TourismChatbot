@@ -6,23 +6,20 @@ from ..state import MessageProcessingState, IntentType
 from ..utils.gemini_client import gemini_fast
 
 
-# Keywords indicating travel-related queries
-TRAVEL_KEYWORDS = [
-    "du lịch", "địa điểm", "thăm", "tham quan", "khám phá",
-    "khách sạn", "resort", "homestay", "ở đâu", "nghỉ",
-    "ăn gì", "món ngon", "đặc sản", "quán", "nhà hàng",
-    "đi", "bay", "xe", "tàu", "tour", "vé",
-    "biển", "núi", "đảo", "phố", "chùa", "đền", "viện",
-    "việt nam", "hà nội", "sài gòn", "đà nẵng", "hội an"
-]
+import os
+import yaml
 
-# Off-topic patterns
-OFF_TOPIC_PATTERNS = [
-    "code", "lập trình", "python", "javascript",
-    "toán", "tính", "giải", "phương trình",
-    "chính trị", "bầu cử", "tôn giáo",
-    "y tế", "bệnh", "thuốc", "khám"
-]
+# Initialize configs from YAML
+_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "guard.yaml")
+try:
+    with open(_config_path, "r", encoding="utf-8") as f:
+        _config = yaml.safe_load(f)
+except Exception as e:
+    print(f"⚠️ Error loading guard config: {e}")
+    _config = {"travel_keywords": [], "off_topic_patterns": []}
+
+TRAVEL_KEYWORDS = _config.get("travel_keywords", [])
+OFF_TOPIC_PATTERNS = _config.get("off_topic_patterns", [])
 
 
 def check_relevance_keywords(message: str) -> tuple[bool, str]:

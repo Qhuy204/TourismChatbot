@@ -425,6 +425,103 @@ export type Database = {
         }
         Relationships: []
       }
+      locations_cache: {
+        Row: {
+          id: number
+          name: string
+          name_normalized: string
+          city: string | null
+          province: string | null
+          category: string
+          description: string | null
+          details: Json | null
+          source_response_id: number | null
+          extracted_at: string
+        }
+        Insert: {
+          id?: number
+          name: string
+          name_normalized: string
+          city?: string | null
+          province?: string | null
+          category?: string
+          description?: string | null
+          details?: Json | null
+          source_response_id?: number | null
+          extracted_at?: string
+        }
+        Update: {
+          id?: number
+          name?: string
+          name_normalized?: string
+          city?: string | null
+          province?: string | null
+          category?: string
+          description?: string | null
+          details?: Json | null
+          source_response_id?: number | null
+          extracted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locations_cache_source_response_id_fkey"
+            columns: ["source_response_id"]
+            isOneToOne: false
+            referencedRelation: "chat_logs"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      model_evaluations: {
+        Row: {
+          id: number
+          chat_log_id: number | null
+          session_id: string
+          response_latency_ms: number | null
+          context_relevance: number | null
+          context_count: number | null
+          model_used: string | null
+          hallucination_score: number | null
+          response_length: number | null
+          user_feedback_score: number | null
+          evaluated_at: string
+        }
+        Insert: {
+          id?: number
+          chat_log_id?: number | null
+          session_id: string
+          response_latency_ms?: number | null
+          context_relevance?: number | null
+          context_count?: number | null
+          model_used?: string | null
+          hallucination_score?: number | null
+          response_length?: number | null
+          user_feedback_score?: number | null
+          evaluated_at?: string
+        }
+        Update: {
+          id?: number
+          chat_log_id?: number | null
+          session_id?: string
+          response_latency_ms?: number | null
+          context_relevance?: number | null
+          context_count?: number | null
+          model_used?: string | null
+          hallucination_score?: number | null
+          response_length?: number | null
+          user_feedback_score?: number | null
+          evaluated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model_evaluations_chat_log_id_fkey"
+            columns: ["chat_log_id"]
+            isOneToOne: false
+            referencedRelation: "chat_logs"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never

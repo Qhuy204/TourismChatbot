@@ -1,0 +1,40 @@
+# Rewriter Configuration
+
+# Short reply patterns for rule-based rewrite
+# {topic} will be replaced with the detected last topic from conversation
+short_replies:
+  "có": "Có, tôi muốn biết thêm về {topic}"
+  "ok": "Đồng ý, cho tôi thêm thông tin về {topic}"
+  "tiếp": "Tiếp tục về {topic}"
+  "được": "Được, hãy cho tôi biết thêm về {topic}"
+  "ừ": "Vâng, tôi quan tâm đến {topic}"
+  "vâng": "Vâng, tôi muốn biết về {topic}"
+  "đúng": "Đúng vậy, hãy nói thêm về {topic}"
+  "thêm": "Cho tôi thêm thông tin về {topic}"
+  "chi tiết": "Cho tôi chi tiết hơn về {topic}"
+
+# Travel entities for detecting complete queries/topics
+travel_entities:
+  - "hà nội"
+  - "sài gòn"
+  - "đà nẵng"
+  - "hội an"
+  - "huế"
+  - "nha trang"
+  - "phú quốc"
+  - "đà lạt"
+  - "sapa"
+  - "hạ long"
+  - "ninh bình"
+  - "quy nhơn"
+  - "khách sạn"
+  - "resort"
+  - "tour"
+  - "vé máy bay"
+  - "nhà hàng"
+  - "bãi biển"
+  - "núi"
+  - "chùa"
+  - "đền"
+  - "phố cổ"
+  - "viện bảo tàng"

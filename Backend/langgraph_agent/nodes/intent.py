@@ -4,27 +4,22 @@ from ..state import MessageProcessingState, IntentType
 from ..utils.gemini_client import gemini_fast
 
 
-# Keyword-based rules for fast classification
+import os
+import yaml
+
+# Initialize configs from YAML
+_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "intent.yaml")
+try:
+    with open(_config_path, "r", encoding="utf-8") as f:
+        _config = yaml.safe_load(f)
+except Exception as e:
+    print(f"⚠️ Error loading intent config: {e}")
+    _config = {"intent_keywords": {}}
+
+# Convert string mapping from YAML to Enum mapping
+_raw_keywords = _config.get("intent_keywords", {})
 INTENT_KEYWORDS = {
-    IntentType.TRAVEL_QUERY: [
-        "đi", "du lịch", "địa điểm", "khách sạn", "tour", "vé",
-        "thăm", "tham quan", "nghỉ dưỡng", "resort", "bãi biển",
-        "núi", "đảo", "phố cổ", "chùa", "đền", "lăng", "viện bảo tàng",
-        "ăn gì", "món ngon", "đặc sản", "ẩm thực", "nhà hàng",
-        "lịch trình", "itinerary", "ngày", "đêm"
-    ],
-    IntentType.CHIT_CHAT: [
-        "bạn là ai", "xin chào", "tạm biệt", "cảm ơn", "hello", "hi",
-        "tên gì", "làm gì", "giúp gì", "bye", "goodbye"
-    ],
-    IntentType.PREFERENCE_UPDATE: [
-        "cập nhật sở thích", "thích đi", "không thích", "yêu thích",
-        "ưa thích", "ghét", "muốn", "prefer", "sở thích của tôi"
-    ],
-    IntentType.NEGATIVE_FEEDBACK: [
-        "sai rồi", "không đúng", "nhầm", "không phải", "chán",
-        "tệ", "dở", "không hài lòng", "thất vọng"
-    ],
+    IntentType(k): v for k, v in _raw_keywords.items()
 }
 
 

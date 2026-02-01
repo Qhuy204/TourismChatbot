@@ -51,9 +51,11 @@ export function SessionSidebar({ onSessionChange, isOpen, onClose }: SessionSide
     const [editName, setEditName] = useState('');
     const [showSettings, setShowSettings] = useState(false);
 
-    const handleCreateSession = () => {
-        const newId = createSession();
-        onSessionChange(newId);
+    const handleCreateSession = async () => {
+        const newId = await createSession();
+        if (newId) {
+            onSessionChange(newId);
+        }
     };
 
     const handleSelectSession = (session: ChatSession) => {
@@ -98,7 +100,7 @@ export function SessionSidebar({ onSessionChange, isOpen, onClose }: SessionSide
     if (!isOpen) return null;
 
     return (
-        <div className="w-72 h-full bg-background border-r flex flex-col">
+        <div className="w-100 h-full bg-background border-r flex flex-col">
             {/* Header */}
             <div className="p-4 border-b flex items-center justify-between">
                 <h2 className="font-semibold text-lg">Lịch sử chat</h2>
@@ -151,7 +153,7 @@ export function SessionSidebar({ onSessionChange, isOpen, onClose }: SessionSide
                     variant="outline"
                 >
                     <Plus className="h-4 w-4" />
-                    Cuộc trò chuyện mới
+                    Cuộc hội thoại mới
                 </Button>
             </div>
 
@@ -168,7 +170,7 @@ export function SessionSidebar({ onSessionChange, isOpen, onClose }: SessionSide
                                 key={session.id}
                                 onClick={() => handleSelectSession(session)}
                                 className={cn(
-                                    "group p-3 rounded-lg cursor-pointer transition-colors",
+                                    "group p-3 rounded-lg cursor-pointer transition-colors w-64",
                                     "hover:bg-muted",
                                     activeSessionId === session.id && "bg-primary/10 border border-primary/20"
                                 )}
@@ -211,58 +213,55 @@ export function SessionSidebar({ onSessionChange, isOpen, onClose }: SessionSide
                                     </div>
                                 ) : (
                                     <>
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex items-center gap-2 min-w-0">
+                                        <div className="flex items-center justify-between gap-1 w-full">
+                                            <div className="flex items-center gap-2 min-w-0 flex-1">
                                                 <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0" />
                                                 <span className="text-sm font-medium truncate">
-                                                    {session.name}
+                                                    {session.name.split(' ').slice(0, 5).join(' ')}
+                                                    {session.name.split(' ').length > 5 ? '...' : ''}
                                                 </span>
                                                 {session.isPinned && (
                                                     <Pin className="h-3 w-3 text-primary shrink-0" />
                                                 )}
                                             </div>
-                                            <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
+
+                                            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                                 <Button
                                                     size="icon"
                                                     variant="ghost"
-                                                    className="h-6 w-6"
+                                                    className="h-7 w-7"
+                                                    title="Sửa tên"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleStartRename(session);
                                                     }}
                                                 >
-                                                    <Edit2 className="h-3 w-3" />
+                                                    <Edit2 className="h-3.5 w-3.5" />
                                                 </Button>
                                                 <Button
                                                     size="icon"
                                                     variant="ghost"
-                                                    className="h-6 w-6"
+                                                    className="h-7 w-7"
+                                                    title={session.isPinned ? "Bỏ ghim" : "Ghim"}
                                                     onClick={(e) => handleTogglePin(session.id, e)}
                                                 >
                                                     {session.isPinned ? (
-                                                        <PinOff className="h-3 w-3" />
+                                                        <PinOff className="h-3.5 w-3.5" />
                                                     ) : (
-                                                        <Pin className="h-3 w-3" />
+                                                        <Pin className="h-3.5 w-3.5 text-muted-foreground/50" />
                                                     )}
                                                 </Button>
                                                 <Button
                                                     size="icon"
                                                     variant="ghost"
-                                                    className="h-6 w-6 text-destructive"
+                                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                    title="Xóa"
                                                     onClick={(e) => handleDelete(session.id, e)}
                                                 >
-                                                    <Trash2 className="h-3 w-3" />
+                                                    <Trash2 className="h-3.5 w-3.5" />
                                                 </Button>
                                             </div>
                                         </div>
-                                        {session.preview && (
-                                            <p className="text-xs text-muted-foreground mt-1 truncate pl-6">
-                                                {session.preview}
-                                            </p>
-                                        )}
-                                        <p className="text-[10px] text-muted-foreground/60 mt-1 pl-6">
-                                            {session.messageCount} tin nhắn
-                                        </p>
                                     </>
                                 )}
                             </div>

@@ -47,6 +47,7 @@ def build_system_prompt(
     # Base prompt
     prompt_parts = [
         "Bạn là trợ lý du lịch Việt Nam thân thiện và am hiểu.",
+        "Nếu trong 'Thông tin tham khảo' có Image URL, hãy luôn ưu tiên nhúng ảnh vào câu trả lời bằng cú pháp Markdown: ![Mô tả](URL).",
         f"Phong cách trả lời: {style['tone']}.",
     ]
     
@@ -58,8 +59,8 @@ def build_system_prompt(
     if user_context.travel_style:
         prompt_parts.append(f"Phong cách du lịch: {user_context.travel_style}.")
     
-    if user_context.top_interests:
-        interests = ", ".join(user_context.top_interests[:3])
+    if user_context.interests:
+        interests = ", ".join(user_context.interests[:3])
         prompt_parts.append(f"Sở thích: {interests}.")
     
     # Intent-specific instructions
@@ -150,6 +151,7 @@ async def generate_response(
                     "image_id": item.get("image_id", "N/A"),
                     "q": item.get("question", ""),
                     "a": item.get("answer", ""),
+                    "image_url": item.get("image_url", ""),
                     "score": round(item.get("score", 0), 2)
                 }
                 for item in processing_state.retrieved_context

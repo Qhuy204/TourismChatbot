@@ -28,50 +28,25 @@ class ExtractedFact:
     source_message: str
 
 
-# Rule-based patterns for common facts
+import os
+import yaml
+
+# Initialize configs from YAML
+_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "extractor.yaml")
+try:
+    with open(_config_path, "r", encoding="utf-8") as f:
+        _config = yaml.safe_load(f)
+except Exception as e:
+    print(f"⚠️ Error loading extractor config: {e}")
+    _config = {"fact_patterns": {}, "allowed_keys": []}
+
+# Convert string mapping from YAML to Enum mapping
+_raw_patterns = _config.get("fact_patterns", {})
 FACT_PATTERNS = {
-    # Preferences
-    "thích": FactType.PREFERENCE,
-    "yêu thích": FactType.PREFERENCE,
-    "ưa thích": FactType.PREFERENCE,
-    "ghét": FactType.PREFERENCE,
-    "không thích": FactType.PREFERENCE,
-    
-    # Travel style
-    "phong cách": FactType.TRAVEL_STYLE,
-    "mạo hiểm": FactType.TRAVEL_STYLE,
-    "thư giãn": FactType.TRAVEL_STYLE,
-    "khám phá": FactType.TRAVEL_STYLE,
-    
-    # Constraints
-    "ngân sách": FactType.CONSTRAINT,
-    "budget": FactType.CONSTRAINT,
-    "không có nhiều thời gian": FactType.CONSTRAINT,
-    "dị ứng": FactType.CONSTRAINT,
-    "ăn chay": FactType.CONSTRAINT,
-    
-    # Personal info
-    "tôi sống ở": FactType.PERSONAL_INFO,
-    "tôi ở": FactType.PERSONAL_INFO,
-    "tôi là": FactType.PERSONAL_INFO,
-    
-    # Interests
-    "quan tâm đến": FactType.INTEREST,
-    "muốn tìm hiểu": FactType.INTEREST,
+    k: FactType(v) for k, v in _raw_patterns.items()
 }
 
-# Keys that can be stored
-ALLOWED_KEYS = [
-    "preferred_cities",
-    "travel_style", 
-    "budget_range",
-    "dietary_restrictions",
-    "interests",
-    "disliked_places",
-    "accommodation_preference",
-    "transport_preference",
-    "trip_duration_preference",
-]
+ALLOWED_KEYS = _config.get("allowed_keys", [])
 
 
 def extract_by_rules(message: str) -> List[ExtractedFact]:
@@ -142,15 +117,21 @@ async def extract_by_llm(message: str, history: List[Dict] = None) -> List[Extra
     if not any(ind in message.lower() for ind in indicators):
         return []
     
-    prompt = f"""Phân tích tin nhắn và trích xuất thông tin cá nhân/sở thích của user.
+    prompt = f"""Phân tích tin nhắn và trích xuất thông tin cá nhân/sở thích của khách du lịch.
+Đặc biệt chú ý đến:
+- preferred_cities: Các thành phố/địa danh họ muốn đi hoặc thích.
+- interests: Các hoạt động (biển, núi, trekking, ẩm thực...).
+- travel_style: Phong cách đi (mạo hiểm, thư giãn, tiết kiệm...).
 
 Tin nhắn: "{message}"
 
-Nếu có thông tin, trả về JSON array:
-[{{"key": "interests/travel_style/budget_range/dietary_restrictions", "value": "...", "confidence": 0.0-1.0}}]
+Trả về JSON array:
+[
+  {{"key": "preferred_cities", "value": "Tên thành phố", "confidence": 0.8}},
+  {{"key": "interests", "value": "...", "confidence": 0.7}}
+]
 
-Nếu không có thông tin cá nhân, trả về: []
-
+Nếu không có thông tin mới, trả về: []
 Chỉ trả về JSON:"""
     
     try:

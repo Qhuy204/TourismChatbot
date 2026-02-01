@@ -34,6 +34,7 @@ class ChatResponse(BaseModel):
     emotion_detected: str
     intent: str
     memory_updated: bool = False
+    new_title: Optional[str] = None
     debug: Optional[Dict] = None
 
 
@@ -52,6 +53,13 @@ class EventRequest(BaseModel):
     session_id: str
     event_type: str
     event_data: Optional[Dict] = None
+
+
+class SessionCreateRequest(BaseModel):
+    user_id: str
+    session_id: str
+    title: str = "Cuộc hội thoại mới"
+    first_message: Optional[str] = None
 
 
 # ============== Lifespan ==============
@@ -165,6 +173,7 @@ async def chat(request: ChatRequest):
             emotion_detected=result.get("emotion_detected", "neutral"),
             intent=result.get("intent", "travel_query"),
             memory_updated=result.get("memory_updated", False),
+            new_title=result.get("new_title"),
             debug=result.get("debug")
         )
     except Exception as e:
@@ -205,6 +214,64 @@ async def get_suggestions(request: SuggestionsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/langgraph/initial_suggestions/{user_id}")
+async def get_initial_suggestions(user_id: str):
+    """
+    Get personalized initial suggestions for a new chat session.
+    """
+    from langgraph_agent.memory.store import get_user_preferences
+    from langgraph_agent.utils.gemini_client import gemini_fast
+    import json
+    
+    prefs = await get_user_preferences(user_id)
+    
+    # Default suggestions in case nothing else works
+    default_data = {
+        "welcome_message": "Tôi là trợ lý du lịch AI. Hãy hỏi tôi về các địa điểm du lịch Việt Nam, gợi ý lịch trình, hoặc thông tin về các điểm tham quan!",
+        "suggestions": [
+            {"text": "Gợi ý địa điểm du lịch biển", "category": "personalized"},
+            {"text": "Đà Nẵng có gì hay?", "category": "personalized"},
+            {"text": "Địa điểm du lịch miền Trung", "category": "personalized"}
+        ]
+    }
+    
+    if not prefs or (not prefs.get("interests") and not prefs.get("preferred_cities")):
+        return default_data
+        
+    # Generate personalized suggestions using Gemini
+    try:
+        pref_str = ""
+        if prefs.get("interests"): pref_str += f"- Sở thích: {', '.join(prefs['interests'])}\n"
+        if prefs.get("preferred_cities"): pref_str += f"- Thành phố quan tâm: {', '.join(prefs['preferred_cities'])}\n"
+        
+        prompt = f"""
+        Dựa trên sở thích du lịch của người dùng này:
+        {pref_str}
+        
+        Hãy tạo:
+        1. Một câu chào mừng cực kỳ ngắn gọn (dưới 15 từ) mời họ hỏi về du lịch dựa trên sở thích của họ.
+        2. 3 gợi ý câu hỏi mẫu (dưới 10 từ mỗi câu) mà họ có thể muốn hỏi ngay bây giờ.
+        
+        Trả về định dạng JSON:
+        {{
+            "welcome_message": "...",
+            "suggestions": [
+                {{"text": "...", "category": "personalized"}},
+                ...
+            ]
+        }}
+        Chỉ trả về JSON thô, không có dấu ngoặc ``` hay văn bản thừa nào khác.
+        """
+        
+        response = await gemini_fast.generate_content(prompt)
+        # Attempt to parse
+        clean_res = response.strip().strip('```json').strip('```').strip()
+        return json.loads(clean_res)
+    except Exception as e:
+        print(f"⚠️ Error generating personalized suggestions: {e}")
+        return default_data
+
+
 @app.post("/langgraph/event")
 async def track_event(request: EventRequest):
     """
@@ -223,6 +290,45 @@ async def track_event(request: EventRequest):
     except Exception as e:
         print(f"Event logging error: {e}")
         return {"status": "error", "message": str(e)}
+
+
+# ============== Session Management Endpoints ==============
+
+@app.get("/langgraph/sessions/{user_id}")
+async def list_sessions(user_id: str):
+    """List all chat sessions for a user"""
+    from langgraph_agent.memory.store import get_chat_sessions
+    sessions = await get_chat_sessions(user_id)
+    return {"sessions": sessions}
+
+
+@app.post("/langgraph/sessions")
+async def create_or_update_session(request: SessionCreateRequest):
+    """Create or update a session title/metadata"""
+    from langgraph_agent.memory.store import upsert_chat_session
+    success = await upsert_chat_session(
+        user_id=request.user_id,
+        session_id=request.session_id,
+        title=request.title,
+        first_message=request.first_message
+    )
+    return {"status": "ok" if success else "error"}
+
+
+@app.delete("/langgraph/sessions/{session_id}")
+async def delete_session(session_id: str):
+    """Delete a session and its logs"""
+    from langgraph_agent.memory.store import delete_chat_session
+    success = await delete_chat_session(session_id)
+    return {"status": "ok" if success else "error"}
+
+
+@app.get("/langgraph/history/{session_id}")
+async def get_history(session_id: str):
+    """Get full message history for a session"""
+    from langgraph_agent.memory.store import get_session_history
+    history = await get_session_history(session_id)
+    return {"history": history}
 
 
 # ============== Run ==============

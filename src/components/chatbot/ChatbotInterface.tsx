@@ -35,9 +35,12 @@ export function ChatbotInterface() {
 
     // Ensure there's always an active session
     useEffect(() => {
-        if (!sessionManager.activeSessionId && sessionManager.sessions.length === 0) {
-            sessionManager.createSession();
-        }
+        const initSession = async () => {
+            if (!sessionManager.activeSessionId && sessionManager.sessions.length === 0 && !sessionManager.isLoading) {
+                await sessionManager.createSession();
+            }
+        };
+        initSession();
     }, [sessionManager]);
 
     const {
@@ -50,6 +53,8 @@ export function ChatbotInterface() {
         refreshSuggestions,
         error,
         switchSession,
+        fetchInitialSuggestions,
+        initialData,
     } = useLangGraphChat(sessionManager.activeSessionId || undefined);
     const { trackPageView, trackChatMessage } = useEventTracking();
     const { setEmotion } = useTheme();
@@ -72,6 +77,13 @@ export function ChatbotInterface() {
     useEffect(() => {
         trackPageView('chatbot');
     }, [trackPageView]);
+
+    // Fetch initial suggestions for new session
+    useEffect(() => {
+        if (messages.length === 0 && !isLoading) {
+            fetchInitialSuggestions();
+        }
+    }, [messages.length, sessionManager.activeSessionId, fetchInitialSuggestions, isLoading]);
 
     // Auto-scroll to bottom when new messages arrive
     useEffect(() => {
@@ -96,16 +108,24 @@ export function ChatbotInterface() {
         e?.preventDefault();
         if ((!input.trim() && !attachment) || isLoading) return;
 
+        const currentSid = sessionManager.activeSessionId;
+        if (!currentSid) return;
+
         const message = input.trim();
         setInput('');
         setAttachment(null);
         trackChatMessage('user', message);
 
-        await sendMessage(message, attachment ? [{
-            url: attachment.url,
-            type: attachment.mimeType,
-            name: attachment.name,
-        }] : undefined);
+        await sendMessage(
+            message,
+            attachment ? [{
+                url: attachment.url,
+                type: attachment.mimeType,
+                name: attachment.name,
+            }] : undefined,
+            sessionManager.memoryShareEnabled,
+            (newTitle) => sessionManager.renameSession(currentSid, newTitle)
+        );
     };
 
     const handleFileUpload = (file: UploadedFile) => {
@@ -247,25 +267,27 @@ export function ChatbotInterface() {
                                     </div>
                                     <h3 className="text-lg font-semibold mb-2">Xin chào! 👋</h3>
                                     <p className="text-muted-foreground max-w-md mb-6">
-                                        Tôi là trợ lý du lịch AI. Hãy hỏi tôi về các địa điểm du lịch Việt Nam,
-                                        gợi ý lịch trình, hoặc thông tin về các điểm tham quan!
+                                        {initialData?.welcome_message || "Tôi là trợ lý du lịch AI. Hãy hỏi tôi về các địa điểm du lịch Việt Nam, gợi ý lịch trình, hoặc thông tin về các điểm tham quan!"}
                                     </p>
                                     <div className="flex flex-wrap gap-2 justify-center">
-                                        {[
+                                        {(suggestions.length > 0 ? suggestions : [
                                             'Gợi ý địa điểm du lịch biển',
                                             'Đà Nẵng có gì hay?',
                                             'Địa điểm du lịch miền Trung'
-                                        ].map((suggestion) => (
-                                            <Button
-                                                key={suggestion}
-                                                variant="outline"
-                                                size="sm"
-                                                className="rounded-full"
-                                                onClick={() => handleSuggestionClick(suggestion)}
-                                            >
-                                                {suggestion}
-                                            </Button>
-                                        ))}
+                                        ]).map((s) => {
+                                            const text = typeof s === 'string' ? s : s.text;
+                                            return (
+                                                <Button
+                                                    key={text}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="rounded-full"
+                                                    onClick={() => handleSuggestionClick(text)}
+                                                >
+                                                    {text}
+                                                </Button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             ) : (

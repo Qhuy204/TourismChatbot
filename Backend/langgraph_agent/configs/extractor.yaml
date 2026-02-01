@@ -1,0 +1,45 @@
+# Extractor Configuration
+
+# Rule-based patterns for common facts
+# Mapping from Vietnamese keywords to FactType
+fact_patterns:
+  # Preferences
+  "thích": "preference"
+  "yêu thích": "preference"
+  "ưa thích": "preference"
+  "ghét": "preference"
+  "không thích": "preference"
+  
+  # Travel style
+  "phong cách": "travel_style"
+  "mạo hiểm": "travel_style"
+  "thư giãn": "travel_style"
+  "khám phá": "travel_style"
+  
+  # Constraints
+  "ngân sách": "constraint"
+  "budget": "constraint"
+  "không có nhiều thời gian": "constraint"
+  "dị ứng": "constraint"
+  "ăn chay": "constraint"
+  
+  # Personal info
+  "tôi sống ở": "personal_info"
+  "tôi ở": "personal_info"
+  "tôi là": "personal_info"
+  
+  # Interests
+  "quan tâm đến": "interest"
+  "muốn tìm hiểu": "interest"
+
+# Keys that are allowed to be stored in the user profile
+allowed_keys:
+  - "preferred_cities"
+  - "travel_style"
+  - "budget_range"
+  - "dietary_restrictions"
+  - "interests"
+  - "disliked_places"
+  - "accommodation_preference"
+  - "transport_preference"
+  - "trip_duration_preference"

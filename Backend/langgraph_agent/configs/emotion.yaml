@@ -1,0 +1,50 @@
+# Emotion Detector Configuration
+
+# Keyword-based emotion detection rules
+# Mapping from EmotionType to list of keywords
+emotion_keywords:
+  excited:
+    - "tuyệt vời"
+    - "tuyệt"
+    - "quá đẹp"
+    - "háo hức"
+    - "mong chờ"
+    - "thích quá"
+    - "wow"
+    - "amazing"
+    - "!!"
+    - "yay"
+    - "haha"
+  frustrated:
+    - "chán"
+    - "bực"
+    - "khó chịu"
+    - "tệ"
+    - "sai"
+    - "không hiểu"
+    - "lại"
+    - "mãi"
+    - "???"
+    - "zzz"
+    - "ugh"
+  curious:
+    - "tại sao"
+    - "vì sao"
+    - "như thế nào"
+    - "thế nào"
+    - "là gì"
+    - "ở đâu"
+    - "bao nhiêu"
+    - "khi nào"
+    - "?"
+    - "cho hỏi"
+  calm:
+    - "ok"
+    - "được"
+    - "ừ"
+    - "vâng"
+    - "cảm ơn"
+    - "thanks"
+    - "tốt"
+    - "hay"
+    - "đẹp"

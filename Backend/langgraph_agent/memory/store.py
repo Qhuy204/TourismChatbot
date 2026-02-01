@@ -8,7 +8,7 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 
 from .extractor import ExtractedFact
-from ..nodes.profiler import invalidate_cache
+from .extractor import ExtractedFact
 
 # Load env vars
 load_dotenv()
@@ -107,6 +107,7 @@ async def store_facts(
     
     # Invalidate cache if any facts stored
     if stored > 0:
+        from ..nodes.profiler import invalidate_cache
         invalidate_cache(user_id)
     
     return stored
@@ -213,6 +214,118 @@ async def clear_user_memory(user_id: str) -> bool:
         success = True
         
     if success:
+        from ..nodes.profiler import invalidate_cache
         invalidate_cache(user_id)
         
     return success
+
+
+# ============== Chat Session Management ==============
+
+async def get_chat_sessions(user_id: str) -> List[Dict]:
+    """Fetch all chat sessions for a user from Supabase"""
+    client = get_supabase()
+    if not client:
+        return []
+        
+    try:
+        response = client.table("chat_sessions") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .order("updated_at", desc=True) \
+            .execute()
+        return response.data
+    except Exception as e:
+        print(f"❌ get_chat_sessions error: {e}")
+        return []
+
+
+async def upsert_chat_session(
+    user_id: str,
+    session_id: str,
+    title: str = "Cuộc hội thoại mới",
+    first_message: str = None
+) -> bool:
+    """Create or update a chat session's metadata"""
+    client = get_supabase()
+    if not client:
+        return False
+        
+    try:
+        data = {
+            "id": session_id,
+            "user_id": user_id,
+            "title": title,
+            "updated_at": "now()"
+        }
+        if first_message:
+            data["first_message"] = first_message
+            
+        client.table("chat_sessions").upsert(data, on_conflict="id").execute()
+        return True
+    except Exception as e:
+        print(f"❌ upsert_chat_session error: {e}")
+        return False
+
+
+async def delete_chat_session(session_id: str) -> bool:
+    """Delete a chat session and all its logs (cascade handled by DB or manually)"""
+    client = get_supabase()
+    if not client:
+        return False
+        
+    try:
+        # Delete logs first if cascade is not set up correctly
+        client.table("chat_logs").delete().eq("session_id", session_id).execute()
+        # Delete session
+        client.table("chat_sessions").delete().eq("id", session_id).execute()
+        return True
+    except Exception as e:
+        print(f"❌ delete_chat_session error: {e}")
+        return False
+
+
+async def get_user_preferences(user_id: str) -> Dict[str, any]:
+    """Fetch user preferences from Supabase"""
+    client = get_supabase()
+    if not client:
+        return {}
+        
+    try:
+        response = client.table("user_preferences").select("*").eq("user_id", user_id).execute()
+        return response.data[0] if response.data else {}
+    except Exception as e:
+        print(f"❌ get_user_preferences error: {e}")
+        return {}
+
+
+async def get_chat_sessions_count(user_id: str) -> int:
+    """Get the number of chat sessions for a user"""
+    client = get_supabase()
+    if not client:
+        return 0
+        
+    try:
+        response = client.table("chat_sessions").select("id", count="exact").eq("user_id", user_id).execute()
+        return response.count if response.count is not None else 0
+    except Exception as e:
+        print(f"❌ get_chat_sessions_count error: {e}")
+        return 0
+
+
+async def get_session_history(session_id: str) -> List[Dict]:
+    """Fetch chat history for a specific session"""
+    client = get_supabase()
+    if not client:
+        return []
+        
+    try:
+        response = client.table("chat_logs") \
+            .select("*") \
+            .eq("session_id", session_id) \
+            .order("created_at", desc=False) \
+            .execute()
+        return response.data
+    except Exception as e:
+        print(f"❌ get_session_history error: {e}")
+        return []
