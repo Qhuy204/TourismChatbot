@@ -81,6 +81,8 @@ class MessageProcessingState:
     is_relevant: bool = True
     relevance_reason: str = ""
     
+    model_mode: Literal["gemini", "qwen"] = "gemini"
+    
     # Retrieved context
     retrieved_context: List[Dict] = field(default_factory=list)
     

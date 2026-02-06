@@ -1,6 +1,7 @@
-"""
-LangGraph Tourism Chatbot - FastAPI Entry Point
-"""
+try:
+    import unsloth
+except ImportError:
+    pass
 import os
 from contextlib import asynccontextmanager
 from typing import List, Dict, Optional
@@ -21,6 +22,7 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
     history: List[Dict] = []
+    model_mode: Optional[str] = "gemini"
 
 
 class SuggestionItem(BaseModel):
@@ -96,6 +98,11 @@ async def lifespan(app: FastAPI):
         # We don't 'await' this so lifespan can continue
         loop.run_in_executor(executor, init_vqa_store, vqa_path, None)
         
+        # Warm-load Qwen model
+        print("⏳ Warm-loading Qwen model in background...")
+        from langgraph_agent.utils.qwen_client import qwen_client
+        loop.run_in_executor(executor, qwen_client.warm_load)
+        
     except Exception as e:
         print(f"⚠️ VQA store background init failed: {e}")
     
@@ -147,10 +154,14 @@ async def get_vqa_status():
 
 @app.post("/langgraph/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """
-    Main chat endpoint.
-    Processes message through LangGraph pipeline.
-    """
+    """Main entry point for chatbot interactions"""
+    print(f"\n" + "="*50)
+    print(f"🚀 NEW CHAT REQUEST | MODE: {request.model_mode} | SESSION: {request.session_id}")
+    print(f"="*50)
+    
+    if not request.user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
+        
     from langgraph_agent.graph import run_graph
     
     try:
@@ -158,7 +169,8 @@ async def chat(request: ChatRequest):
             user_id=request.user_id,
             session_id=request.session_id,
             message=request.message,
-            history=request.history
+            history=request.history,
+            model_mode=request.model_mode
         )
         
         # Convert suggestions to response format
@@ -339,5 +351,6 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True
+        reload=True,
+        reload_excludes=["unsloth_compiled_cache", "**/__pycache__/*"]
     )

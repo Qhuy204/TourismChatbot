@@ -41,6 +41,9 @@ class GraphState(TypedDict):
     
     # Output
     output: OutputState
+    
+    # Configuration
+    model_mode: str
 
 
 # =============================================================================
@@ -53,9 +56,12 @@ async def node_init(state: GraphState) -> GraphState:
         user_id=state["user_id"],
         session_id=state["session_id"]
     )
+    mode = state.get("model_mode") or "gemini"
+    print(f"📍 Node Init: session={state['session_id']} | mode_in_state={state.get('model_mode')} | using_mode={mode}")
     state["processing"] = MessageProcessingState(
         message=state["message"],
-        history=state.get("history", [])
+        history=state.get("history", []),
+        model_mode=mode
     )
     state["output"] = OutputState()
     return state
@@ -242,7 +248,8 @@ async def run_graph(
     user_id: str,
     session_id: str,
     message: str,
-    history: List[Dict] = None
+    history: List[Dict] = None,
+    model_mode: str = "gemini"
 ) -> Dict:
     """
     Run the full graph pipeline.
@@ -261,7 +268,8 @@ async def run_graph(
         "history": history or [],
         "user_context": None,
         "processing": None,
-        "output": None
+        "output": None,
+        "model_mode": model_mode
     }
     
     # Run graph
@@ -290,6 +298,7 @@ async def run_graph(
         nonlocal new_title
         try:
             from .utils.gemini_client import gemini_fast
+            from .utils.qwen_client import qwen_client
             from .memory.store import get_supabase
             client = get_supabase()
             if not client: return
@@ -317,7 +326,11 @@ async def run_graph(
                     f"tóm tắt chủ đề chính của cuộc trò chuyện:\n\n{context_str}\n\n"
                     f"Chỉ trả về tiêu đề, không có dấu ngoặc hay văn bản thừa."
                 )
-                title = await gemini_fast.generate(title_prompt)
+                if model_mode == "qwen":
+                    title = await qwen_client.generate(title_prompt)
+                else:
+                    title = await gemini_fast.generate(title_prompt)
+                
                 new_title = title.strip().strip('"').strip("'")
                 
                 if new_title:
@@ -340,6 +353,14 @@ async def run_graph(
 
         async def run_remaining_tasks():
             # Run other background tasks
+            
+            # Helper to extract AND store locations
+            async def extract_and_store():
+                locs = await extract_locations(output.response)
+                if locs:
+                    await store_locations(locs)
+                return locs
+
             tasks = [
                 log_chat(
                     user_id=user_id,
@@ -356,7 +377,7 @@ async def run_graph(
                     start_time=start_time,
                     session_id=session_id
                 ),
-                extract_locations(output.response)
+                extract_and_store()
             ]
             await asyncio.gather(*tasks, return_exceptions=True)
         

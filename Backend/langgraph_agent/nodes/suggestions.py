@@ -9,6 +9,7 @@ from enum import Enum
 
 from ..state import MessageProcessingState, UserContextState, OutputState
 from ..utils.gemini_client import gemini_fast
+from ..utils.qwen_client import qwen_client
 
 
 class SuggestionCategory(str, Enum):
@@ -79,11 +80,18 @@ Trả về JSON array THUẦN:
 [{{"text":"Giá vé {location_name}?","category":"next_step"}}]"""
 
     try:
-        response = await gemini_fast.generate(
-            prompt=prompt,
-            temperature=0.7,
-            max_tokens=400
-        )
+        if processing_state.model_mode == "qwen":
+            response = await qwen_client.generate(
+                prompt=prompt,
+                temperature=0.7,
+                max_tokens=400
+            )
+        else:
+            response = await gemini_fast.generate(
+                prompt=prompt,
+                temperature=0.7,
+                max_tokens=400
+            )
         
         # ROBUST JSON extraction
         clean = response.strip()

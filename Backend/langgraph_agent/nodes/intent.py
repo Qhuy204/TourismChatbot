@@ -2,6 +2,7 @@ from typing import Tuple, List
 
 from ..state import MessageProcessingState, IntentType
 from ..utils.gemini_client import gemini_fast
+from ..utils.qwen_client import qwen_client
 
 
 import os
@@ -43,7 +44,7 @@ def classify_by_keywords(message: str) -> Tuple[IntentType, float]:
     return best_intent, confidence
 
 
-async def classify_by_llm(message: str, history: List[dict] = None) -> IntentType:
+async def classify_by_llm(message: str, history: List[dict] = None, model_mode: str = "gemini") -> IntentType:
     """LLM-based classification for ambiguous cases"""
     categories = [intent.value for intent in IntentType]
     
@@ -52,11 +53,18 @@ async def classify_by_llm(message: str, history: List[dict] = None) -> IntentTyp
         last_turn = history[-1].get("content", "")[:100]
         context = f"\nContext (tin nhắn trước): {last_turn}"
     
-    result = await gemini_fast.classify(
-        text=f"{message}{context}",
-        categories=categories,
-        system_instruction="Bạn là hệ thống phân loại intent cho chatbot du lịch Việt Nam."
-    )
+    if model_mode == "qwen":
+        result = await qwen_client.classify(
+            text=f"{message}{context}",
+            categories=categories,
+            system_instruction="Bạn là hệ thống phân loại intent cho chatbot du lịch Việt Nam."
+        )
+    else:
+        result = await gemini_fast.classify(
+            text=f"{message}{context}",
+            categories=categories,
+            system_instruction="Bạn là hệ thống phân loại intent cho chatbot du lịch Việt Nam."
+        )
     
     # Map string back to enum
     for intent in IntentType:
@@ -76,7 +84,11 @@ async def classify_intent(state: MessageProcessingState) -> MessageProcessingSta
     
     # LLM fallback for low confidence
     if confidence < 0.6:
-        intent = await classify_by_llm(state.message, state.history)
+        intent = await classify_by_llm(
+            message=state.message, 
+            history=state.history,
+            model_mode=state.model_mode
+        )
         confidence = 0.8  # LLM confidence
     
     state.intent = intent

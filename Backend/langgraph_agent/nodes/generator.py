@@ -2,6 +2,7 @@ from typing import List, Dict
 
 from ..state import MessageProcessingState, UserContextState, OutputState, EmotionType, IntentType
 from ..utils.gemini_client import gemini_fast, gemini_pro
+from ..utils.qwen_client import qwen_client
 from .retriever import format_context_for_prompt
 from .summarizer import build_context_prompt
 
@@ -112,40 +113,50 @@ async def generate_response(
     prompt_parts.append("Hội thoại:")
     prompt_parts.append(conversation)
     prompt_parts.append("")
-    prompt_parts.append("Trả lời (ngắn gọn, hữu ích):")
+    prompt_parts.append("Trả lời (chi tiết, hữu ích):")
     
     final_prompt = "\n".join(prompt_parts)
     
-    # Choose model based on complexity
-    use_pro = (
-        len(processing_state.retrieved_context) > 3 or 
-        len(processing_state.message) > 200
-    )
-    
-    client = gemini_pro if use_pro else gemini_fast
-    
     try:
-        # We already increased max_tokens in client.generate and handled DNS sync workaround there
-        response_text = await client.generate(
-            prompt=final_prompt,
-            system_instruction=system_prompt,
-            temperature=0.7,
-            max_tokens=2000
-        )
+        if processing_state.model_mode == "qwen":
+            response_text = await qwen_client.generate(
+                prompt=final_prompt,
+                system_instruction=system_prompt,
+                temperature=0.7,
+                max_tokens=512
+            )
+            model_name = "qwen3-vl-8b-unsloth"
+        else:
+            # Choose model based on complexity
+            use_pro = (
+                len(processing_state.retrieved_context) > 3 or 
+                len(processing_state.message) > 200
+            )
+            client = gemini_pro if use_pro else gemini_fast
+            
+            response_text = await client.generate(
+                prompt=final_prompt,
+                system_instruction=system_prompt,
+                temperature=0.7,
+                max_tokens=2000
+            )
+            model_name = client.model_name
+        
+        print(f"🤖 Model Used: {model_name} | Mode: {processing_state.model_mode}")
         
         output_state.response = response_text.strip()
         output_state.response_tone = EMOTION_STYLES.get(
             processing_state.emotion, 
             EMOTION_STYLES[EmotionType.NEUTRAL]
         )['tone']
-        output_state.model_used = client.model_name
+        output_state.model_used = model_name
         
         # Add rich debug info
         output_state.debug_info = {
             "rewrite_method": processing_state.rewrite_method,
             "is_relevant": processing_state.is_relevant,
             "context_count": len(processing_state.retrieved_context),
-            "model_used": client.model_name,
+            "model_used": model_name,
             "retrieved_sources": [
                 {
                     "image_id": item.get("image_id", "N/A"),

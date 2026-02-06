@@ -60,6 +60,8 @@ async def extract_locations(response_text: str) -> List[ExtractedLocation]:
     if not response_text or len(response_text) < 20:
         return []
     
+    print(f"🔍 Extracting locations from response ({len(response_text)} chars)...")
+    
     prompt = f"""Trích xuất tất cả địa điểm du lịch Việt Nam được đề cập trong đoạn văn sau.
 
 Với mỗi địa điểm, cung cấp:
@@ -111,6 +113,11 @@ Nếu không có địa điểm nào, trả về: {{"locations": []}}"""
                 description=loc.get("description") or None
             ))
         
+        if locations:
+            print(f"✨ Extracted {len(locations)} locations: {[l.name for l in locations]}")
+        else:
+            print("📭 No locations found in response.")
+            
         return locations
         
     except Exception as e:

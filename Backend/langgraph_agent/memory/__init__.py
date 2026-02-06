@@ -1,4 +1,4 @@
-# Memory System (ChatGPT-like)
+# Memory System
 from .extractor import extract_facts, ExtractedFact, FactType
 from .validator import validate_facts, validate_fact
 from .store import store_facts, get_user_memory, clear_user_memory, log_chat, log_event

@@ -1,7 +1,3 @@
-# Intent Classifier Configuration
-
-# Keyword-based rules for fast classification
-# Mapping from IntentType to list of keywords
 intent_keywords:
   travel_query:
     - "đi"

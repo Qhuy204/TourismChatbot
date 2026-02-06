@@ -6,14 +6,15 @@ from typing import List, Dict
 
 from ..state import MessageProcessingState
 from ..utils.gemini_client import gemini_fast
+from ..utils.qwen_client import qwen_client
 
 
 # Configuration
-MAX_RAW_TURNS = 6       # Keep last 6 turns raw
-SUMMARY_THRESHOLD = 12  # Start summarizing after 12 turns
+MAX_RAW_TURNS = 6       
+SUMMARY_THRESHOLD = 12  
 
 
-async def summarize_conversation(history: List[Dict]) -> str:
+async def summarize_conversation(history: List[Dict], model_mode: str = "gemini") -> str:
     """
     Summarize older conversation turns.
     Only called when history > SUMMARY_THRESHOLD
@@ -33,19 +34,23 @@ async def summarize_conversation(history: List[Dict]) -> str:
     
     turns_text = "\n".join(formatted)
     
-    prompt = f"""Tóm tắt ngắn gọn cuộc hội thoại sau (giữ lại thông tin quan trọng về sở thích, địa điểm du lịch):
-
-{turns_text}
-
-Tóm tắt (2-3 câu):"""
+    prompt = f"""Tóm tắt ngắn gọn cuộc hội thoại sau (giữ lại thông tin quan trọng về sở thích, địa điểm du lịch):{turns_text} Tóm tắt (2-3 câu):"""
     
     try:
-        summary = await gemini_fast.generate(
-            prompt=prompt,
-            system_instruction="Bạn là chuyên gia tóm tắt hội thoại.",
-            temperature=0.3,
-            max_tokens=1000
-        )
+        if model_mode == "qwen":
+            summary = await qwen_client.generate(
+                prompt=prompt,
+                system_instruction="Bạn là chuyên gia tóm tắt hội thoại.",
+                temperature=0.3,
+                max_tokens=1000
+            )
+        else:
+            summary = await gemini_fast.generate(
+                prompt=prompt,
+                system_instruction="Bạn là chuyên gia tóm tắt hội thoại.",
+                temperature=0.3,
+                max_tokens=1000
+            )
         return summary.strip()
     except Exception as e:
         print(f"Summarization failed: {e}")
@@ -87,7 +92,10 @@ async def prepare_context(state: MessageProcessingState) -> MessageProcessingSta
     """
     # Check if summarization needed
     if len(state.history) > SUMMARY_THRESHOLD and not state.conversation_summary:
-        state.conversation_summary = await summarize_conversation(state.history)
+        state.conversation_summary = await summarize_conversation(
+            state.history, 
+            model_mode=state.model_mode
+        )
     
     # Split history
     if len(state.history) > MAX_RAW_TURNS:

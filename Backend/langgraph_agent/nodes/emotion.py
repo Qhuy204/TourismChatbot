@@ -2,6 +2,7 @@ from typing import Tuple
 
 from ..state import MessageProcessingState, EmotionType
 from ..utils.gemini_client import gemini_fast
+from ..utils.qwen_client import qwen_client
 
 
 import os
@@ -42,7 +43,7 @@ def detect_by_keywords(message: str) -> Tuple[EmotionType, float]:
     return best_emotion, confidence
 
 
-async def detect_by_llm(message: str, history: list = None) -> EmotionType:
+async def detect_by_llm(message: str, history: list = None, model_mode: str = "gemini") -> EmotionType:
     """LLM-based emotion detection for nuanced cases"""
     context = ""
     if history and len(history) > 0:
@@ -61,13 +62,21 @@ Chỉ trả về tên emotion:"""
     system_instruction = "You are an emotion detection model. Your task is to identify the user's emotion from their message."
 
     try:
-        response = await gemini_fast.generate(
-            prompt,
-            system_instruction=system_instruction,
-            temperature=0.1,
-            max_tokens=100
-        )
-        result = response.strip().lower() # Corrected from `result = result.strip().lower()` to use `response`
+        if model_mode == "qwen":
+            response = await qwen_client.generate(
+                prompt,
+                system_instruction=system_instruction,
+                temperature=0.1,
+                max_tokens=100
+            )
+        else:
+            response = await gemini_fast.generate(
+                prompt,
+                system_instruction=system_instruction,
+                temperature=0.1,
+                max_tokens=100
+            )
+        result = response.strip().lower()
         
         # Map to enum
         for emotion in EmotionType:
@@ -89,7 +98,11 @@ async def detect_emotion(state: MessageProcessingState) -> MessageProcessingStat
     
     # LLM fallback for low confidence
     if confidence < 0.6:
-        emotion = await detect_by_llm(state.message, state.history)
+        emotion = await detect_by_llm(
+            message=state.message, 
+            history=state.history,
+            model_mode=state.model_mode
+        )
         confidence = 0.8
     
     state.emotion = emotion

@@ -1,5 +1,3 @@
-# Evaluator Configuration
-
 # Vietnamese stop words for heuristic hallucination check
 stop_words:
   - "là"

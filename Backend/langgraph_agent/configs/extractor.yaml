@@ -1,7 +1,3 @@
-# Extractor Configuration
-
-# Rule-based patterns for common facts
-# Mapping from Vietnamese keywords to FactType
 fact_patterns:
   # Preferences
   "thích": "preference"

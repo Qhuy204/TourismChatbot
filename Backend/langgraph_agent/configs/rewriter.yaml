@@ -1,7 +1,3 @@
-# Rewriter Configuration
-
-# Short reply patterns for rule-based rewrite
-# {topic} will be replaced with the detected last topic from conversation
 short_replies:
   "có": "Có, tôi muốn biết thêm về {topic}"
   "ok": "Đồng ý, cho tôi thêm thông tin về {topic}"
@@ -13,7 +9,6 @@ short_replies:
   "thêm": "Cho tôi thêm thông tin về {topic}"
   "chi tiết": "Cho tôi chi tiết hơn về {topic}"
 
-# Travel entities for detecting complete queries/topics
 travel_entities:
   - "hà nội"
   - "sài gòn"

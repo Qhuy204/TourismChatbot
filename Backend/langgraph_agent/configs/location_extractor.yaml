@@ -1,11 +1,7 @@
-# Location Extractor Configuration
-
-# Vietnamese character normalization map
 vietnamese_map:
   'đ': 'd'
   'Đ': 'd'
 
-# Valid categories for extracted locations
 valid_categories:
   - "beach"
   - "heritage"

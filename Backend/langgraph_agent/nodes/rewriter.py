@@ -7,6 +7,7 @@ import re
 
 from ..state import MessageProcessingState
 from ..utils.gemini_client import gemini_fast
+from ..utils.qwen_client import qwen_client
 
 
 import os
@@ -81,7 +82,7 @@ def rewrite_rule_based(message: str, history: List[Dict]) -> str:
     return message
 
 
-async def rewrite_with_llm(message: str, history: List[Dict]) -> str:
+async def rewrite_with_llm(message: str, history: List[Dict], model_mode: str = "gemini") -> str:
     """LLM-based rewrite for complex cases"""
     # Format recent history
     recent = history[-3:] if len(history) > 3 else history
@@ -103,12 +104,20 @@ Câu hỏi hiện tại: "{message}"
 Viết lại câu hỏi rõ ràng hơn (1 câu, giữ ý chính):"""
     
     try:
-        rewritten = await gemini_fast.generate(
-            prompt=prompt,
-            system_instruction="Bạn là chuyên gia tối ưu câu lệnh tìm kiếm cho chatbot du lịch.",
-            temperature=0.3,
-            max_tokens=500
-        )
+        if model_mode == "qwen":
+            rewritten = await qwen_client.generate(
+                prompt=prompt,
+                system_instruction="Bạn là chuyên gia tối ưu câu lệnh tìm kiếm cho chatbot du lịch.",
+                temperature=0.3,
+                max_tokens=500
+            )
+        else:
+            rewritten = await gemini_fast.generate(
+                prompt=prompt,
+                system_instruction="Bạn là chuyên gia tối ưu câu lệnh tìm kiếm cho chatbot du lịch.",
+                temperature=0.3,
+                max_tokens=500
+            )
         return rewritten.strip().strip('"').strip("'")
     except Exception:
         return message
@@ -133,7 +142,11 @@ async def rewrite_query(state: MessageProcessingState) -> MessageProcessingState
         return state
     
     # LLM for complex cases
-    state.rewritten_query = await rewrite_with_llm(state.message, state.history)
+    state.rewritten_query = await rewrite_with_llm(
+        message=state.message, 
+        history=state.history,
+        model_mode=state.model_mode
+    )
     state.rewrite_method = "llm"
     
     return state
