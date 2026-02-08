@@ -4,6 +4,7 @@ import { useLangGraphChat, ChatMessage, SuggestionItem } from '@/hooks/useLangGr
 import { useSessionManager } from '@/hooks/useSessionManager';
 import { useEventTracking } from '@/hooks/useEventTracking';
 import { useTheme } from '@/hooks/useTheme';
+import { useToast } from '@/hooks/use-toast';
 import { InlineFileUpload, UploadedFile } from '@/components/chatbot/FileUpload';
 import { SessionSidebar } from '@/components/chatbot/SessionSidebar';
 import { Card, CardContent } from '@/components/ui/card';
@@ -25,7 +26,11 @@ import {
     RefreshCw,
     PanelLeftOpen,
     PanelLeftClose,
+    Cpu,
+    Zap,
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
 export function ChatbotInterface() {
@@ -55,13 +60,18 @@ export function ChatbotInterface() {
         switchSession,
         fetchInitialSuggestions,
         initialData,
+        modelMode,
+        setModelMode,
+        preferences
     } = useLangGraphChat(sessionManager.activeSessionId || undefined);
     const { trackPageView, trackChatMessage } = useEventTracking();
     const { setEmotion } = useTheme();
+    const { toast } = useToast();
 
     const [input, setInput] = useState('');
     const [attachment, setAttachment] = useState<UploadedFile | null>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
+    const [isRefreshingSuggestions, setIsRefreshingSuggestions] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -78,12 +88,20 @@ export function ChatbotInterface() {
         trackPageView('chatbot');
     }, [trackPageView]);
 
-    // Fetch initial suggestions for new session
+    // Fetch initial suggestions only ONCE per session
+    const fetchedSessionRef = useRef<string | null>(null);
     useEffect(() => {
-        if (messages.length === 0 && !isLoading) {
-            fetchInitialSuggestions();
+        const sessionId = sessionManager.activeSessionId;
+        if (
+            sessionId &&
+            messages.length === 0 &&
+            !isLoading &&
+            fetchedSessionRef.current !== sessionId
+        ) {
+            fetchedSessionRef.current = sessionId;
+            fetchInitialSuggestions(preferences?.askedTopics);
         }
-    }, [messages.length, sessionManager.activeSessionId, fetchInitialSuggestions, isLoading]);
+    }, [sessionManager.activeSessionId, messages.length, isLoading, fetchInitialSuggestions, preferences?.askedTopics]);
 
     // Auto-scroll to bottom when new messages arrive
     useEffect(() => {
@@ -91,6 +109,23 @@ export function ChatbotInterface() {
             scrollRef.current.scrollIntoView({ behavior: 'smooth' });
         }
     }, [messages]);
+
+    // Notify user on model switch
+    const isFirstMount = useRef(true);
+    useEffect(() => {
+        if (isFirstMount.current) {
+            isFirstMount.current = false;
+            return;
+        }
+
+        const modelName = modelMode === 'gemini' ? 'Gemini 3.0 Flash' : 'Qwen3 VL 8B';
+        console.log(`🔄 Model switched to: ${modelName}`);
+        toast({
+            title: "Đã chuyển đổi mô hình",
+            description: `Hiện đang sử dụng: ${modelName}`,
+            duration: 3000,
+        });
+    }, [modelMode, toast]);
 
     const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
         const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -175,8 +210,13 @@ export function ChatbotInterface() {
     };
 
     const handleSuggestionClick = (text: string) => {
-        setInput(text);
-        setTimeout(() => handleSubmit(), 0);
+        trackChatMessage('user', `(suggestion) ${text}`);
+        sendMessage(
+            text,
+            undefined,
+            sessionManager.memoryShareEnabled,
+            (newTitle) => sessionManager.renameSession(sessionManager.activeSessionId!, newTitle)
+        );
     };
 
     // Handle session switch
@@ -232,17 +272,41 @@ export function ChatbotInterface() {
                             </p>
                         </div>
                     </div>
-                    {messages.length > 0 && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={clearMessages}
-                            className="text-muted-foreground hover:text-primary"
-                        >
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            Hội thoại mới
-                        </Button>
-                    )}
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center space-x-2 bg-muted/30 px-3 py-1.5 rounded-full border border-border">
+                            <Label htmlFor="model-mode" className="text-xs font-medium flex items-center gap-1.5 cursor-pointer">
+                                {modelMode === 'gemini' ? (
+                                    <Zap className="h-3.5 w-3.5 text-yellow-500" />
+                                ) : (
+                                    <Cpu className="h-3.5 w-3.5 text-blue-500" />
+                                )}
+                                <span className={cn(modelMode === 'gemini' ? "text-foreground" : "text-muted-foreground")}>Gemini</span>
+                            </Label>
+                            <Switch
+                                id="model-mode"
+                                checked={modelMode === 'qwen'}
+                                onCheckedChange={(checked) => setModelMode(checked ? 'qwen' : 'gemini')}
+                                className="scale-75"
+                            />
+                            <Label htmlFor="model-mode" className={cn(
+                                "text-xs font-medium cursor-pointer",
+                                modelMode === 'qwen' ? "text-foreground" : "text-muted-foreground"
+                            )}>
+                                Qwen3
+                            </Label>
+                        </div>
+                        {messages.length > 0 && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={clearMessages}
+                                className="text-muted-foreground hover:text-primary"
+                            >
+                                <Sparkles className="h-4 w-4 mr-2" />
+                                Hội thoại mới
+                            </Button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Error Alert */}
@@ -265,16 +329,33 @@ export function ChatbotInterface() {
                                     <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                                         <Bot className="h-8 w-8 text-primary" />
                                     </div>
-                                    <h3 className="text-lg font-semibold mb-2">Xin chào! 👋</h3>
+                                    <h3 className="text-lg font-semibold mb-2">
+                                        {initialData?.welcome_message || "Ê, cuối tuần này đi đâu chưa?"}
+                                    </h3>
                                     <p className="text-muted-foreground max-w-md mb-6">
-                                        {initialData?.welcome_message || "Tôi là trợ lý du lịch AI. Hãy hỏi tôi về các địa điểm du lịch Việt Nam, gợi ý lịch trình, hoặc thông tin về các điểm tham quan!"}
+                                        Tôi có thể giúp bạn lên kế hoạch du lịch, tìm địa điểm, hoặc gợi ý ẩm thực!
                                     </p>
                                     <div className="flex flex-wrap gap-2 justify-center">
-                                        {(suggestions.length > 0 ? suggestions : [
-                                            'Gợi ý địa điểm du lịch biển',
-                                            'Đà Nẵng có gì hay?',
-                                            'Địa điểm du lịch miền Trung'
-                                        ]).map((s) => {
+                                        {/* Instant suggestions - AI upgrades in background */}
+                                        {(suggestions.length > 0 ? suggestions : (() => {
+                                            // Instant client-side fallback based on cookie topics - more natural
+                                            const topics = preferences?.askedTopics || [];
+                                            if (topics.length > 0) {
+                                                const t = topics[0];
+                                                return [
+                                                    { text: `Du lịch ${t} mấy ngày hợp lý`, category: 'schedule' },
+                                                    { text: `Đặc sản ${t} phải thử`, category: 'food' },
+                                                    { text: `Đi ${t} mùa nào đẹp nhất`, category: 'weather' },
+                                                    { text: `Chỗ ở ${t} nên chọn đâu`, category: 'stay' }
+                                                ];
+                                            }
+                                            return [
+                                                { text: 'Địa điểm hot cuối tuần này', category: 'trending' },
+                                                { text: 'Gợi ý biển đẹp gần Sài Gòn', category: 'discovery' },
+                                                { text: 'Lịch trình Đà Nẵng 3 ngày', category: 'itinerary' },
+                                                { text: 'Phố ẩm thực đường phố Hà Nội', category: 'food' }
+                                            ];
+                                        })()).slice(0, 5).map((s) => {
                                             const text = typeof s === 'string' ? s : s.text;
                                             return (
                                                 <Button
@@ -336,10 +417,15 @@ export function ChatbotInterface() {
                                         variant="ghost"
                                         size="icon"
                                         className="h-7 w-7"
-                                        onClick={refreshSuggestions}
+                                        onClick={async () => {
+                                            setIsRefreshingSuggestions(true);
+                                            await refreshSuggestions();
+                                            setIsRefreshingSuggestions(false);
+                                        }}
+                                        disabled={isRefreshingSuggestions}
                                         title="Đổi gợi ý"
                                     >
-                                        <RefreshCw className="h-3 w-3" />
+                                        <RefreshCw className={`h-3 w-3 ${isRefreshingSuggestions ? 'animate-spin' : ''}`} />
                                     </Button>
                                 </div>
                             </div>

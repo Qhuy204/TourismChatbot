@@ -48,7 +48,7 @@ def build_system_prompt(
     # Base prompt
     prompt_parts = [
         "Bạn là trợ lý du lịch Việt Nam thân thiện và am hiểu.",
-        "Nếu trong 'Thông tin tham khảo' có Image URL, hãy luôn ưu tiên nhúng ảnh vào câu trả lời bằng cú pháp Markdown: ![Mô tả](URL).",
+        "CHỈ nhúng ảnh nếu URL có trong 'Thông tin tham khảo'. KHÔNG TỰ BỊA URL ẢNH.",
         f"Phong cách trả lời: {style['tone']}.",
     ]
     
@@ -123,7 +123,7 @@ async def generate_response(
                 prompt=final_prompt,
                 system_instruction=system_prompt,
                 temperature=0.7,
-                max_tokens=512
+                max_tokens=2048
             )
             model_name = "qwen3-vl-8b-unsloth"
         else:
@@ -138,7 +138,7 @@ async def generate_response(
                 prompt=final_prompt,
                 system_instruction=system_prompt,
                 temperature=0.7,
-                max_tokens=2000
+                max_tokens=2048
             )
             model_name = client.model_name
         
@@ -175,3 +175,60 @@ async def generate_response(
         output_state.model_used = "error"
     
     return output_state
+
+
+async def generate_response_stream(
+    processing_state: MessageProcessingState,
+    user_context: UserContextState
+):
+    """
+    Generator function for streaming response.
+    Yields chunks of text.
+    """
+    system_prompt = build_system_prompt(
+        user_context=user_context,
+        emotion=processing_state.emotion,
+        intent=processing_state.intent
+    )
+    
+    conversation = build_context_prompt(
+        message=processing_state.message,
+        history=processing_state.recent_turns or processing_state.history,
+        summary=processing_state.conversation_summary
+    )
+    
+    prompt_parts = []
+    if processing_state.retrieved_context:
+        rag_context = format_context_for_prompt(processing_state.retrieved_context)
+        prompt_parts.append(rag_context)
+        prompt_parts.append("")
+    
+    prompt_parts.append("Hội thoại:")
+    prompt_parts.append(conversation)
+    prompt_parts.append("")
+    prompt_parts.append("Trả lời (chi tiết, hữu ích):")
+    
+    final_prompt = "\n".join(prompt_parts)
+    
+    if processing_state.model_mode == "qwen":
+        async for chunk in qwen_client.stream_generate(
+            prompt=final_prompt,
+            system_instruction=system_prompt,
+            temperature=0.7,
+            max_tokens=4096  # Increased for longer responses
+        ):
+            yield chunk
+    else:
+        use_pro = (
+            len(processing_state.retrieved_context) > 3 or 
+            len(processing_state.message) > 200
+        )
+        client = gemini_pro if use_pro else gemini_fast
+        
+        async for chunk in client.generate_stream(
+            prompt=final_prompt,
+            system_instruction=system_prompt,
+            temperature=0.7,
+            max_tokens=4096  # Increased for longer responses
+        ):
+            yield chunk

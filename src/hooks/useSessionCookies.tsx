@@ -1,9 +1,3 @@
-/**
- * useSessionCookies - Cookie-based session persistence
- * 
- * Persists chat session ID and preferences using cookies.
- * Handles session restoration across page reloads.
- */
 import { useState, useEffect, useCallback } from 'react';
 import Cookies from 'js-cookie';
 
@@ -18,6 +12,11 @@ interface SessionPreferences {
     memoryShareEnabled?: boolean;
     lastVisitedAt?: string;
     funnelState?: FunnelState;
+    // Enhanced tracking
+    topicCounts?: Record<string, number>; // { 'beach': 5, 'Đà Nẵng': 3 }
+    askedTopics?: string[];               // Keep for backward compatibility/quick access
+    questionCount?: number;
+    recentLocations?: string[];           // Locations from last response (max 5)
 }
 
 interface SessionData {
@@ -31,8 +30,8 @@ const SESSION_COOKIE = 'tc_session';
 const TOKEN_COOKIE = 'tc_token';
 const GUEST_COOKIE = 'tc_guest_id';
 const PREFS_COOKIE = 'tc_preferences';
-const COOKIE_EXPIRY = 30; // days (for session/prefs)
-const LONG_TERM_EXPIRY = 365; // days (for guest_id)
+const COOKIE_EXPIRY = 30; // days
+const LONG_TERM_EXPIRY = 365; // days
 
 export function useSessionCookies() {
     const [sessionData, setSessionData] = useState<SessionData | null>(null);
@@ -79,6 +78,14 @@ export function useSessionCookies() {
 
         // Update last visit timestamp
         preferences.lastVisitedAt = new Date().toISOString();
+        if (!preferences.askedTopics) preferences.askedTopics = [];
+        if (!preferences.questionCount) preferences.questionCount = 0;
+
+        // Save initial prefs to cookie so it exists immediately
+        Cookies.set(PREFS_COOKIE, JSON.stringify(preferences), {
+            expires: COOKIE_EXPIRY,
+            sameSite: 'Lax'
+        });
 
         setSessionData({
             sessionId,
@@ -133,6 +140,107 @@ export function useSessionCookies() {
         });
     }, [savePreferences]);
 
+    // Track topic from user's message for recommendations
+    const trackTopic = useCallback((
+        text: string,
+        isLocation: boolean = false,
+        meta?: { city?: string; province?: string; adminId?: string }
+    ) => {
+        const detected: string[] = [];
+        const lowerText = text.toLowerCase();
+
+        // 1. Expanded Category Mapping
+        const categoryMap: Record<string, string[]> = {
+            'beach': ['biển', 'bãi tắm', 'đảo', 'vịnh', 'beach', 'island'],
+            'mountain': ['núi', 'rừng', 'đèo', 'cao nguyên', 'mountain', 'trekking'],
+            'food': ['ăn', 'uống', 'ẩm thực', 'đặc sản', 'nhà hàng', 'quán', 'hải sản', 'food', 'seafood', 'mì quảng', 'bánh đa cua'],
+            'itinerary': ['lịch trình', 'tour', 'đi đâu', 'chơi gì', 'kế hoạch'],
+            'accommodation': ['khách sạn', 'hotel', 'resort', 'homestay', 'nhà nghỉ', 'ở đâu'],
+            'heritage': ['di tích', 'lịch sử', 'văn hóa', 'bảo tàng', 'phố cổ', 'heritage', 'history']
+        };
+
+        Object.entries(categoryMap).forEach(([cat, keywords]) => {
+            if (keywords.some(kw => lowerText.includes(kw))) {
+                detected.push(cat);
+            }
+        });
+
+        // 2. Comprehensive Vietnamese Provinces (63 Provinces)
+        const provinces = [
+            'An Giang', 'Bà Rịa - Vũng Tàu', 'Bắc Giang', 'Bắc Kạn', 'Bạc Liêu', 'Bắc Ninh', 'Bến Tre', 'Bình Định', 'Bình Dương', 'Bình Phước', 'Bình Thuận', 'Cà Mau', 'Cần Thơ', 'Cao Bằng', 'Đà Nẵng', 'Đắk Lắk', 'Đắk Nông', 'Điện Biên', 'Đồng Nai', 'Đồng Tháp', 'Gia Lai', 'Hà Giang', 'Hà Nam', 'Hà Nội', 'Hà Tĩnh', 'Hải Dương', 'Hải Phòng', 'Hậu Giang', 'Hòa Bình', 'Hưng Yên', 'Khánh Hòa', 'Kiên Giang', 'Kon Tum', 'Lai Châu', 'Lâm Đồng', 'Lạng Sơn', 'Lào Cai', 'Long An', 'Nam Định', 'Nghệ An', 'Ninh Bình', 'Ninh Thuận', 'Phú Thọ', 'Phú Yên', 'Quảng Bình', 'Quảng Nam', 'Quảng Ngãi', 'Quảng Ninh', 'Quảng Trị', 'Sóc Trăng', 'Sơn La', 'Tây Ninh', 'Thái Bình', 'Thái Nguyên', 'Thanh Hóa', 'Thừa Thiên Huế', 'Tiền Giang', 'TP HCM', 'Sài Gòn', 'Trà Vinh', 'Tuyên Quang', 'Vĩnh Long', 'Vĩnh Phúc', 'Yên Bái', 'Hội An', 'Đà Lạt', 'Phú Quốc', 'Côn Đảo', 'Sapa'
+        ];
+
+        provinces.forEach(p => {
+            const escapedP = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`\\b${escapedP}\\b`, 'gi');
+            if (regex.test(text)) {
+                detected.push(p);
+            }
+        });
+
+        // 3. Handle explicit locations with disambiguation logic
+        if (isLocation) {
+            let label = text;
+            // Add disambiguation info if available (e.g., "Bãi Dài (Phú Quốc)")
+            if (meta?.province || meta?.city) {
+                const parent = (meta.city && meta.city !== text) ? meta.city : meta.province;
+                if (parent) label = `${text} (${parent})`;
+            }
+            detected.push(label);
+        }
+
+        if (detected.length > 0) {
+            console.log("🎯 Tracking interests:", detected);
+            setSessionData(prev => {
+                if (!prev) return null;
+
+                const currentCounts = { ...(prev.preferences.topicCounts || {}) };
+
+                detected.forEach(topic => {
+                    // Update counts
+                    currentCounts[topic] = (currentCounts[topic] || 0) + 1;
+                });
+
+                // Keep only top 15 topics based on frequency
+                const sortedTopics = Object.entries(currentCounts)
+                    .sort((a, b) => (b[1] as number) - (a[1] as number))
+                    .map(([name]) => name)
+                    .slice(0, 15);
+
+                const updated = {
+                    ...prev.preferences,
+                    topicCounts: currentCounts,
+                    askedTopics: sortedTopics,
+                    questionCount: (prev.preferences.questionCount || 0) + 1
+                };
+
+                Cookies.set(PREFS_COOKIE, JSON.stringify(updated), {
+                    expires: COOKIE_EXPIRY,
+                    sameSite: 'Lax'
+                });
+                return { ...prev, preferences: updated };
+            });
+        }
+    }, []);
+
+    // Update recent locations from latest response
+    const updateRecentLocations = useCallback((locations: string[]) => {
+        setSessionData(prev => {
+            if (!prev) return null;
+
+            const updated = {
+                ...prev.preferences,
+                recentLocations: locations.slice(0, 5) // Keep max 5 recent locations
+            };
+
+            Cookies.set(PREFS_COOKIE, JSON.stringify(updated), {
+                expires: COOKIE_EXPIRY,
+                sameSite: 'Lax'
+            });
+            return { ...prev, preferences: updated };
+        });
+    }, []);
+
     // Clear everything (Logout/Reset)
     const clearSession = useCallback(() => {
         Cookies.remove(SESSION_COOKIE);
@@ -175,6 +283,8 @@ export function useSessionCookies() {
         saveToken,
         savePreferences,
         setFunnelState,
+        trackTopic,
+        updateRecentLocations,
         clearSession,
         hasPreviousSession,
         getPreviousSessionId,

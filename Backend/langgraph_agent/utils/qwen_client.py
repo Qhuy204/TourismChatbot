@@ -5,7 +5,8 @@ os.environ["UNSLOTH_CACHE_DIR"] = os.path.expanduser("~/.cache/unsloth")
 from unsloth import FastVisionModel
 import torch
 from typing import Optional, List, Dict, Any
-from transformers import TextStreamer
+from transformers import TextStreamer, TextIteratorStreamer
+from threading import Thread
 
 # Configuration
 MODEL_PATH = "/home/qhuy/TourismChatbot/TourismChatbot/Backend/model/qwen3vl-viettravelvqa/checkpoint-220"
@@ -86,13 +87,13 @@ class QwenClient:
             return_tensors="pt",
         ).to("cuda")
 
-        with torch.no_grad():
+        with torch.inference_mode():
             outputs = self._model.generate(
                 **inputs,
                 max_new_tokens=max_tokens,
                 temperature=temperature,
                 do_sample=temperature > 0,
-                # For Qwen2-VL, we often don't need pad_token_id if it's set in processor
+                use_cache=True,
             )
 
         # Extract only the new tokens
@@ -101,6 +102,61 @@ class QwenClient:
         response = self._processor.tokenizer.decode(generated_tokens, skip_special_tokens=True)
         
         return response.strip()
+
+    async def stream_generate(
+        self,
+        prompt: str,
+        system_instruction: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 1024
+    ):
+        """Generate text response as a stream"""
+        if not self._is_initialized:
+            self._initialize()
+
+        messages = []
+        if system_instruction:
+            messages.append({"role": "system", "content": [{"type": "text", "text": system_instruction}]})
+        messages.append({"role": "user", "content": [{"type": "text", "text": prompt}]})
+
+        input_text = self._processor.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
+        inputs = self._processor(
+            text=[input_text],
+            images=None,
+            videos=None,
+            padding=True,
+            return_tensors="pt",
+        ).to("cuda")
+
+        streamer = TextIteratorStreamer(
+            self._processor.tokenizer, 
+            skip_prompt=True, 
+            skip_special_tokens=True
+        )
+
+        generation_kwargs = dict(
+            **inputs,
+            streamer=streamer,
+            max_new_tokens=max_tokens,
+            temperature=temperature,
+            do_sample=temperature > 0,
+            use_cache=True,
+        )
+
+        # Run generation in a separate thread
+        thread = Thread(target=self._model.generate, kwargs=generation_kwargs)
+        thread.start()
+
+        import asyncio
+        # Yield from streamer
+        for new_text in streamer:
+            yield new_text
+            await asyncio.sleep(0)  # Allow event loop to process
 
     async def classify(
         self,

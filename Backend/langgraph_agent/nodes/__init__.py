@@ -6,7 +6,7 @@ from .profiler import load_user_profile, invalidate_cache
 from .rewriter import rewrite_query
 from .guard import check_relevance
 from .retriever import retrieve_context, format_context_for_prompt
-from .generator import generate_response
+from .generator import generate_response, generate_response_stream
 from .suggestions import generate_suggestions, refresh_suggestions
 
 __all__ = [
@@ -32,6 +32,7 @@ __all__ = [
     
     # Generation
     "generate_response",
+    "generate_response_stream",
     "generate_suggestions",
     "refresh_suggestions",
 ]

@@ -43,6 +43,7 @@ interface LangGraphResponse {
         model_used?: string;
         retrieved_sources?: any[];
     };
+    extracted_locations?: any[];
 }
 
 // Session storage for messages
@@ -53,13 +54,18 @@ export function useLangGraphChat(initialSessionId?: string) {
     const {
         sessionId: savedSessionId,
         saveSession,
+        trackTopic,
+        updateRecentLocations,
+        preferences,
         isLoaded: cookiesLoaded
     } = useSessionCookies();
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
+    const [recentLocations, setRecentLocations] = useState<string[]>([]);
     const [initialData, setInitialData] = useState<{ welcome_message: string; suggestions: SuggestionItem[] } | null>(null);
+    const [modelMode, setModelMode] = useState<'gemini' | 'qwen'>('gemini');
     const [error, setError] = useState<string | null>(null);
 
     // Use: provided initialSessionId > saved cookie session > generate new
@@ -171,12 +177,18 @@ export function useLangGraphChat(initialSessionId?: string) {
         content: string,
         attachments?: Array<{ url: string; type: string; name?: string }>,
         memoryShareEnabled: boolean = false,
-        onNewTitle?: (title: string) => void
+        onNewTitle?: (title: string) => void,
+        overrideModelMode?: 'gemini' | 'qwen'
     ) => {
         if (!content.trim() || !user?.id) return;
 
         setError(null);
         const currentSid = sidRef.current; // Use ref to ensure consistency
+
+        // Track topic for recommendations in cookies
+        trackTopic(content.trim());
+
+        console.log(`📡 Sending chat request: mode=${overrideModelMode || modelMode}, session=${currentSid}`);
 
         // Add user message immediately
         const userMessage: ChatMessage = {
@@ -212,8 +224,8 @@ export function useLangGraphChat(initialSessionId?: string) {
                     content: m.content,
                 }));
 
-            // Call LangGraph API
-            const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/chat`, {
+            // Call LangGraph Streaming API
+            const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/chat/stream`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -224,6 +236,7 @@ export function useLangGraphChat(initialSessionId?: string) {
                     message: content.trim(),
                     history: history,
                     memory_scope: memoryShareEnabled ? 'global' : 'session',
+                    model_mode: overrideModelMode || modelMode,
                 }),
             });
 
@@ -231,44 +244,90 @@ export function useLangGraphChat(initialSessionId?: string) {
                 throw new Error(`API error: ${response.status}`);
             }
 
-            const data: LangGraphResponse = await response.json();
-            console.log('LangGraph API response:', data);
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            if (!reader) throw new Error('No reader found');
 
-            // Handle auto-titling feedback
-            if (data.new_title && onNewTitle) {
-                console.log('Applying new session title:', data.new_title);
-                onNewTitle(data.new_title);
-            }
+            let assistantContent = '';
+            let metadata: any = null;
 
-            // Replace loading message with actual response
-            const assistantMessage: ChatMessage = {
-                id: loadingMessage.id,
-                role: 'assistant',
-                content: data.response || (data.intent === 'guard_violation' ? 'Xin lỗi, tôi chỉ có thể trả lời các câu hỏi về du lịch Việt Nam.' : 'Xin lỗi, tôi không tìm thấy câu trả lời phù hợp.'),
-                timestamp: new Date(),
-                emotion: data.emotion_detected,
-                intent: data.intent,
-            };
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-            setMessages(prev =>
-                prev.map(m => m.id === loadingMessage.id ? assistantMessage : m)
-            );
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
 
-            // Update suggestions
-            setSuggestions(data.suggested_prompts || []);
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
 
-            // Debug logging
-            if (data.debug) {
-                const debugData = data.debug as any;
-                console.log('🔍 LangGraph Debug Info:', debugData);
-                if (debugData.retrieved_sources && debugData.retrieved_sources.length > 0) {
-                    console.group('📚 retrieval data details:');
-                    debugData.retrieved_sources.forEach((s: any, idx: number) => {
-                        console.log(`--- Source #${idx + 1} [${s.image_id}] (Score: ${s.score}) ---`);
-                        console.log(`Question: ${s.q}`);
-                        console.log(`Answer: ${s.a}`);
-                    });
-                    console.groupEnd();
+                            if (data.type === 'metadata') {
+                                metadata = data;
+                                setMessages(prev => prev.map(m =>
+                                    m.id === loadingMessage.id
+                                        ? { ...m, emotion: data.emotion, intent: data.intent }
+                                        : m
+                                ));
+                            } else if (data.type === 'content') {
+                                assistantContent += data.content;
+                                setMessages(prev => prev.map(m =>
+                                    m.id === loadingMessage.id
+                                        ? { ...m, content: assistantContent, isLoading: false }
+                                        : m
+                                ));
+                            } else if (data.type === 'final') {
+                                setSuggestions(data.suggested_prompts || []);
+
+                                // Handle session title update if provided
+                                if (data.new_title && onNewTitle) {
+                                    onNewTitle(data.new_title);
+                                }
+
+                                // Handle extracted locations - save to recentLocations for contextual suggestions
+                                if (data.extracted_locations && data.extracted_locations.length > 0) {
+                                    const locationNames = data.extracted_locations.map((loc: any) => loc.name);
+                                    setRecentLocations(locationNames.slice(0, 3)); // Keep top 3 recent locations
+                                    updateRecentLocations(locationNames.slice(0, 5)); // Persist to cookies
+
+                                    // Fetch AI-generated contextual suggestions (async, non-blocking)
+                                    fetch(`${LANGGRAPH_API_URL}/langgraph/contextual_suggestions`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            locations: locationNames.slice(0, 3),
+                                            last_question: userMessage.content,
+                                            limit: 4
+                                        })
+                                    })
+                                        .then(res => res.json())
+                                        .then(result => {
+                                            if (result.suggestions && result.suggestions.length > 0) {
+                                                // Merge AI contextual + general suggestions
+                                                setSuggestions(prev => {
+                                                    const aiSuggestions = data.suggested_prompts || prev;
+                                                    return [...result.suggestions, ...aiSuggestions.slice(0, 1)].slice(0, 5);
+                                                });
+                                            }
+                                        })
+                                        .catch(err => console.warn('Contextual suggestions error:', err));
+
+                                    data.extracted_locations.forEach((loc: any) => {
+                                        trackTopic(loc.name, true, {
+                                            city: loc.city,
+                                            province: loc.province,
+                                            adminId: loc.admin_id
+                                        });
+                                    });
+                                }
+                            } else if (data.type === 'error') {
+                                throw new Error(data.message);
+                            }
+                        } catch (e) {
+                            console.warn('Error parsing SSE chunk:', e);
+                        }
+                    }
                 }
             }
 
@@ -280,17 +339,28 @@ export function useLangGraphChat(initialSessionId?: string) {
             setMessages(prev => prev.filter(m => m.id !== loadingMessage.id));
         } finally {
             setIsLoading(false);
+            console.log('🏁 Stream finished');
         }
-    }, [user?.id, messages]);
+    }, [user?.id, messages, modelMode]);
 
     /**
      * Fetch personalized initial suggestions for a new session
      */
-    const fetchInitialSuggestions = useCallback(async () => {
+    const fetchInitialSuggestions = useCallback(async (topics?: string[]) => {
         if (!user?.id) return;
 
         try {
-            const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/initial_suggestions/${user.id}`);
+            const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/initial_suggestions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    user_id: user.id,
+                    topics: topics || []
+                }),
+            });
+
             if (response.ok) {
                 const data = await response.json();
                 setInitialData(data);
@@ -304,34 +374,62 @@ export function useLangGraphChat(initialSessionId?: string) {
     }, [user?.id, messages.length]);
 
     /**
-     * Refresh suggestions without sending a message
+     * Refresh suggestions without sending a message - uses AI contextual suggestions
      */
     const refreshSuggestions = useCallback(async () => {
         if (!user?.id) return;
 
         try {
-            const currentTexts = suggestions.map(s => s.text);
+            // Use recentLocations from state or cookies
+            const locations = recentLocations.length > 0
+                ? recentLocations
+                : (preferences?.recentLocations || preferences?.askedTopics?.slice(0, 3) || []);
 
-            const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/suggestions`, {
+            if (locations.length > 0) {
+                // Get recent user messages for style mimicry
+                const userMessages = messages
+                    .filter(m => m.role === 'user')
+                    .slice(-5)
+                    .map(m => m.content);
+
+                // Use AI-powered contextual suggestions
+                const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/contextual_suggestions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        locations: locations.slice(0, 3),
+                        limit: 4,
+                        user_messages: userMessages
+                    }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.suggestions && data.suggestions.length > 0) {
+                        setSuggestions(data.suggestions);
+                        return;
+                    }
+                }
+            }
+
+            // Fallback to initial suggestions endpoint
+            const fallbackResponse = await fetch(`${LANGGRAPH_API_URL}/langgraph/initial_suggestions`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     user_id: user.id,
-                    session_id: sessionIdRef.current,
-                    exclude: currentTexts,
+                    topics: preferences?.askedTopics || []
                 }),
             });
 
-            if (response.ok) {
-                const data = await response.json();
+            if (fallbackResponse.ok) {
+                const data = await fallbackResponse.json();
                 setSuggestions(data.suggestions || []);
             }
         } catch (err) {
             console.error('Failed to refresh suggestions:', err);
         }
-    }, [user?.id, suggestions]);
+    }, [user?.id, recentLocations, preferences, messages]);
 
     /**
      * Clear messages and start new session
@@ -396,5 +494,9 @@ export function useLangGraphChat(initialSessionId?: string) {
         sessionId: sessionIdRef.current,
         fetchInitialSuggestions,
         initialData,
+        modelMode,
+        setModelMode,
+        preferences,
+        recentLocations
     };
 }

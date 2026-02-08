@@ -18,7 +18,7 @@ const passwordSchema = z.string().min(6, 'Password must be at least 6 characters
 export default function Auth() {
   const navigate = useNavigate();
   const { signIn, signUp, user, loading: authLoading } = useAuth();
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -26,7 +26,7 @@ export default function Auth() {
   const [signupPassword, setSignupPassword] = useState('');
   const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  
+
   // Forgot password state
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
@@ -39,7 +39,7 @@ export default function Auth() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       emailSchema.parse(loginEmail);
       passwordSchema.parse(loginPassword);
@@ -93,7 +93,7 @@ export default function Auth() {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       emailSchema.parse(forgotEmail);
     } catch (err) {
@@ -167,9 +167,9 @@ export default function Auth() {
             </form>
           </CardContent>
           <CardFooter>
-            <Button 
-              variant="ghost" 
-              className="w-full" 
+            <Button
+              variant="ghost"
+              className="w-full"
               onClick={() => setShowForgotPassword(false)}
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -190,9 +190,9 @@ export default function Auth() {
               <Database className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl">SVLM Dataset Manager</CardTitle>
+          <CardTitle className="text-2xl">Tourism Chatbot</CardTitle>
           <CardDescription>
-            Đăng nhập để quản lý và annotate dữ liệu
+            Chatbot hỏi đáp địa điểm du lịch
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -201,7 +201,7 @@ export default function Auth() {
               <TabsTrigger value="login">Đăng nhập</TabsTrigger>
               <TabsTrigger value="signup">Đăng ký</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="login">
               <form onSubmit={handleLogin} className="space-y-4 mt-4">
                 <div className="space-y-2">
@@ -218,9 +218,9 @@ export default function Auth() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="login-password">Mật khẩu</Label>
-                    <Button 
-                      type="button" 
-                      variant="link" 
+                    <Button
+                      type="button"
+                      variant="link"
                       className="px-0 text-xs h-auto"
                       onClick={() => setShowForgotPassword(true)}
                     >
@@ -248,7 +248,7 @@ export default function Auth() {
                 </Button>
               </form>
             </TabsContent>
-            
+
             <TabsContent value="signup">
               <form onSubmit={handleSignup} className="space-y-4 mt-4">
                 <div className="space-y-2">

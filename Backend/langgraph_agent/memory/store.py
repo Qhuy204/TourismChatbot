@@ -329,3 +329,162 @@ async def get_session_history(session_id: str) -> List[Dict]:
     except Exception as e:
         print(f"❌ get_session_history error: {e}")
         return []
+
+
+# ============== Location Deduplication Functions ==============
+
+async def check_location_duplicate(
+    name: str, 
+    threshold: float = 0.85
+) -> List[Dict]:
+    """
+    Check if a location name has duplicates in locations_cache.
+    Returns list of matches with similarity >= 60%.
+    
+    Args:
+        name: Location name to check
+        threshold: Similarity threshold for 'skip' action (default 0.85)
+    
+    Returns:
+        List of {existing_id, existing_name, similarity_score, recommended_action}
+    """
+    client = get_supabase()
+    if not client:
+        return []
+    
+    try:
+        result = client.rpc("check_location_duplicate", {
+            "p_name": name,
+            "p_threshold": threshold
+        }).execute()
+        return result.data or []
+    except Exception as e:
+        print(f"❌ check_location_duplicate error: {e}")
+        return []
+
+
+async def insert_location_smart(
+    name: str,
+    city: Optional[str] = None,
+    province: Optional[str] = None,
+    category: str = "other",
+    description: Optional[str] = None,
+    details: Optional[Dict] = None,
+    source_id: Optional[int] = None
+) -> Dict:
+    """
+    Smart insert location with duplicate handling.
+    
+    Actions:
+        - >=85% similarity: Skip insert, return existing
+        - 60-85% similarity: Merge into existing
+        - <60% similarity: Insert as new
+    
+    Returns:
+        {result_id, result_action, matched_with}
+    """
+    client = get_supabase()
+    if not client:
+        return {"result_action": "error", "error": "No database connection"}
+    
+    try:
+        result = client.rpc("insert_location_smart", {
+            "p_name": name,
+            "p_city": city,
+            "p_province": province,
+            "p_category": category,
+            "p_description": description,
+            "p_details": details,
+            "p_source_id": source_id
+        }).execute()
+        
+        if result.data:
+            return result.data[0]
+        return {"result_action": "error", "error": "No result returned"}
+    except Exception as e:
+        print(f"❌ insert_location_smart error: {e}")
+        return {"result_action": "error", "error": str(e)}
+
+
+async def find_duplicate_locations(min_similarity: float = 0.6) -> List[Dict]:
+    """
+    Scan all locations_cache for duplicate pairs.
+    
+    Returns:
+        List of {loc1_id, loc1_name, loc2_id, loc2_name, 
+                 similarity_score, recommended_action}
+    """
+    client = get_supabase()
+    if not client:
+        return []
+    
+    try:
+        result = client.rpc("find_duplicate_locations", {
+            "p_min_similarity": min_similarity
+        }).execute()
+        return result.data or []
+    except Exception as e:
+        print(f"❌ find_duplicate_locations error: {e}")
+        return []
+
+
+async def cleanup_duplicate_locations(
+    threshold: float = 0.85,
+    dry_run: bool = True
+) -> List[Dict]:
+    """
+    Cleanup duplicate locations in the database.
+    
+    Args:
+        threshold: Similarity threshold (>=threshold: delete, <threshold: merge)
+        dry_run: If True, only report what would be done
+    
+    Returns:
+        List of {action_taken, affected_id, kept_id, 
+                 affected_name, kept_name, similarity_score}
+    """
+    client = get_supabase()
+    if not client:
+        return []
+    
+    try:
+        result = client.rpc("cleanup_duplicate_locations", {
+            "p_threshold": threshold,
+            "p_dry_run": dry_run
+        }).execute()
+        return result.data or []
+    except Exception as e:
+        print(f"❌ cleanup_duplicate_locations error: {e}")
+        return []
+
+
+async def get_recommendations(
+    user_id: str,
+    topics: Optional[List[str]] = None,
+    limit: int = 5
+) -> List[Dict]:
+    """
+    Get personalized question recommendations.
+    
+    Args:
+        user_id: User UUID
+        topics: List of topic categories from cookies
+        limit: Max recommendations to return
+    
+    Returns:
+        List of {question, category, source, score}
+    """
+    client = get_supabase()
+    if not client:
+        return []
+    
+    try:
+        result = client.rpc("get_recommendations", {
+            "p_user_id": user_id,
+            "p_topics": topics,
+            "p_limit": limit
+        }).execute()
+        return result.data or []
+    except Exception as e:
+        print(f"❌ get_recommendations error: {e}")
+        return []

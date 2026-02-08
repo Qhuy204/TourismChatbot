@@ -8,8 +8,12 @@ import yaml
 from ..utils.gemini_client import gemini_fast
 from ..memory.store import get_supabase
 
+import json
+
 # Initialize configs from YAML
 _config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "location_extractor.yaml")
+_admin_data_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "administrative_divisions_vn.json")
+
 try:
     with open(_config_path, "r", encoding="utf-8") as f:
         _config = yaml.safe_load(f)
@@ -21,6 +25,121 @@ VIETNAMESE_MAP = _config.get("vietnamese_map", {})
 VALID_CATEGORIES = set(_config.get("valid_categories", []))
 
 
+def normalize_name(name: str) -> str:
+    # Simple accent removal
+    nfkd_form = unicodedata.normalize('NFKD', name)
+    without_accents = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    
+    # Handle 'đ' manually
+    res = without_accents.replace('đ', 'd').replace('Đ', 'D')
+    return res.lower().strip()
+
+class VNAdministrativeManager:
+    """Manages Vietnamese administrative divisions for normalization and disambiguation"""
+    _instance = None
+    _provinces = {}  # name -> data
+    _districts = {}   # name + province -> data
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(VNAdministrativeManager, cls).__new__(cls)
+            cls._instance._load_data()
+        return cls._instance
+    
+    def _load_data(self):
+        if not os.path.exists(_admin_data_path):
+            print(f"⚠️ Administrative data not found at {_admin_data_path}")
+            return
+            
+        try:
+            with open(_admin_data_path, 'r', encoding='utf-8') as f:
+                raw_data = json.load(f).get('data', [])
+                for p in raw_data:
+                    p_name = p['name']
+                    self._provinces[self._clean(p_name)] = {
+                        "id": p['level1_id'],
+                        "name": p_name,
+                        "type": p['type']
+                    }
+                    for d in p.get('level2s', []):
+                        d_name = d['name']
+                        key = f"{self._clean(d_name)}|{self._clean(p_name)}"
+                        self._districts[key] = {
+                            "id": d['level2_id'],
+                            "name": d_name,
+                            "type": d['type'],
+                            "parent_province": p_name
+                        }
+            
+            # Add common aliases
+            if "ho chi minh" in self._provinces:
+                hcm_data = self._provinces["ho chi minh"]
+                self._provinces["sai gon"] = hcm_data
+                self._provinces["tphcm"] = hcm_data
+                self._provinces["hcm"] = hcm_data
+            
+            if "ha noi" in self._provinces:
+                hn_data = self._provinces["ha noi"]
+                self._provinces["hn"] = hn_data
+                
+            print(f"✅ Loaded {len(self._provinces)} provinces and {len(self._districts)} districts plus aliases")
+        except Exception as e:
+            print(f"❌ Error parsing administrative data: {e}")
+
+    def _clean(self, text: str) -> str:
+        if not text: return ""
+        # Remove common prefixes for matching
+        prefixes = ["Thành phố ", "Tỉnh ", "Quận ", "Huyện ", "Thị xã "]
+        cleaned = text
+        for p in prefixes:
+            if cleaned.startswith(p):
+                cleaned = cleaned[len(p):]
+        return normalize_name(cleaned)
+
+    def find_province(self, name: str) -> Optional[Dict]:
+        return self._provinces.get(self._clean(name))
+
+    def find_district(self, name: str, province_name: Optional[str] = None) -> Optional[Dict]:
+        c_name = self._clean(name)
+        if province_name:
+            key = f"{c_name}|{self._clean(province_name)}"
+            return self._districts.get(key)
+        
+        # If no province provided, search all (risky for disambiguation)
+        for key, data in self._districts.items():
+            if key.startswith(f"{c_name}|"):
+                return data
+        return None
+
+    def scan_text(self, text: str) -> List[Dict]:
+        """Fast scan for administrative names in text"""
+        results = []
+        # Simple normalization for matching
+        text = text.lower()
+        text_norm = normalize_name(text)
+        
+        # Check provinces (high priority)
+        # Sort by length desc to match "Ho Chi Minh" before "Minh" (if any)
+        sorted_provinces = sorted(self._provinces.items(), key=lambda x: len(x[0]), reverse=True)
+        
+        for p_norm, p_data in sorted_provinces:
+            # Basic word boundary check equivalent
+            if p_norm in text_norm:
+                 results.append({"name": p_data["name"], "type": "province"})
+                 
+        return results[:3] # Limit to top 3
+
+def fast_extract_locations(text: str) -> List[Dict]:
+    """
+    Quickly extract locations using pattern matching.
+    Used for immediate UI updates (suggestions) without waiting for AI.
+    """
+    manager = VNAdministrativeManager()
+    return manager.scan_text(text)
+
+# Singleton instance
+admin_manager = VNAdministrativeManager()
+
 @dataclass
 class ExtractedLocation:
     """Represents an extracted location from response"""
@@ -29,22 +148,8 @@ class ExtractedLocation:
     province: Optional[str]      # "Quảng Nam"
     category: str                # beach|heritage|nature|food|temple|city|other
     description: Optional[str]   # Brief description from response
+    admin_id: Optional[str] = None # level1_id or level2_id
 
-
-def normalize_name(name: str) -> str:
-    """
-    Normalize location name for deduplication.
-    Removes Vietnamese accents and converts to lowercase.
-    """
-    for vn_char, ascii_char in VIETNAMESE_MAP.items():
-        name = name.replace(vn_char, ascii_char)
-    
-    # Normalize unicode and remove diacritics
-    normalized = unicodedata.normalize('NFD', name)
-    without_accents = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
-    
-    # Lowercase and strip
-    return without_accents.lower().strip()
 
 
 async def extract_locations(response_text: str) -> List[ExtractedLocation]:
@@ -82,7 +187,8 @@ Nếu không có địa điểm nào, trả về: {{"locations": []}}"""
     try:
         result = await gemini_fast.generate_json(
             prompt=prompt,
-            schema={"locations": "array of location objects"}
+            schema={"locations": "array of location objects"},
+            max_tokens=2048  # Increase to prevent JSON truncation
         )
         
         locations = []
@@ -105,16 +211,36 @@ Nếu không có địa điểm nào, trả về: {{"locations": []}}"""
             if category not in VALID_CATEGORIES:
                 category = "other"
             
+            # Normalize against dataset
+            p_val = loc.get("province")
+            c_val = loc.get("city")
+            admin_id = None
+            
+            if p_val:
+                p_match = admin_manager.find_province(p_val)
+                if p_match:
+                    p_val = p_match['name']
+                    admin_id = p_match['id']
+            
+            if c_val:
+                d_match = admin_manager.find_district(c_val, p_val)
+                if d_match:
+                    c_val = d_match['name']
+                    p_val = d_match['parent_province'] # Resolve province if only city was known
+                    admin_id = d_match['id']
+
             locations.append(ExtractedLocation(
                 name=name,
-                city=loc.get("city") or None,
-                province=loc.get("province") or None,
+                city=c_val,
+                province=p_val,
                 category=category,
-                description=loc.get("description") or None
+                description=loc.get("description") or None,
+                admin_id=admin_id
             ))
         
         if locations:
-            print(f"✨ Extracted {len(locations)} locations: {[l.name for l in locations]}")
+            names = [f"{l.name} ({l.province or '?'})" for l in locations]
+            print(f"✨ Extracted {len(locations)} locations: {names}")
         else:
             print("📭 No locations found in response.")
             
@@ -161,6 +287,7 @@ async def store_locations(
             "province": loc.province,
             "category": loc.category,
             "description": loc.description,
+            "details": {"admin_id": loc.admin_id} if loc.admin_id else None,
             "source_response_id": source_response_id
         })
     

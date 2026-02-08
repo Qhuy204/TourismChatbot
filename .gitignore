@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Models and weights
+**/model/**
+weights/
+checkpoint-*/
+unsloth_compiled_cache/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -53,3 +59,5 @@ Backend/data/chroma_vqa/
 *.sqlite3
 
 Backend/model/
+VQA/
+REPORT_APP_BUILD.md

@@ -3,6 +3,7 @@ LangGraph State Machine
 Assembles all nodes into a coherent graph with routing
 """
 import time
+import asyncio
 from typing import TypedDict, Annotated, List, Dict
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -14,7 +15,8 @@ from .state import (
 from .nodes import (
     prepare_context, classify_intent, detect_emotion,
     load_user_profile, rewrite_query, check_relevance,
-    retrieve_context, generate_response, generate_suggestions
+    retrieve_context, generate_response, generate_suggestions,
+    generate_response_stream
 )
 from .nodes.evaluator import evaluate_response
 from .nodes.location_extractor import extract_locations, store_locations
@@ -343,9 +345,20 @@ async def run_graph(
             print(f"⚠️ Auto-titling error: {e}")
 
     # Run post-processing
+    final_locations = []
     try:
-        import asyncio
         
+        # 1. NEW: Extract locations from both message and response for cookie tracking
+        # We do this before background tasks to return them in the response
+        try:
+            from .nodes.location_extractor import extract_locations, store_locations
+            # Combine message and response for better entity extraction
+            combined_text = f"User asked: {message}\nBot responded: {output.response}"
+            loc_objects = await extract_locations(combined_text)
+            final_locations = [vars(l) for l in loc_objects]
+        except Exception as e:
+            print(f"⚠️ Location extraction for response failed: {e}")
+
         # If we need a title and don't have one, await it BEFORE returning response
         # This ensuring the UI gets 'new_title' in the same response
         if needs_titling:
@@ -353,14 +366,6 @@ async def run_graph(
 
         async def run_remaining_tasks():
             # Run other background tasks
-            
-            # Helper to extract AND store locations
-            async def extract_and_store():
-                locs = await extract_locations(output.response)
-                if locs:
-                    await store_locations(locs)
-                return locs
-
             tasks = [
                 log_chat(
                     user_id=user_id,
@@ -376,9 +381,13 @@ async def run_graph(
                     output_state=output,
                     start_time=start_time,
                     session_id=session_id
-                ),
-                extract_and_store()
+                )
             ]
+            
+            # Store extracted locations if any
+            if 'loc_objects' in locals() and loc_objects:
+                tasks.append(store_locations(loc_objects))
+                
             await asyncio.gather(*tasks, return_exceptions=True)
         
         # Launch remaining post-processing in background
@@ -395,5 +404,163 @@ async def run_graph(
         "memory_updated": output.memory_updated,
         "memory_facts_stored": output.memory_facts_stored,
         "new_title": new_title,
-        "debug": final_debug
+        "debug": final_debug,
+        "extracted_locations": final_locations
+    }
+
+
+async def run_graph_stream(
+    user_id: str,
+    session_id: str,
+    message: str,
+    history: List[Dict] = None,
+    model_mode: str = "gemini"
+):
+    """
+    Streamed version of run_graph.
+    Yields chunks for SSE.
+    """
+    import time
+    timings = {}
+    total_start = time.time()
+    
+    # 1. Init & Sync Nodes
+    graph = get_graph()
+    state: GraphState = {
+        "user_id": user_id,
+        "session_id": session_id,
+        "message": message,
+        "history": history or [],
+        "user_context": None,
+        "processing": None,
+        "output": None,
+        "model_mode": model_mode
+    }
+    
+    # Run setup nodes manually with timing
+    t0 = time.time()
+    state = await node_init(state)
+    timings["init"] = round((time.time() - t0) * 1000)
+    
+    t0 = time.time()
+    state = await node_context(state)
+    timings["context"] = round((time.time() - t0) * 1000)
+    
+    t0 = time.time()
+    state = await node_intent(state)
+    timings["intent"] = round((time.time() - t0) * 1000)
+    
+    intent = state["processing"].intent
+    if intent not in [IntentType.CHIT_CHAT, IntentType.NEGATIVE_FEEDBACK]:
+        t0 = time.time()
+        state = await node_emotion(state)
+        timings["emotion"] = round((time.time() - t0) * 1000)
+        
+        t0 = time.time()
+        state = await node_profile(state)
+        timings["profile"] = round((time.time() - t0) * 1000)
+        
+        t0 = time.time()
+        state = await node_rewrite(state)
+        timings["rewrite"] = round((time.time() - t0) * 1000)
+        
+        t0 = time.time()
+        state = await node_guard(state)
+        timings["guard"] = round((time.time() - t0) * 1000)
+        
+        if state["processing"].is_relevant:
+            t0 = time.time()
+            state = await node_retrieve(state)
+            timings["retrieve"] = round((time.time() - t0) * 1000)
+    
+    # Yield initial metadata
+    yield {
+        "type": "metadata",
+        "intent": state["processing"].intent.value if state["processing"].intent else "travel_query",
+        "emotion": state["processing"].emotion.value if state["processing"].emotion else "neutral"
+    }
+
+    # 2. Stream Generation with timing
+    t0 = time.time()
+    full_response = ""
+    async for chunk in generate_response_stream(state["processing"], state["user_context"]):
+        # Safety check: Prevent infinite loops of numbers or repeated chars
+        if len(chunk) > 100 and (chunk.isdigit() or len(set(chunk)) < 5):
+            print("⚠️ Detected infinite loop pattern in generation, stopping stream.")
+            break
+            
+        full_response += chunk
+        yield {"type": "content", "content": chunk}
+    timings["generate"] = round((time.time() - t0) * 1000)
+
+    # 3. Post-processing
+    state["output"].response = full_response
+    
+    t0 = time.time()
+    state = await node_suggestions(state)
+    timings["suggestions"] = round((time.time() - t0) * 1000)
+    
+    # FAST EXTRACTION for UI responsiveness
+    t0 = time.time()
+    final_locations = []
+    new_title = None
+    combined_text = f"User asked: {message}\nBot responded: {full_response}"
+    
+    try:
+        from .nodes.location_extractor import fast_extract_locations
+        fast_locs = fast_extract_locations(combined_text)
+        # Convert to format expected by frontend/store
+        final_locations = [{"name": l["name"], "province": l["name"] if l["type"] == "province" else None} for l in fast_locs]
+    except Exception as e:
+        print(f"Fast extraction failed: {e}")
+        
+    timings["fast_extract"] = round((time.time() - t0) * 1000)
+
+    # Run memory & background tasks (Deep Extraction, Titling, Logging)
+    async def run_bg():
+        await node_memory(state)
+        
+        # Deep AI Extraction & Store (Slow)
+        try:
+            from .nodes.location_extractor import extract_locations, store_locations
+            loc_objects = await extract_locations(combined_text)
+            if loc_objects:
+                await store_locations(loc_objects)
+        except Exception as e:
+            print(f"Bg extraction error: {e}")
+
+        # Titling (Slow)
+        if len(history or []) >= 2:
+            try:
+                from .utils.gemini_client import gemini_fast
+                title_prompt = f"Tạo tiêu đề ngắn gọn (dưới 5 từ) cho hội thoại này. User: {message}\nBot: {full_response}"
+                # We can't return this to UI anymore as request is done, but we could store it in DB
+                # For now, let's skip titling in BG or implement a separate update mechanism
+                pass 
+            except:
+                pass
+            
+        from .memory import log_chat
+        await log_chat(
+            user_id=user_id,
+            session_id=session_id,
+            message=message,
+            response=full_response,
+            emotion=state["processing"].emotion.value if state["processing"].emotion else "neutral",
+            intent=state["processing"].intent.value if state["processing"].intent else "travel_query"
+        )
+    
+    asyncio.create_task(run_bg())
+
+    # Print timing summary
+    total_time = round((time.time() - total_start) * 1000)
+    timing_str = " | ".join([f"{k}={v}ms" for k, v in timings.items()])
+    print(f"⏱️ TIMING: {timing_str} | TOTAL={total_time}ms")
+
+    yield {
+        "type": "final",
+        "suggested_prompts": state["output"].suggested_prompts,
+        "memory_updated": state["output"].memory_updated,
+        "extracted_locations": final_locations,
+        "new_title": new_title # Will be None mostly now, titling relies on separate flow
     }

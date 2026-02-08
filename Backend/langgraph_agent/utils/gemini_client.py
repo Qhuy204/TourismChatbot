@@ -97,8 +97,39 @@ class GeminiClient:
                     print(f"🛡️ Safety ratings: {candidate.safety_ratings}")
             elif hasattr(response, 'prompt_feedback') and response.prompt_feedback:
                 print(f"🚫 Prompt blocked. Feedback: {response.prompt_feedback}")
-        
         return response.text or ""
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_instruction: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 20480
+    ):
+        """Generate text completion as a stream"""
+        import asyncio
+        
+        types = _get_types()
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+        )
+        
+        if system_instruction:
+            config.system_instruction = system_instruction
+        
+        # Use sync generator in executor to avoid blocking
+        response_stream = self.client.models.generate_content_stream(
+            model=self.model_name,
+            contents=prompt,
+            config=config
+        )
+        
+        for chunk in response_stream:
+            if chunk.text:
+                yield chunk.text
+                # Allow event loop to process other tasks
+                await asyncio.sleep(0)
     
     def generate_sync(
         self,
@@ -129,7 +160,8 @@ class GeminiClient:
         self,
         prompt: str,
         schema: Dict[str, Any],
-        temperature: float = 0.3
+        temperature: float = 0.3,
+        max_tokens: int = 1024  # Higher limit for JSON output
     ) -> Dict[str, Any]:
         """Generate structured JSON output"""
         json_prompt = f"""{prompt}
@@ -139,18 +171,32 @@ Trả về JSON theo schema:
 
 CHỈ trả về JSON, không có text khác."""
         
-        response = await self.generate(json_prompt, temperature=temperature)
+        response = await self.generate(json_prompt, temperature=temperature, max_tokens=max_tokens)
         
         # Parse JSON with fallback
         try:
-            # Try direct parse
-            return json.loads(response.strip())
+            # 1. Clean markdown code blocks
+            clean_response = response.strip()
+            if "```" in clean_response:
+                clean_response = re.sub(r"```(?:json)?\n?(.*?)```", r"\1", clean_response, flags=re.DOTALL).strip()
+            
+            # 2. Try parse cleaned response
+            return json.loads(clean_response)
         except json.JSONDecodeError:
-            # Try to extract JSON from response
-            match = re.search(r'\{.*\}', response, re.DOTALL)
-            if match:
-                return json.loads(match.group())
-            raise ValueError(f"Failed to parse JSON from response: {response[:200]}")
+            # 3. Try to extract JSON object/array via regex if direct parse fails
+            try:
+                match = re.search(r'(\{.*\}|\[.*\])', response, re.DOTALL)
+                if match:
+                    json_str = match.group(1)
+                    # Simple fix for trailing commas before closing braces/brackets
+                    json_str = re.sub(r",\s*([\]}])", r"\1", json_str)
+                    return json.loads(json_str)
+            except:
+                pass
+            
+            # Log error but don't crash app flow
+            print(f"Failed to parse JSON: {response[:200]}...")
+            return {}
     
     async def classify(
         self,

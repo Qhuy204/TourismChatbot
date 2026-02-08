@@ -1,20 +1,3 @@
-"""
-Copyright 2018 YoongiKim
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License to the specific language governing permissions and
-   limitations under the License.
-"""
-
 import os
 import requests
 import shutil
@@ -609,7 +592,6 @@ if __name__ == '__main__':
     parser.add_argument('--proxy-list', type=str, default='',
                         help='The comma separated proxy list like: "socks://127.0.0.1:1080,http://127.0.0.1:1081". '
                              'Every thread will randomly choose one from the list.')
-    # Bỏ license-filter vì nó đã được hardcode trong logic mới
     args = parser.parse_args()
 
     _skip = False if str(args.skip).lower() == 'false' else True
@@ -629,7 +611,6 @@ if __name__ == '__main__':
     else:
         _no_gui = False
         
-    # Bỏ _license_filter
 
     print(
         'Options - skip:{}, threads:{}, google:{}, naver:{}, full_resolution:{}, face:{}, no_gui:{}, limit:{}, _proxy_list:{}'

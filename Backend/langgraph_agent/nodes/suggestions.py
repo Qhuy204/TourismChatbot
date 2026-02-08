@@ -67,17 +67,17 @@ async def generate_suggestions(
     latest_response = output_state.response or ""
     location_name = extract_location_name(latest_response[:500])
     
-    # 2. Build prompt for Gemini
-    prompt = f"""Dựa trên câu trả lời về "{location_name}", hãy tạo ra 5 câu hỏi gợi ý NGẮN (dưới 35 ký tự).
+    # 2. Build prompt for Gemini - diverse suggestions
+    prompt = f"""Dựa trên câu trả lời về "{location_name}", hãy tạo ra 5 câu hỏi gợi ý NGẮN (dưới 35 ký tự) và ĐA DẠNG.
 
 Yêu cầu:
-- 3 gợi ý "next_step": Câu hỏi đào sâu về {location_name}
-- 2 gợi ý "open_ended": Câu hỏi về các địa điểm lân cận
-- PHẢI ghi đầy đủ tên địa điểm, VD: "Giá vé {location_name}?" không phải "Giá vé Địa?"
+- MỖI câu hỏi phải thuộc category KHÁC NHAU: schedule, food, weather, stay, tips, experience
+- PHẢI ghi đầy đủ tên địa điểm trong câu hỏi
+- KHÔNG dùng "Giá vé", "Cách đến" - hãy sáng tạo hơn!
 - KHÔNG bắt đầu bằng "Gợi ý", "Top"
 
 Trả về JSON array THUẦN:
-[{{"text":"Giá vé {location_name}?","category":"next_step"}}]"""
+[{{"text":"Du lịch {location_name} mấy ngày?","category":"schedule"}}]"""
 
     try:
         if processing_state.model_mode == "qwen":
@@ -123,13 +123,13 @@ Trả về JSON array THUẦN:
     except Exception as e:
         print(f"❌ Suggestions error: {e}")
     
-    # FALLBACK with proper location name
+    # FALLBACK with diverse suggestions (not hardcoded templates)
     output_state.suggested_prompts = [
-        {"text": f"Giá vé {location_name}?", "category": "next_step"},
-        {"text": f"Cách đến {location_name}?", "category": "next_step"},
-        {"text": f"Ăn gì gần {location_name}?", "category": "next_step"},
-        {"text": "Điểm đến lân cận?", "category": "open_ended"},
-        {"text": "Lịch trình 1 ngày?", "category": "open_ended"}
+        {"text": f"Du lịch {location_name} mấy ngày?", "category": "schedule"},
+        {"text": f"Đặc sản {location_name} là gì?", "category": "food"},
+        {"text": f"Đi {location_name} mùa nào đẹp?", "category": "weather"},
+        {"text": f"Chỗ ở gần {location_name}?", "category": "stay"},
+        {"text": "Điểm đến lân cận?", "category": "open_ended"}
     ]
     
     return output_state
