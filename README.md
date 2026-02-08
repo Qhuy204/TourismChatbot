@@ -23,74 +23,77 @@
 
 ---
 
-## Project info
+## 🌟 Project Overview
+An intelligent, AI-powered travel assistant designed for Vietnam tourism. The chatbot leverages advanced RAG (Retrieval-Augmented Generation) and Agentic Workflow to provide personalized, actuate, and culturally relevant travel advice.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## ✨ Key Features
 
-## How can I edit this code?
+### 🤖 Intelligent Conversation
+- **Multi-Model Support:** Seamlessly switches between **Gemini 1.5 Flash** (fast response) and **Qwen3-VL** (local visual understanding).
+- **Agentic Workflow:** Powered by LangGraph with specialized nodes (Intent Classification, Emotion Analysis, Guardrails, Retrieval, Generation).
+- **Context Awareness:** Maintains long-term memory of user preferences, travel style, and conversation history.
 
-There are several ways of editing your application.
+### 🔍 Smart Retrieval (RAG)
+- **Visual Question Answering (VQA):** Retrieves information not just from text but also understands travel images using Vector Search (ChromaDB).
+- **Real-time Suggestions:** Proactively suggests relevant travel topics and questions based on context.
+- **Location Extraction:** Automatically detects and normalizes Vietnamese location names (e.g., "Sài Gòn" -> "Hồ Chí Minh") for precise recommendations.
 
-**Use Lovable**
+### 🎨 Modern User Experience
+- **Adaptive UI:** Light/Dark mode, responsive design, and smooth animations.
+- **Rich Media:** Displays travel images directly in chat with smart fallback handling for broken links.
+- **Style Mimicry:** The AI adapts its tone (Casual/Formal) to match the user's communication style.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+---
 
-Changes made via Lovable will be committed automatically to this repo.
+## 🛠️ Tech Stack
 
-**Use your preferred IDE**
+### Frontend
+- **Framework:** [React](https://react.dev/) + [Vite](https://vitejs.dev/)
+- **Language:** TypeScript
+- **Styling:** [Tailwind CSS](https://tailwindcss.com/)
+- **Components:** [shadcn/ui](https://ui.shadcn.com/)
+- **State Management:** React Hooks + Context API
+- **Markdown:** `react-markdown` with GFM support
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Backend
+- **Framework:** [FastAPI](https://fastapi.tiangolo.com/) (Python)
+- **Orchestration:** [LangGraph](https://langchain-ai.github.io/langgraph/) + LangChain
+- **AI Models:** 
+  - Google Gemini 1.5 Flash/Pro (via API)
+  - Qwen3-VL (Fine-tuned, local/server)
+- **Vector Database:** [ChromaDB](https://www.trychroma.com/)
+- **Authentication:** [Supabase Auth](https://supabase.com/)
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Infrastructure & Tools
+- **Version Control:** Git
+- **Package Manager:** npm (Frontend), pip (Backend)
+- **Environment:** Linux/Conda
 
-Follow these steps:
+## 🚀 Getting Started
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Prerequisites
+- Node.js & npm
+- Python 3.10+ (Conda recommended)
+- Supabase Account & Project
+- Google Gemini API Key
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### Installation
 
-# Step 3: Install the necessary dependencies.
-npm i
+1. **Clone the repository**
+   ```bash
+   git clone <YOUR_GIT_URL>
+   cd TourismChatbot
+   ```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+2. **Frontend Setup**
+   ```bash
+   npm install
+   npm run dev
+   ```
 
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+3. **Backend Setup**
+   ```bash
+   cd Backend
+   pip install -r requirements.txt
+   uvicorn main:app --reload
+   ```
