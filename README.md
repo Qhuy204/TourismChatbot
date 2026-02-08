@@ -59,8 +59,8 @@ An intelligent, AI-powered travel assistant designed for Vietnam tourism. The ch
 - **Framework:** [FastAPI](https://fastapi.tiangolo.com/) (Python)
 - **Orchestration:** [LangGraph](https://langchain-ai.github.io/langgraph/) + LangChain
 - **AI Models:** 
-  - Google Gemini 1.5 Flash/Pro (via API)
-  - Qwen3-VL (Fine-tuned, local/server)
+  - Google Gemini 3.0 Flash Preview (via API)
+  - Qwen3-VL 8B (Fine-tuned, local/server)
 - **Vector Database:** [ChromaDB](https://www.trychroma.com/)
 - **Authentication:** [Supabase Auth](https://supabase.com/)
 
