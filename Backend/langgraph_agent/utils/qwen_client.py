@@ -108,16 +108,45 @@ class QwenClient:
         prompt: str,
         system_instruction: Optional[str] = None,
         temperature: float = 0.7,
-        max_tokens: int = 1024
+        max_tokens: int = 1024,
+        image_urls: Optional[List[str]] = None
     ):
-        """Generate text response as a stream"""
+        """Generate text response as a stream with vision support"""
         if not self._is_initialized:
             self._initialize()
+
+        import httpx
+        from PIL import Image
+        from io import BytesIO
+
+        # Build message content
+        content = []
+        
+        # Add images if available
+        processed_images = []
+        if image_urls:
+            for url in image_urls:
+                try:
+                    # Download image
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.get(url)
+                        if resp.status_code == 200:
+                            img = Image.open(BytesIO(resp.content)).convert("RGB")
+                            processed_images.append(img)
+                            content.append({"type": "image"})
+                            print(f"📷 Qwen: Added image from {url[:50]}...")
+                except Exception as e:
+                    print(f"⚠️ Qwen failed to load image {url}: {e}")
+
+        # Add text prompt
+        content.append({"type": "text", "text": prompt})
 
         messages = []
         if system_instruction:
             messages.append({"role": "system", "content": [{"type": "text", "text": system_instruction}]})
-        messages.append({"role": "user", "content": [{"type": "text", "text": prompt}]})
+        
+        # Current message with optional images
+        messages.append({"role": "user", "content": content})
 
         input_text = self._processor.apply_chat_template(
             messages,
@@ -127,7 +156,7 @@ class QwenClient:
 
         inputs = self._processor(
             text=[input_text],
-            images=None,
+            images=processed_images if processed_images else None,
             videos=None,
             padding=True,
             return_tensors="pt",

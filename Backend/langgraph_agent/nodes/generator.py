@@ -210,12 +210,22 @@ async def generate_response_stream(
     
     final_prompt = "\n".join(prompt_parts)
     
+    # Extract image URLs from attachments for vision models
+    image_urls = [
+        att.get("url") for att in processing_state.attachments 
+        if att.get("type", "").startswith("image/") and att.get("url")
+    ]
+    
+    if image_urls:
+        print(f"📷 Sending {len(image_urls)} image(s) to LLM ({processing_state.model_mode})")
+    
     if processing_state.model_mode == "qwen":
         async for chunk in qwen_client.stream_generate(
             prompt=final_prompt,
             system_instruction=system_prompt,
             temperature=0.7,
-            max_tokens=4096  # Increased for longer responses
+            max_tokens=4096,
+            image_urls=image_urls if image_urls else None
         ):
             yield chunk
     else:
@@ -229,6 +239,7 @@ async def generate_response_stream(
             prompt=final_prompt,
             system_instruction=system_prompt,
             temperature=0.7,
-            max_tokens=4096  # Increased for longer responses
+            max_tokens=4096,
+            image_urls=image_urls if image_urls else None
         ):
             yield chunk

@@ -49,6 +49,55 @@ class GraphState(TypedDict):
 
 
 # =============================================================================
+# Helpers
+# =============================================================================
+
+async def perform_auto_titling(session_id: str, message: str, response: str, history: List[Dict], model_mode: str) -> str:
+    """Helper to generate and store a title for a session if it's new"""
+    try:
+        from .utils.gemini_client import gemini_fast
+        from .utils.qwen_client import qwen_client
+        from .memory.store import get_supabase
+        client = get_supabase()
+        if not client: return None
+        
+        # Check if session needs titling
+        res = client.table("chat_sessions").select("title").eq("id", session_id).execute()
+        if not res.data: return None
+        
+        current_title = res.data[0].get("title", "")
+        default_titles = ["Cuộc hội thoại mới", "Cuộc trò chuyện mới", "New Chat", "Untitled", "Hội thoại du lịch"]
+        
+        if any(t in current_title for t in default_titles) or not current_title:
+            # Build context (keep it simple for speed)
+            context_str = ""
+            # Last few turns are enough for titling
+            for m in history[-2:]:
+                role = "User" if m['role'] == 'user' else "Assistant"
+                context_str += f"{role}: {m['content']}\n"
+            context_str += f"User: {message}\nAssistant: {response}"
+            
+            title_prompt = (
+                f"Tạo tiêu đề cực ngắn (2-4 từ) cho cuộc trò chuyện sau. Chỉ trả về text tiêu đề:\n\n{context_str}"
+            )
+            
+            if model_mode == "qwen":
+                title = await qwen_client.generate(title_prompt)
+            else:
+                title = await gemini_fast.generate(title_prompt)
+            
+            new_title = title.strip().strip('"').strip("'").strip("*")
+            if new_title and len(new_title) < 50:
+                client.table("chat_sessions").update({
+                    "title": new_title,
+                    "first_message": message[:100]
+                }).eq("id", session_id).execute()
+                return new_title
+    except Exception as e:
+        print(f"⚠️ Auto-titling helper error: {e}")
+    return None
+
+# =============================================================================
 # Node Wrappers (adapt our nodes to graph state)
 # =============================================================================
 
@@ -63,7 +112,8 @@ async def node_init(state: GraphState) -> GraphState:
     state["processing"] = MessageProcessingState(
         message=state["message"],
         history=state.get("history", []),
-        model_mode=mode
+        model_mode=mode,
+        attachments=state.get("attachments", [])
     )
     state["output"] = OutputState()
     return state
@@ -290,79 +340,20 @@ async def run_graph(
         **output.debug_info
     }
     
-    new_title = None
-    # We want to title the session if it's still using a default name and we have enough context
-    # We'll try from message 3 (len(history) >= 2) onwards until a title is successfully set.
-    needs_titling = len(history) >= 2
-    
-    async def auto_title_session():
-        """Generate a title for the session if it's new and has enough context"""
-        nonlocal new_title
-        try:
-            from .utils.gemini_client import gemini_fast
-            from .utils.qwen_client import qwen_client
-            from .memory.store import get_supabase
-            client = get_supabase()
-            if not client: return
-            
-            # Check if session needs titling
-            res = client.table("chat_sessions").select("title, first_message").eq("id", session_id).execute()
-            if not res.data: return
-            
-            current_title = res.data[0].get("title", "")
-            default_titles = ["Cuộc hội thoại mới", "Cuộc trò chuyện mới", "New Chat", "Untitled"]
-            
-            # Only title if it's still default or has no preview
-            if (any(t in current_title for t in default_titles) or not res.data[0].get("first_message")):
-                # Build context from history + current message
-                context_str = ""
-                # Get last 6 messages for deep context
-                for m in history[-6:]:
-                    role = "Người dùng" if m['role'] == 'user' else "Chatbot"
-                    context_str += f"{role}: {m['content']}\n"
-                context_str += f"Người dùng: {message}"
-                
-                # Generate title using Gemini with full context
-                title_prompt = (
-                    f"Dựa trên đoạn hội thoại sau đây, hãy tạo một tiêu đề cực kỳ ngắn gọn (2-4 từ) "
-                    f"tóm tắt chủ đề chính của cuộc trò chuyện:\n\n{context_str}\n\n"
-                    f"Chỉ trả về tiêu đề, không có dấu ngoặc hay văn bản thừa."
-                )
-                if model_mode == "qwen":
-                    title = await qwen_client.generate(title_prompt)
-                else:
-                    title = await gemini_fast.generate(title_prompt)
-                
-                new_title = title.strip().strip('"').strip("'")
-                
-                if new_title:
-                    # Update session
-                    client.table("chat_sessions").update({
-                        "title": new_title,
-                        "first_message": history[0]['content'] if history else message[:100]
-                    }).eq("id", session_id).execute()
-        except Exception as e:
-            print(f"⚠️ Auto-titling error: {e}")
-
     # Run post-processing
     final_locations = []
     try:
-        
-        # 1. NEW: Extract locations from both message and response for cookie tracking
-        # We do this before background tasks to return them in the response
+        # 1. NEW: Extract locations from both message and response
         try:
             from .nodes.location_extractor import extract_locations, store_locations
-            # Combine message and response for better entity extraction
             combined_text = f"User asked: {message}\nBot responded: {output.response}"
             loc_objects = await extract_locations(combined_text)
             final_locations = [vars(l) for l in loc_objects]
         except Exception as e:
             print(f"⚠️ Location extraction for response failed: {e}")
 
-        # If we need a title and don't have one, await it BEFORE returning response
-        # This ensuring the UI gets 'new_title' in the same response
-        if needs_titling:
-            await auto_title_session()
+        # 2. Titling (from message 1 onwards)
+        new_title = await perform_auto_titling(session_id, message, output.response, history, model_mode)
 
         async def run_remaining_tasks():
             # Run other background tasks
@@ -414,7 +405,8 @@ async def run_graph_stream(
     session_id: str,
     message: str,
     history: List[Dict] = None,
-    model_mode: str = "gemini"
+    model_mode: str = "gemini",
+    attachments: List[Dict] = None
 ):
     """
     Streamed version of run_graph.
@@ -434,7 +426,8 @@ async def run_graph_stream(
         "user_context": None,
         "processing": None,
         "output": None,
-        "model_mode": model_mode
+        "model_mode": model_mode,
+        "attachments": attachments or []
     }
     
     # Run setup nodes manually with timing
@@ -515,8 +508,11 @@ async def run_graph_stream(
         print(f"Fast extraction failed: {e}")
         
     timings["fast_extract"] = round((time.time() - t0) * 1000)
+    
+    # 2. Titling (from message 1 onwards)
+    new_title = await perform_auto_titling(session_id, message, full_response, history or [], model_mode)
 
-    # Run memory & background tasks (Deep Extraction, Titling, Logging)
+    # Run memory & background tasks (Deep Extraction, Logging)
     async def run_bg():
         await node_memory(state)
         
@@ -528,17 +524,6 @@ async def run_graph_stream(
                 await store_locations(loc_objects)
         except Exception as e:
             print(f"Bg extraction error: {e}")
-
-        # Titling (Slow)
-        if len(history or []) >= 2:
-            try:
-                from .utils.gemini_client import gemini_fast
-                title_prompt = f"Tạo tiêu đề ngắn gọn (dưới 5 từ) cho hội thoại này. User: {message}\nBot: {full_response}"
-                # We can't return this to UI anymore as request is done, but we could store it in DB
-                # For now, let's skip titling in BG or implement a separate update mechanism
-                pass 
-            except:
-                pass
             
         from .memory import log_chat
         await log_chat(
@@ -562,5 +547,5 @@ async def run_graph_stream(
         "suggested_prompts": state["output"].suggested_prompts,
         "memory_updated": state["output"].memory_updated,
         "extracted_locations": final_locations,
-        "new_title": new_title # Will be None mostly now, titling relies on separate flow
+        "new_title": new_title
     }

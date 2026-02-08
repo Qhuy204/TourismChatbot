@@ -276,20 +276,24 @@ async def store_locations(
     
     stored = 0
     
-    data_to_store = []
-    
+    # Build data and deduplicate by name_normalized
+    seen_names = {}
     for loc in locations:
         name_normalized = normalize_name(loc.name)
-        data_to_store.append({
-            "name": loc.name,
-            "name_normalized": name_normalized,
-            "city": loc.city,
-            "province": loc.province,
-            "category": loc.category,
-            "description": loc.description,
-            "details": {"admin_id": loc.admin_id} if loc.admin_id else None,
-            "source_response_id": source_response_id
-        })
+        # Only keep first occurrence (or update with more complete data)
+        if name_normalized not in seen_names:
+            seen_names[name_normalized] = {
+                "name": loc.name,
+                "name_normalized": name_normalized,
+                "city": loc.city,
+                "province": loc.province,
+                "category": loc.category,
+                "description": loc.description,
+                "details": {"admin_id": loc.admin_id} if loc.admin_id else None,
+                "source_response_id": source_response_id
+            }
+    
+    data_to_store = list(seen_names.values())
     
     try:
         if data_to_store:

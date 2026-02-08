@@ -25,6 +25,7 @@ class ChatRequest(BaseModel):
     message: str
     history: List[Dict] = []
     model_mode: Optional[str] = "gemini"
+    attachments: Optional[List[Dict]] = None  # [{url, type, name}]
 
 
 class SuggestionItem(BaseModel):
@@ -241,7 +242,8 @@ async def chat_stream(request: ChatRequest):
                 session_id=request.session_id,
                 message=request.message,
                 history=request.history,
-                model_mode=request.model_mode
+                model_mode=request.model_mode,
+                attachments=request.attachments
             ):
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
         except Exception as e:

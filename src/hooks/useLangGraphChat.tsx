@@ -237,6 +237,11 @@ export function useLangGraphChat(initialSessionId?: string) {
                     history: history,
                     memory_scope: memoryShareEnabled ? 'global' : 'session',
                     model_mode: overrideModelMode || modelMode,
+                    attachments: attachments?.map(a => ({
+                        url: a.url,
+                        type: a.type,
+                        name: a.name || 'image',
+                    })),
                 }),
             });
 

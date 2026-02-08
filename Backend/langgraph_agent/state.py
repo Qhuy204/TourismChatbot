@@ -83,6 +83,9 @@ class MessageProcessingState:
     
     model_mode: Literal["gemini", "qwen"] = "gemini"
     
+    # Attachments (images for vision models)
+    attachments: List[Dict] = field(default_factory=list)  # [{url, type, name}]
+    
     # Retrieved context
     retrieved_context: List[Dict] = field(default_factory=list)
     

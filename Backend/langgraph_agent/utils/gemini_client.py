@@ -104,10 +104,13 @@ class GeminiClient:
         prompt: str,
         system_instruction: Optional[str] = None,
         temperature: float = 0.7,
-        max_tokens: int = 20480
+        max_tokens: int = 20480,
+        image_urls: Optional[List[str]] = None
     ):
-        """Generate text completion as a stream"""
+        """Generate text completion as a stream, with optional image inputs"""
         import asyncio
+        import httpx
+        import base64
         
         types = _get_types()
         config = types.GenerateContentConfig(
@@ -118,10 +121,46 @@ class GeminiClient:
         if system_instruction:
             config.system_instruction = system_instruction
         
+        # Build contents: combine images and text
+        contents = []
+        
+        # Add images first (if any)
+        if image_urls:
+            for url in image_urls:
+                try:
+                    # For data URLs (base64), extract and use inline_data
+                    if url.startswith("data:"):
+                        # Parse data URL: data:image/jpeg;base64,/9j/4AAQ...
+                        match = re.match(r"data:([^;]+);base64,(.+)", url)
+                        if match:
+                            mime_type = match.group(1)
+                            b64_data = match.group(2)
+                            contents.append(types.Part.from_bytes(
+                                data=base64.b64decode(b64_data),
+                                mime_type=mime_type
+                            ))
+                            print(f"📷 Added inline image ({mime_type})")
+                    else:
+                        # For HTTP URLs, download and convert to bytes
+                        async with httpx.AsyncClient(timeout=5.0) as client:
+                            resp = await client.get(url)
+                            if resp.status_code == 200:
+                                content_type = resp.headers.get("content-type", "image/jpeg")
+                                contents.append(types.Part.from_bytes(
+                                    data=resp.content,
+                                    mime_type=content_type.split(";")[0]
+                                ))
+                                print(f"📷 Added image from URL: {url[:50]}...")
+                except Exception as e:
+                    print(f"⚠️ Failed to load image {url[:50]}: {e}")
+        
+        # Add text prompt
+        contents.append(prompt)
+        
         # Use sync generator in executor to avoid blocking
         response_stream = self.client.models.generate_content_stream(
             model=self.model_name,
-            contents=prompt,
+            contents=contents,
             config=config
         )
         
