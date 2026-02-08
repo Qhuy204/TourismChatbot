@@ -37,12 +37,42 @@ async def retrieve_context(state: MessageProcessingState) -> MessageProcessingSt
             min_score=MIN_SCORE
         )
         
+        # Verify image links (remove dead ones)
+        await verify_image_urls(results)
+        
         state.retrieved_context = results
     except Exception as e:
         print(f"Retrieval error: {e}")
         state.retrieved_context = []
     
     return state
+
+
+# Helper: Check image links
+import aiohttp
+import asyncio
+
+async def verify_image_urls(context: List[Dict]):
+    """Quickly verify image URLs in parallel"""
+    if not context: return
+
+    timeout = aiohttp.ClientTimeout(total=1.5)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async def check(item):
+            url = item.get("image_url")
+            if not url: return
+            try:
+                async with session.head(url, allow_redirects=True) as resp:
+                    if resp.status != 200:
+                        print(f"⚠️ Dead Image: {url} ({resp.status})")
+                        item["image_url"] = ""
+            except Exception:
+                # Timeout or connection error
+                print(f"⚠️ Dead Image (Error): {url}")
+                item["image_url"] = ""
+
+        # Run checks in parallel
+        await asyncio.gather(*(check(item) for item in context))
 
 
 def format_context_for_prompt(context: List[Dict]) -> str:

@@ -48,7 +48,7 @@ def build_system_prompt(
     # Base prompt
     prompt_parts = [
         "Bạn là trợ lý du lịch Việt Nam thân thiện và am hiểu.",
-        "CHỈ nhúng ảnh nếu URL có trong 'Thông tin tham khảo'. KHÔNG TỰ BỊA URL ẢNH.",
+        "CHỈ nhúng ảnh nếu URL có trong 'Thông tin tham khảo' bằng cú pháp: ![Mô tả](URL). KHÔNG TỰ BỊA URL ẢNH.",
         f"Phong cách trả lời: {style['tone']}.",
     ]
     

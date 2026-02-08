@@ -1,4 +1,27 @@
-# Welcome to your Lovable project
+# Tourism Chatbot Assistant 🇻🇳
+
+## 🚀 Latest Updates (Feb 2026)
+
+### ⚡ Performance & Optimization
+- **Faster Responses:** Significant reduction in response latency (~15s) by moving heavy AI tasks (deep location extraction, auto-titling) to background processes.
+- **Instant Suggestions:** Implemented `Fast Location Extraction` (Regex/Dictionary-based) to provide immediate travel suggestions while the main response is generating.
+- **Async Verification:** Backend now asynchronously verifies image URLs status (HEAD request) before sending to client, removing dead links automatically.
+
+### 🧠 Intelligence & Natural Language
+- **Style Mimicry:** The AI now analyzes recent user messages to adapt its tone (Casual vs. Professional/Formal).
+- **Refined Prompts:** Suggestions are now more natural, concise, and professional, removing overly casual or repetitive filler words.
+- **Smart Location Awareness:** Added alias support (e.g., "Sài Gòn" -> "Hồ Chí Minh", "Hà Nội" -> "HN") for better context understanding.
+
+### 🖼️ Robust Image Handling
+- **Strict No-Hallucination:** System prompt updated to strictly forbid generating fake image URLs. Images are only shown if they exist in the retrieved context.
+- **Smart Rendering:** Frontend automatically detects raw URLs in text (from models like Qwen) and converts them to Markdown Image syntax.
+- **Fallback UI:** Broken images are automatically hidden to prevent UI stutter/layout shifts. `loading="lazy"` enabled for better performance.
+
+### 🛠️ Technical Improvements
+- **Robust JSON Parsing:** Enhanced `gemini_client` to handle Markdown code blocks and trailing commas in JSON responses.
+- **Project Structure:** Optimized `.gitignore` for large model folders (`VQA/`).
+
+---
 
 ## Project info
 

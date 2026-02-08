@@ -576,29 +576,40 @@ function MessageBubble({
                                 <ReactMarkdown
                                     components={{
                                         img: ({ src, alt }) => (
-                                            <img
-                                                src={src}
-                                                alt={alt || 'Hình ảnh'}
-                                                className="rounded-lg max-w-full h-auto my-2 border border-gray-200 shadow-sm"
-                                                style={{ maxHeight: '300px', objectFit: 'cover' }}
-                                                onError={(e) => {
-                                                    (e.target as HTMLImageElement).style.display = 'none';
-                                                }}
-                                            />
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <div className="relative text-center my-2">
+                                                <img
+                                                    loading="lazy"
+                                                    src={src}
+                                                    alt={alt || 'Hình ảnh'}
+                                                    className="rounded-lg w-full h-auto border border-gray-200 shadow-sm transition-opacity duration-300"
+                                                    style={{ maxHeight: '300px', objectFit: 'cover' }}
+                                                    onError={(e) => {
+                                                        console.warn('Image load failed:', src);
+                                                        (e.target as HTMLElement).parentElement!.style.display = 'none';
+                                                    }}
+                                                />
+                                            </div>
                                         ),
                                         a: ({ href, children }) => (
                                             <a
                                                 href={href}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="text-primary hover:underline"
+                                                className="text-primary hover:underline font-medium"
                                             >
                                                 {children}
                                             </a>
                                         ),
+                                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
                                     }}
                                 >
-                                    {message.content}
+                                    {/* Detect image URLs and convert to markdown, but Ignore existing markdown images */}
+                                    {message.content.replace(/(!\[.*?\]\()?(https?:\/\/[^\s\),"]+(?:\.jpg|\.jpeg|\.png|\.webp|\.gif))/gi, (match, prefix, url) => {
+                                        if (prefix) return match; // Already markdown image
+                                        // Auto-convert raw URL
+                                        return `\n![Ảnh minh họa](${url})\n`;
+                                    })}
                                 </ReactMarkdown>
                             )}
                         </div>
