@@ -78,7 +78,7 @@ export function Sidebar({ currentView, onViewChange, onOpenSettings, isAdmin = f
             <div>
               <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
                 <Database className="h-5 w-5 text-primary" />
-                SVLM Dataset
+                Tourism Dataset
               </h1>
               <p className="text-xs text-muted-foreground mt-0.5">Data Annotation Platform</p>
             </div>

@@ -1,0 +1,331 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+:root {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* ─── Dark Theme (default) ─── */
+[data-theme="dark"],
+:root {
+  --bg: #05070a;
+  --bg-card: #0e1320;
+  --bg-card-hover: #131c2f;
+  --bg-muted: #111827;
+  --primary: #1d6de0;
+  --primary-accent: #06b6d4;
+  --primary-hover: #2563eb;
+  --primary-foreground: #ffffff;
+  /* ✅ Fixed: text colors are now clearly legible on dark backgrounds */
+  --text: #e8edf5;
+  /* was #f1f5f9 — boosted saturation */
+  --text-muted: #8b9db8;
+  /* was #64748b — now 30% brighter */
+  --text-secondary: #b0bfd4;
+  /* was #94a3b8 — more contrast */
+  --border: rgba(99, 130, 200, 0.18);
+  --border-strong: rgba(99, 130, 200, 0.35);
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 40px rgba(29, 109, 224, 0.18);
+  --input-bg: #0d1320;
+}
+
+/* ─── Light Theme ─── */
+[data-theme="light"] {
+  --bg: #f0f4ff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8faff;
+  --bg-muted: #eef2fc;
+  --primary: #1d6de0;
+  --primary-hover: #1558c0;
+  --primary-foreground: #ffffff;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-secondary: #475569;
+  --border: #dbe5f1;
+  --border-strong: #b8cfe8;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 40px rgba(29, 109, 224, 0.08);
+  --input-bg: #f8faff;
+}
+
+/* ─── Base Reset ─── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  min-height: 100vh;
+}
+
+/* ─── Network Background Pattern ─── */
+.bg-network {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 20% 50%, rgba(29, 109, 224, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(29, 109, 224, 0.05) 0%, transparent 40%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='1' fill='%231d6de0' opacity='0.15'/%3E%3C/svg%3E");
+  background-size: auto, auto, 60px 60px;
+}
+
+[data-theme="light"] .bg-network {
+  background-image:
+    radial-gradient(circle at 20% 50%, rgba(29, 109, 224, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(29, 109, 224, 0.03) 0%, transparent 40%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='1' fill='%231d6de0' opacity='0.08'/%3E%3C/svg%3E");
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* ─── Utility Classes ─── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-glow);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+  font-family: var(--font-sans);
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(29, 109, 224, 0.4);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  padding: 9px 23px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease;
+  font-family: var(--font-sans);
+}
+
+.btn-outline:hover {
+  background: var(--primary);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #60a5fa 0%, #1d6de0 50%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="light"] .text-gradient {
+  background: linear-gradient(135deg, #1d6de0 0%, #0e4fb5 50%, #0ea5e9 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.section-hero {
+  background: var(--bg-network);
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  padding: 80px 0 60px;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ─── Animations ─── */
+
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glow-pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(29, 109, 224, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 40px rgba(29, 109, 224, 0.5);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-fade-up {
+  animation: fadeInUp 0.5s ease forwards;
+}
+
+.animate-glow {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* ─── Emotion Theme Overrides ─── */
+[data-emotion="happy"] .chat-main-area,
+[data-emotion="excited"] .chat-main-area {
+  /* Warm tint overlay on bg — applied via JS data-theme switch */
+}
+
+/* Emotion indicator dot in chat */
+.emotion-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(29, 109, 224, 0.12);
+  color: var(--primary);
+  border: 1px solid var(--border);
+  transition: all 0.3s ease;
+}
+
+/* Smooth primary color transitions for emotion changes */
+:root {
+  transition: --primary 0.5s ease;
+}
+
+/* ─── Input Styles ─── */
+input,
+textarea,
+select {
+  font-family: var(--font-sans);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  outline: none;
+  width: 100%;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(29, 109, 224, 0.1);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* ─── Prose / Markdown ─── */
+.prose p {
+  margin-bottom: 8px;
+}
+
+.prose p:last-child {
+  margin-bottom: 0;
+}
+
+.prose ul {
+  padding-left: 20px;
+  margin-bottom: 8px;
+}
+
+.prose li {
+  margin-bottom: 4px;
+}
+
+.prose a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.prose code {
+  background: var(--bg-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.875em;
+}
+
+.prose pre {
+  background: var(--bg-muted);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+}

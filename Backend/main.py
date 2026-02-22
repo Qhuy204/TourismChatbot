@@ -387,10 +387,6 @@ async def track_event(request: EventRequest):
 
 @app.post("/langgraph/contextual_suggestions")
 async def get_contextual_suggestions(request: ContextualSuggestionsRequest):
-    """
-    Generate AI-powered contextual follow-up suggestions based on recent locations.
-    These are truly personalized, not templated.
-    """
     from langgraph_agent.utils.gemini_client import gemini_fast
     
     locations = request.locations[:3]  # Max 3 locations
@@ -545,11 +541,6 @@ async def find_location_duplicates(min_similarity: float = 0.6):
 
 @app.post("/langgraph/locations/cleanup")
 async def cleanup_locations(request: DuplicateCleanupRequest):
-    """
-    Cleanup duplicate locations.
-    - dry_run=True: Only report what would be done
-    - dry_run=False: Actually delete/merge records
-    """
     from langgraph_agent.memory.store import cleanup_duplicate_locations
     
     results = await cleanup_duplicate_locations(
@@ -565,7 +556,6 @@ async def cleanup_locations(request: DuplicateCleanupRequest):
 
 @app.post("/langgraph/recommendations")
 async def get_question_recommendations(request: RecommendationsRequest):
-    """Get personalized question recommendations based on user topics"""
     from langgraph_agent.memory.store import get_recommendations
     
     recommendations = await get_recommendations(
@@ -576,7 +566,6 @@ async def get_question_recommendations(request: RecommendationsRequest):
     return {"recommendations": recommendations}
 
 
-# ============== Run ==============
 
 if __name__ == "__main__":
     import uvicorn

@@ -109,6 +109,20 @@ async def generate_response(
     if rag_context:
         prompt_parts.append(rag_context)
         prompt_parts.append("")
+        
+    # Inject text files
+    text_attachments = [
+        att for att in processing_state.attachments
+        if att.get("type", "file") in ["file/text", "text/plain", "file"] and type(att.get("url")) is str and len(att.get("url", "")) > 10
+    ]
+    
+    if text_attachments:
+        prompt_parts.append("--- NỘI DUNG FILE ĐÍNH KÈM ---")
+        for att in text_attachments:
+            if not att.get("type", "").startswith("image/"):
+                prompt_parts.append(f"Tên file: {att.get('name')}")
+                prompt_parts.append(att.get("url")[:15000]) # Cap text
+        prompt_parts.append("----------------------------\n")
     
     prompt_parts.append("Hội thoại:")
     prompt_parts.append(conversation)
@@ -181,10 +195,6 @@ async def generate_response_stream(
     processing_state: MessageProcessingState,
     user_context: UserContextState
 ):
-    """
-    Generator function for streaming response.
-    Yields chunks of text.
-    """
     system_prompt = build_system_prompt(
         user_context=user_context,
         emotion=processing_state.emotion,
@@ -202,6 +212,20 @@ async def generate_response_stream(
         rag_context = format_context_for_prompt(processing_state.retrieved_context)
         prompt_parts.append(rag_context)
         prompt_parts.append("")
+        
+    # Inject text files
+    text_attachments = [
+        att for att in processing_state.attachments
+        if att.get("type", "file") in ["file/text", "text/plain", "file"] and isinstance(att.get("url"), str) and len(att.get("url", "")) > 10
+    ]
+    
+    if text_attachments:
+        prompt_parts.append("--- NỘI DUNG FILE ĐÍNH KÈM ---")
+        for att in text_attachments:
+            if not att.get("type", "").startswith("image/"):
+                prompt_parts.append(f"Tên file: {att.get('name')}")
+                prompt_parts.append(att.get("url")[:15000]) # Cap text length for safety
+        prompt_parts.append("----------------------------\n")
     
     prompt_parts.append("Hội thoại:")
     prompt_parts.append(conversation)

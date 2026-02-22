@@ -118,9 +118,10 @@ async def log_chat(
     session_id: str,
     message: str,
     response: str,
-    emotion: str = None,
-    intent: str = None,
-    debug: Optional[Dict] = None
+    emotion: str = "neutral",
+    intent: str = "travel_query",
+    debug: Optional[Dict] = None,
+    attachments: Optional[List[Dict]] = None
 ) -> bool:
     """
     Log chat to Supabase using the ACTUAL schema.
@@ -139,7 +140,8 @@ async def log_chat(
             "session_id": session_id,
             "role": "user",
             "message": message,
-            "model_used": "langgraph"
+            "model_used": "langgraph",
+            "context": {"attachments": attachments} if attachments else None
         }).execute()
         
         # Log assistant response
@@ -463,17 +465,6 @@ async def get_recommendations(
     topics: Optional[List[str]] = None,
     limit: int = 5
 ) -> List[Dict]:
-    """
-    Get personalized question recommendations.
-    
-    Args:
-        user_id: User UUID
-        topics: List of topic categories from cookies
-        limit: Max recommendations to return
-    
-    Returns:
-        List of {question, category, source, score}
-    """
     client = get_supabase()
     if not client:
         return []

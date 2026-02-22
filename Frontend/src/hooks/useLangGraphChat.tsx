@@ -1,0 +1,415 @@
+/**
+ * useLangGraphChat — Full port from legacy with:
+ * - Streaming SSE chat
+ * - Contextual suggestions based on extracted locations (histogram-ranked)
+ * - Initial personalized suggestions (frequent topics → backend endpoint)
+ * - Emotion metadata from backend response
+ * - Session switching + message cache
+ */
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { useSessionCookies } from '@/hooks/useSessionCookies';
+import { supabase } from '@/lib/supabase';
+
+const LANGGRAPH_API_URL = import.meta.env.VITE_LANGGRAPH_API_URL || 'http://localhost:8000';
+
+export interface ChatMessage {
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: Date;
+    feedbackScore?: number | null;
+    isLoading?: boolean;
+    attachments?: Array<{ url: string; type: string; name: string }>;
+    emotion?: string;
+    intent?: string;
+}
+
+export interface SuggestionItem {
+    text: string;
+    category: 'next_step' | 'personalized' | 'open_ended';
+}
+
+// Per-session message cache (avoids re-fetching on tab switch)
+const sessionMessagesCache: Record<string, ChatMessage[]> = {};
+
+export function useLangGraphChat(initialSessionId?: string) {
+    const { user } = useAuth();
+    const {
+        sessionId: savedSessionId,
+        saveSession,
+        trackTopic,
+        updateRecentLocations,
+        preferences,
+        isLoaded: cookiesLoaded,
+    } = useSessionCookies();
+
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
+    const [recentLocations, setRecentLocations] = useState<string[]>([]);
+    const [initialData, setInitialData] = useState<{ welcome_message?: string; suggestions: SuggestionItem[] } | null>(null);
+    const [modelMode, setModelMode] = useState<'gemini' | 'qwen'>('gemini');
+    const [error, setError] = useState<string | null>(null);
+
+    const sidRef = useRef<string>(initialSessionId || savedSessionId || crypto.randomUUID());
+
+    // ── Load chat history when session + auth ready ──────────────────────────
+    useEffect(() => {
+        const loadHistory = async (sid: string) => {
+            if (!user?.id) return;
+            const cached = sessionMessagesCache[sid];
+            if (cached) { setMessages(cached); return; }
+
+            setIsLoading(true);
+            try {
+                const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/history/${sid}`);
+                if (!res.ok) throw new Error('Failed');
+                const data = await res.json();
+
+                const loaded: ChatMessage[] = (data.history || []).map((log: Record<string, unknown>) => ({
+                    id: String(log.id),
+                    role: log.role as 'user' | 'assistant',
+                    content: log.message as string,
+                    timestamp: new Date(log.created_at as string),
+                    emotion: log.role === 'assistant' ? (log.context as Record<string, unknown>)?.emotion as string : undefined,
+                    intent: log.role === 'assistant' ? (log.context as Record<string, unknown>)?.intent as string : undefined,
+                }));
+                setMessages(loaded);
+                sessionMessagesCache[sid] = loaded;
+            } catch {
+                setError('Không thể tải lịch sử cuộc trò chuyện');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        if (cookiesLoaded && sidRef.current) {
+            loadHistory(sidRef.current);
+        }
+    }, [cookiesLoaded, user?.id]);
+
+    // ── Handle session switch ────────────────────────────────────────────────
+    useEffect(() => {
+        if (!initialSessionId || initialSessionId === sidRef.current) return;
+        sidRef.current = initialSessionId;
+        setSuggestions([]);
+        setError(null);
+
+        const cached = sessionMessagesCache[initialSessionId];
+        if (cached) {
+            setMessages(cached);
+            return;
+        }
+
+        setMessages([]); // Clear old messages immediately
+        setIsLoading(true);
+        fetch(`${LANGGRAPH_API_URL}/langgraph/history/${initialSessionId}`)
+            .then(r => {
+                if (!r.ok) throw new Error('API error');
+                return r.json();
+            })
+            .then(data => {
+                const msgs: ChatMessage[] = (data.history || []).map((log: Record<string, unknown>) => ({
+                    id: String(log.id),
+                    role: log.role as 'user' | 'assistant',
+                    content: log.message as string,
+                    timestamp: new Date(log.created_at as string),
+                    emotion: log.role === 'assistant' ? (log.context as Record<string, unknown>)?.emotion as string : undefined,
+                    intent: log.role === 'assistant' ? (log.context as Record<string, unknown>)?.intent as string : undefined,
+                    attachments: log.role === 'user' ? (log.context as Record<string, unknown>)?.attachments as any[] : undefined,
+                }));
+                setMessages(msgs);
+                sessionMessagesCache[initialSessionId] = msgs;
+            })
+            .catch(err => {
+                console.error('Failed to load session history:', err);
+                setError('Không thể tải lịch sử cuộc trò chuyện');
+            })
+            .finally(() => setIsLoading(false));
+    }, [initialSessionId]);
+
+    // ── Persist cookies on session change ───────────────────────────────────
+    useEffect(() => {
+        if (cookiesLoaded && sidRef.current) saveSession(sidRef.current);
+    }, [cookiesLoaded, saveSession]);
+
+    // ── Cache messages ───────────────────────────────────────────────────────
+    useEffect(() => {
+        if (messages.length > 0 && !messages.some(m => m.isLoading)) {
+            sessionMessagesCache[sidRef.current] = messages;
+        }
+    }, [messages]);
+
+    // ── Auto-title from first message (ChatGPT-style) ───────────────────────
+    const generateFallbackTitle = useCallback((msgContent: string): string => {
+        // Vietnamese & English filler words to strip
+        const fillers = new Set(['tôi', 'bạn', 'mình', 'cho', 'về', 'có', 'không', 'ở', 'với', 'và', 'là', 'thì', 'mà', 'của', 'the', 'a', 'an', 'is', 'are', 'in', 'on', 'at', 'to', 'for', 'of', 'can', 'you', 'me', 'i', 'what', 'how']);
+        const words = msgContent
+            .replace(/[?!.,;:()[\]]/g, ' ')
+            .split(/\s+/)
+            .filter(w => w.length > 1 && !fillers.has(w.toLowerCase()));
+        const title = words.slice(0, 6).join(' ');
+        return title.length > 2 ? (title.charAt(0).toUpperCase() + title.slice(1)) : msgContent.slice(0, 40);
+    }, []);
+
+    // ── sendMessage ──────────────────────────────────────────────────────────
+    const sendMessage = useCallback(async (
+        content: string,
+        attachments?: Array<{ url: string; type: string; name?: string }>,
+        memoryShareEnabled: boolean = false,
+        onNewTitle?: (title: string) => void,
+        overrideModelMode?: 'gemini' | 'qwen'
+    ) => {
+        if (!content.trim() || !user?.id) return;
+        setError(null);
+
+        const currentSid = sidRef.current;
+        const isFirstMessage = messages.filter(m => !m.isLoading).length === 0;
+
+        // Track topic for histogram-based recommendations
+        trackTopic(content.trim());
+
+        // Immediate client-side title on first message (ChatGPT behavior)
+        if (isFirstMessage && onNewTitle) {
+            onNewTitle(generateFallbackTitle(content.trim()));
+        }
+
+        const userMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: 'user',
+            content: content.trim(),
+            timestamp: new Date(),
+            attachments: attachments?.map(a => ({ url: a.url, type: a.type, name: a.name || 'file' })),
+        };
+        const loadingMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: '',
+            timestamp: new Date(),
+            isLoading: true,
+        };
+
+        setMessages(prev => [...prev, userMsg, loadingMsg]);
+        setIsLoading(true);
+
+        try {
+            const history = messages
+                .filter(m => !m.isLoading)
+                .map(m => ({ role: m.role, content: m.content }));
+
+            const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/chat/stream`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: user.id,
+                    session_id: currentSid,
+                    message: content.trim(),
+                    history,
+                    memory_scope: memoryShareEnabled ? 'global' : 'session',
+                    model_mode: overrideModelMode || modelMode,
+                    attachments: attachments?.map(a => ({ url: a.url, type: a.type, name: a.name || 'image' })),
+                }),
+            });
+
+            if (!res.ok) throw new Error(`API error: ${res.status}`);
+
+            const reader = res.body?.getReader();
+            const decoder = new TextDecoder();
+            if (!reader) throw new Error('No reader');
+
+            let assistantContent = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                for (const line of chunk.split('\n')) {
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const data = JSON.parse(line.slice(6));
+
+                        if (data.type === 'metadata') {
+                            setMessages(prev => prev.map(m =>
+                                m.id === loadingMsg.id ? { ...m, emotion: data.emotion, intent: data.intent } : m
+                            ));
+                        } else if (data.type === 'content') {
+                            assistantContent += data.content;
+                            setMessages(prev => prev.map(m =>
+                                m.id === loadingMsg.id ? { ...m, content: assistantContent, isLoading: false } : m
+                            ));
+                        } else if (data.type === 'final') {
+                            setSuggestions(data.suggested_prompts || []);
+
+                            if (data.new_title && onNewTitle) onNewTitle(data.new_title);
+
+                            // ── Location-based contextual suggestions ──
+                            if (data.extracted_locations?.length > 0) {
+                                const locationNames: string[] = data.extracted_locations.map((loc: Record<string, string>) => loc.name);
+                                setRecentLocations(locationNames.slice(0, 3));
+                                updateRecentLocations(locationNames.slice(0, 5));
+
+                                // Track each location with histogram
+                                data.extracted_locations.forEach((loc: Record<string, string>) => {
+                                    trackTopic(loc.name, true, {
+                                        city: loc.city,
+                                        province: loc.province,
+                                        adminId: loc.admin_id,
+                                    });
+                                });
+
+                                // Fetch AI-powered contextual suggestions (non-blocking)
+                                fetch(`${LANGGRAPH_API_URL}/langgraph/contextual_suggestions`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        locations: locationNames.slice(0, 3),
+                                        last_question: userMsg.content,
+                                        limit: 4,
+                                    }),
+                                })
+                                    .then(r => r.json())
+                                    .then(result => {
+                                        if (result.suggestions?.length > 0) {
+                                            setSuggestions(prev => {
+                                                const base = data.suggested_prompts || prev;
+                                                return [...result.suggestions, ...base.slice(0, 1)].slice(0, 5);
+                                            });
+                                        }
+                                    })
+                                    .catch(e => console.warn('Contextual suggestions error:', e));
+                            }
+                        } else if (data.type === 'error') {
+                            throw new Error(data.message);
+                        }
+                    } catch (e) {
+                        console.warn('SSE parse error:', e);
+                    }
+                }
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Gửi tin nhắn thất bại');
+            setMessages(prev => prev.filter(m => m.id !== loadingMsg.id));
+        } finally {
+            setIsLoading(false);
+        }
+    }, [user?.id, messages, modelMode, trackTopic, updateRecentLocations]);
+
+    // ── fetchInitialSuggestions: histogram-based personalization ─────────────
+    const fetchInitialSuggestions = useCallback(async (topics?: string[]) => {
+        if (!user?.id) return;
+
+        // Sort topics by frequency from cookie histogram
+        const topicCounts = preferences?.topicCounts || {};
+        const sortedTopics = Object.entries(topicCounts)
+            .sort(([, a], [, b]) => (b as number) - (a as number))
+            .map(([name]) => name)
+            .slice(0, 10);
+
+        const mergedTopics = Array.from(new Set([...sortedTopics, ...(topics || [])])).slice(0, 10);
+
+        try {
+            const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/initial_suggestions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: user.id, topics: mergedTopics }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setInitialData(data);
+                if (messages.length === 0) setSuggestions(data.suggestions || []);
+            }
+        } catch (e) {
+            console.error('Initial suggestions failed:', e);
+        }
+    }, [user?.id, messages.length, preferences]);
+
+    // ── refreshSuggestions: location-context or fallback ────────────────────
+    const refreshSuggestions = useCallback(async () => {
+        if (!user?.id) return;
+
+        const locations = recentLocations.length > 0
+            ? recentLocations
+            : (preferences?.recentLocations || preferences?.askedTopics?.slice(0, 3) || []);
+
+        if (locations.length > 0) {
+            const userMsgs = messages.filter(m => m.role === 'user').slice(-5).map(m => m.content);
+            try {
+                const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/contextual_suggestions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ locations: locations.slice(0, 3), limit: 4, user_messages: userMsgs }),
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.suggestions?.length > 0) { setSuggestions(data.suggestions); return; }
+                }
+            } catch (e) { console.warn('Refresh suggestions error:', e); }
+        }
+
+        // Fallback: initial suggestions
+        try {
+            const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/initial_suggestions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: user.id, topics: preferences?.askedTopics || [] }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setSuggestions(data.suggestions || []);
+            }
+        } catch (e) { console.error('Fallback suggestions failed:', e); }
+    }, [user?.id, recentLocations, preferences, messages]);
+
+    // ── clearMessages ────────────────────────────────────────────────────────
+    const clearMessages = useCallback(() => {
+        setMessages([]);
+        setSuggestions([]);
+        sidRef.current = crypto.randomUUID();
+    }, []);
+
+    // ── updateFeedback ───────────────────────────────────────────────────────
+    const updateFeedback = useCallback(async (messageId: string, score: number) => {
+        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, feedbackScore: score } : m));
+
+        const msg = messages.find(m => m.id === messageId);
+        if (msg && user?.id) {
+            await supabase.from('chat_logs')
+                .update({ feedback_score: score })
+                .eq('user_id', user.id)
+                .eq('session_id', sidRef.current)
+                .eq('role', msg.role)
+                .ilike('message', msg.content.slice(0, 100) + '%')
+                .then(() => { });
+        }
+    }, [messages, user?.id]);
+
+    // ── switchSession ────────────────────────────────────────────────────────
+    const switchSession = useCallback((newSid: string) => {
+        if (messages.length > 0 && !messages.some(m => m.isLoading)) {
+            sessionMessagesCache[sidRef.current] = messages;
+        }
+        // Let the useEffect handle the actual loading, we just cache the current
+        setSuggestions([]);
+    }, [messages]);
+
+    return {
+        messages,
+        isLoading,
+        suggestions,
+        error,
+        sendMessage,
+        refreshSuggestions,
+        clearMessages,
+        updateFeedback,
+        switchSession,
+        sessionId: sidRef.current,
+        fetchInitialSuggestions,
+        initialData,
+        modelMode,
+        setModelMode,
+        preferences,
+        recentLocations,
+    };
+}

@@ -365,7 +365,8 @@ async def run_graph(
                     response=output.response,
                     emotion=processing.emotion.value if processing.emotion else "neutral",
                     intent=processing.intent.value if processing.intent else "travel_query",
-                    debug=final_debug
+                    debug=final_debug,
+                    attachments=processing.attachments
                 ),
                 evaluate_response(
                     processing_state=processing,
@@ -532,7 +533,8 @@ async def run_graph_stream(
             message=message,
             response=full_response,
             emotion=state["processing"].emotion.value if state["processing"].emotion else "neutral",
-            intent=state["processing"].intent.value if state["processing"].intent else "travel_query"
+            intent=state["processing"].intent.value if state["processing"].intent else "travel_query",
+            attachments=state["processing"].attachments
         )
     
     asyncio.create_task(run_bg())

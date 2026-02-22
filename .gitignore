@@ -52,6 +52,7 @@ data/
 *.parquet
 *.csv
 !requirements.txt
+*.pdf
 
 # Vector databases
 chroma_vqa/
