@@ -172,13 +172,20 @@ class GeminiClient:
         iterator = iter(response_stream)
         
         while True:
-            try:
-                # Fetch next chunk in a separate thread
-                chunk = await asyncio.to_thread(next, iterator)
-                if chunk.text:
-                    yield chunk.text
-            except StopIteration:
+            # Fetch next chunk in a separate thread.
+            # We catch StopIteration INSIDE the threaded function to avoid leaking it to asyncio
+            def get_next():
+                try:
+                    return next(iterator)
+                except StopIteration:
+                    return None
+            
+            chunk = await asyncio.to_thread(get_next)
+            if chunk is None:
                 break
+                
+            if chunk.text:
+                yield chunk.text
     
     def generate_sync(
         self,

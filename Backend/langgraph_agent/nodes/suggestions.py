@@ -83,7 +83,7 @@ Yêu cầu:
 - KHÔNG bắt đầu bằng "Gợi ý", "Top"
 
 Trả về JSON array THUẦN:
-[{"text":"Du lịch mấy ngày là vừa?","category":"schedule"}]"""
+[{{ "text":"Du lịch mấy ngày là vừa?", "category":"schedule" }}]"""
 
     try:
         from ..utils.gemini_client import gemini_fast
