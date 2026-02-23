@@ -124,8 +124,8 @@ export default function AuthPage() {
             <div className="card" style={{ width: '100%', maxWidth: 420, padding: 40 }}>
                 {/* Logo */}
                 <div style={{ textAlign: 'center', marginBottom: 32 }}>
-                    <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg, #1d6de0, #06b6d4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                        <Zap size={24} color="white" />
+                    <div style={{ margin: '0 auto 16px', display: 'flex', justifyContent: 'center' }}>
+                        <img src="/Logo.png" alt="ViVi" style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'cover', boxShadow: '0 4px 16px rgba(29,109,224,0.2)' }} />
                     </div>
                     <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text)', marginBottom: 6 }}>
                         Welcome to <span style={{ color: 'var(--primary)' }}>ViVi</span>
