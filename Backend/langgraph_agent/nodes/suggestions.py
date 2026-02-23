@@ -55,40 +55,39 @@ async def generate_suggestions(
 ) -> OutputState:
     """
     LangGraph node: Generate LLM-powered suggestions.
-    Now optimized to run IN PARALLEL with generate node by using state instead of response.
+    Optimized for Fan-out parallel execution. Uses conversation history instead of RAG context 
+    to prevent hallucinations and provide localized, natural follow-ups.
     """
     exclude = exclude or []
     
-    # 1. Extract location name from context instead of response
-    location_name = "địa điểm này"
+    # Build conversational context
+    context_str = ""
+    if processing_state.history:
+        for m in processing_state.history[-2:]:
+            role = "Bot: " if m['role'] == 'assistant' else "User: "
+            context_str += f"{role}{m.get('content', '')[:300]}\n"
+            
+    context_str += f"User: {processing_state.message[:300]}"
     
-    # Try getting location from recent context/message first
-    context_text = processing_state.message
-    if processing_state.retrieved_context:
-        for item in processing_state.retrieved_context:
-            ans = item.get("answer", "")
-            if ans:
-                context_text += " " + ans
-                break
-                
-    location_name = extract_location_name(context_text[:500])
-    
-    # 2. Build prompt for Gemini - diverse suggestions
-    prompt = f"""Dựa trên ngữ cảnh về "{location_name}" người dùng đang hỏi, hãy tạo ra 5 câu hỏi gợi ý NGẮN (dưới 35 ký tự) và ĐA DẠNG.
+    # Prompt LLM to predict follow-ups based on conversation state
+    prompt = f"""Dựa trên đoạn hội thoại ngắn sau, hãy gợi ý 5 câu hỏi tiếp theo NGẮN GỌN (dưới 15 từ) mà người dùng có thể muốn hỏi tiếp.
+
+Đoạn hội thoại:
+{context_str}
 
 Yêu cầu:
-- MỖI câu hỏi phải thuộc category KHÁC NHAU: schedule, food, weather, stay, tips, experience
-- Cố gắng đề cập tên địa điểm trong câu hỏi nếu tự nhiên
-- KHÔNG dùng "Giá vé", "Cách đến" - hãy sáng tạo hơn!
-- KHÔNG bắt đầu bằng "Gợi ý", "Top"
+- Câu hỏi TỰ NHIÊN, như một người dùng thật đang tò mò (Vd: "Ở đó có món gì ngon không?").
+- ĐA DẠNG về chủ đề (lịch trình, món ăn, thời tiết, kinh nghiệm).
+- Gắn với ngữ cảnh của đoạn chat, KHÔNG hỏi chung chung.
+- KHÔNG dùng "Giá vé", "Cách đến" chung chung - hãy sáng tạo hơn!
+- KHÔNG bắt đầu bằng "Gợi ý", "Top".
 
 Trả về JSON array THUẦN:
-[{{ "text":"Du lịch mấy ngày là vừa?", "category":"schedule" }}]"""
+[{{ "text":"Nên đi mùa nào đẹp nhất?", "category":"weather" }}]"""
 
     try:
         from ..utils.gemini_client import gemini_fast
         
-        # We always use gemini_fast for blazing fast parallelism
         response = await gemini_fast.generate(
             prompt=prompt,
             temperature=0.7,
@@ -118,20 +117,26 @@ Trả về JSON array THUẦN:
                 if text and len(text) < 60:
                     formatted_suggestions.append({"text": text, "category": category})
             
-            if formatted_suggestions:
+            if len(formatted_suggestions) >= 3:
                 output_state.suggested_prompts = formatted_suggestions[:5]
                 return output_state
                 
     except Exception as e:
         print(f"❌ Suggestions error: {e}")
     
-    # FALLBACK with diverse suggestions (not hardcoded templates)
+    # FALLBACK: Extract location name from message or last bot response
+    location_name = extract_location_name(processing_state.message)
+    if location_name == "địa điểm này" and processing_state.history:
+        last_bot = next((m for m in reversed(processing_state.history) if m['role'] == 'assistant'), None)
+        if last_bot:
+            location_name = extract_location_name(last_bot.get('content', ''))
+            
     output_state.suggested_prompts = [
-        {"text": f"Du lịch {location_name} mấy ngày?", "category": "schedule"},
+        {"text": f"Du lịch {location_name} nên đi mấy ngày?", "category": "schedule"},
         {"text": f"Đặc sản ở đây là gì?", "category": "food"},
         {"text": "Đi mùa nào đẹp nhất?", "category": "weather"},
-        {"text": "Chỗ ở gần đây?", "category": "stay"},
-        {"text": "Điểm tham quan lân cận?", "category": "open_ended"}
+        {"text": "Có những khách sạn nào gần đây?", "category": "stay"},
+        {"text": "Có những điểm tham quan lân cận nào?", "category": "open_ended"}
     ]
     
     return output_state
