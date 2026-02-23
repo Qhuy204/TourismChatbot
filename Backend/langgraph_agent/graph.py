@@ -23,9 +23,9 @@ from .nodes.location_extractor import extract_locations, store_locations
 from .memory import memory_pipeline, log_chat
 
 
-# =============================================================================
+ 
 # Graph State (TypedDict for LangGraph)
-# =============================================================================
+ 
 
 class GraphState(TypedDict):
     """State passed through the graph"""
@@ -48,58 +48,59 @@ class GraphState(TypedDict):
     model_mode: str
 
 
-# =============================================================================
+ 
 # Helpers
-# =============================================================================
+ 
 
-async def perform_auto_titling(session_id: str, message: str, response: str, history: List[Dict], model_mode: str) -> str:
-    """Helper to generate and store a title for a session if it's new"""
+async def perform_auto_titling(session_id: str, message: str, response: str) -> str:
+    """
+    Helper to generate and store a title using Gemini Fast SLM for abstractive summarization.
+    """
     try:
-        from .utils.gemini_client import gemini_fast
-        from .utils.qwen_client import qwen_client
         from .memory.store import get_supabase
+        from .utils.gemini_client import gemini_fast
+        
         client = get_supabase()
         if not client: return None
         
-        # Check if session needs titling
-        res = client.table("chat_sessions").select("title").eq("id", session_id).execute()
-        if not res.data: return None
+        # Check how many messages exist in the session so far
+        # We only title on the very first user message.
+        res = client.table("chat_logs").select("id", count="exact").eq("session_id", session_id).execute()
         
-        current_title = res.data[0].get("title", "")
-        default_titles = ["Cuộc hội thoại mới", "Cuộc trò chuyện mới", "New Chat", "Untitled", "Hội thoại du lịch"]
+        # Note: If logging happens after titling, count is 0. If before, count is 1. 
+        # We allow <= 1 just in case, or we check the title simply as a fallback.
+        # But even better: check if the title is still default OR looks like a frontend fallback (no spaces or just a slice of the message).
+        # Actually, let's just title if count <= 2 (1 round of conversation).
+        if res.count > 2:
+            return None
+            
+        prompt = f"""Dựa vào câu hỏi và trả lời sau, hãy viết 1 tiêu đề thật ngắn gọn (4-10 từ) tóm tắt mục đích chính của user.
+Tiêu đề phải là tiếng Việt, viết hoa chữ cái đầu tiên. KHÔNG dùng dấu câu ở cuối. KHÔNG dùng ngoặc kép.
+Câu hỏi: {message}
+Trả lời: {response}"""
         
-        if any(t in current_title for t in default_titles) or not current_title:
-            # Build context (keep it simple for speed)
-            context_str = ""
-            # Last few turns are enough for titling
-            for m in history[-2:]:
-                role = "User" if m['role'] == 'user' else "Assistant"
-                context_str += f"{role}: {m['content']}\n"
-            context_str += f"User: {message}\nAssistant: {response}"
-            
-            title_prompt = (
-                f"Tạo tiêu đề cực ngắn (2-4 từ) cho cuộc trò chuyện sau. Chỉ trả về text tiêu đề:\n\n{context_str}"
-            )
-            
-            if model_mode == "qwen":
-                title = await qwen_client.generate(title_prompt)
-            else:
-                title = await gemini_fast.generate(title_prompt)
-            
-            new_title = title.strip().strip('"').strip("'").strip("*")
-            if new_title and len(new_title) < 50:
-                client.table("chat_sessions").update({
-                    "title": new_title,
-                    "first_message": message[:100]
-                }).eq("id", session_id).execute()
-                return new_title
+        title = await gemini_fast.generate(prompt=prompt, temperature=0.7)
+        new_title = title.strip().strip('"').strip("'").strip("*").strip(".")
+        
+        # Capitalize first letter safely
+        if new_title:
+            new_title = new_title[0].upper() + new_title[1:]
+        
+        if new_title and len(new_title) < 100:
+            client.table("chat_sessions").update({
+                "title": new_title,
+                "first_message": message[:100]
+            }).eq("id", session_id).execute()
+            print(f"🏷️ Auto-titled session with SLM: {new_title}")
+            return new_title
     except Exception as e:
         print(f"⚠️ Auto-titling helper error: {e}")
     return None
 
-# =============================================================================
+
+ 
 # Node Wrappers (adapt our nodes to graph state)
-# =============================================================================
+ 
 
 async def node_init(state: GraphState) -> GraphState:
     """Initialize state objects"""
@@ -193,18 +194,16 @@ async def node_suggestions(state: GraphState) -> GraphState:
     return state
 
 
-# =============================================================================
+ 
 # Routing Logic
-# =============================================================================
+ 
 
 def route_after_intent(state: GraphState) -> str:
     """Route based on intent classification"""
     intent = state["processing"].intent
     
-    if intent == IntentType.CHIT_CHAT:
-        return "generate"  # Skip RAG for chit-chat
-    elif intent == IntentType.NEGATIVE_FEEDBACK:
-        return "generate"  # Direct response
+    if intent in [IntentType.CHIT_CHAT, IntentType.NEGATIVE_FEEDBACK, IntentType.META_INSTRUCTION]:
+        return "generate"  # Skip RAG for simple interactions
     else:
         return "parallel"  # Full processing
 
@@ -217,9 +216,9 @@ def route_after_guard(state: GraphState) -> str:
         return "generate"  # Skip RAG for off-topic
 
 
-# =============================================================================
+ 
 # Graph Builder
-# =============================================================================
+ 
 
 def build_graph() -> StateGraph:
     """Build the LangGraph state machine"""
@@ -280,9 +279,9 @@ def build_graph() -> StateGraph:
     return graph
 
 
-# =============================================================================
+ 
 # Compiled Graph (singleton)
-# =============================================================================
+ 
 
 _compiled_graph = None
 
@@ -353,7 +352,11 @@ async def run_graph(
             print(f"⚠️ Location extraction for response failed: {e}")
 
         # 2. Titling (from message 1 onwards)
-        new_title = await perform_auto_titling(session_id, message, output.response, history, model_mode)
+        new_title = await perform_auto_titling(
+            session_id=session_id, 
+            message=message, 
+            response=output.response
+        )
 
         async def run_remaining_tasks():
             # Run other background tasks
@@ -444,12 +447,14 @@ async def run_graph_stream(
     state = await node_intent(state)
     timings["intent"] = round((time.time() - t0) * 1000)
     
+    # Run emotion detection regardless of intent (for timing and logs)
+    t0_emo = time.time()
+    state = await node_emotion(state)
+    timings["emotion"] = round((time.time() - t0_emo) * 1000)
+
     intent = state["processing"].intent
-    if intent not in [IntentType.CHIT_CHAT, IntentType.NEGATIVE_FEEDBACK]:
-        t0 = time.time()
-        state = await node_emotion(state)
-        timings["emotion"] = round((time.time() - t0) * 1000)
-        
+    # Full processing for all intents except chit_chat and feedback/meta
+    if intent not in [IntentType.CHIT_CHAT, IntentType.NEGATIVE_FEEDBACK, IntentType.META_INSTRUCTION]:
         t0 = time.time()
         state = await node_profile(state)
         timings["profile"] = round((time.time() - t0) * 1000)
@@ -537,7 +542,11 @@ async def run_graph_stream(
     timings["fast_extract"] = round((time.time() - t0) * 1000)
     
     # 2. Titling (from message 1 onwards)
-    new_title = await perform_auto_titling(session_id, message, full_response, history or [], model_mode)
+    new_title = await perform_auto_titling(
+        session_id=session_id, 
+        message=message, 
+        response=full_response
+    )
 
     # Run memory & background tasks (Deep Extraction, Logging)
     async def run_bg():

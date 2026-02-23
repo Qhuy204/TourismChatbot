@@ -89,9 +89,17 @@ export function useLangGraphChat(initialSessionId?: string) {
         }
     }, [cookiesLoaded, user?.id]);
 
-    // Handle session switch
+    // Handle session switch and cleanup empty sessions
     useEffect(() => {
         if (!initialSessionId || initialSessionId === sidRef.current) return;
+
+        // Cleanup old session if it was empty before switching
+        if (messages.length === 0 && sidRef.current) {
+            fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
+                method: 'DELETE'
+            }).catch(e => console.warn('Failed to cleanup empty session:', e));
+        }
+
         sidRef.current = initialSessionId;
         setSuggestions([]);
         setError(null);
@@ -129,6 +137,19 @@ export function useLangGraphChat(initialSessionId?: string) {
             .finally(() => setIsLoading(false));
     }, [initialSessionId]);
 
+    // Cleanup empty session on component unmount
+    useEffect(() => {
+        return () => {
+            if (messages.length === 0 && sidRef.current) {
+                // Use keepalive or Beacon API if possible, but fetch is usually fine for simple unmounts
+                fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
+                    method: 'DELETE',
+                    keepalive: true
+                }).catch(() => { });
+            }
+        };
+    }, [messages.length]);
+
     // Persist cookies on session change
     useEffect(() => {
         if (cookiesLoaded && sidRef.current) saveSession(sidRef.current);
@@ -141,17 +162,7 @@ export function useLangGraphChat(initialSessionId?: string) {
         }
     }, [messages]);
 
-    // Auto-title from first message
-    const generateFallbackTitle = useCallback((msgContent: string): string => {
-        // Vietnamese & English filler words to strip
-        const fillers = new Set(['tôi', 'bạn', 'mình', 'cho', 'về', 'có', 'không', 'ở', 'với', 'và', 'là', 'thì', 'mà', 'của', 'the', 'a', 'an', 'is', 'are', 'in', 'on', 'at', 'to', 'for', 'of', 'can', 'you', 'me', 'i', 'what', 'how']);
-        const words = msgContent
-            .replace(/[?!.,;:()[\]]/g, ' ')
-            .split(/\s+/)
-            .filter(w => w.length > 1 && !fillers.has(w.toLowerCase()));
-        const title = words.slice(0, 6).join(' ');
-        return title.length > 2 ? (title.charAt(0).toUpperCase() + title.slice(1)) : msgContent.slice(0, 40);
-    }, []);
+    // Note: Removed frontend auto-title fallback to rely entirely on backend SLM
 
     // sendMessage
     const sendMessage = useCallback(async (
@@ -170,10 +181,7 @@ export function useLangGraphChat(initialSessionId?: string) {
         // Track topic for histogram-based recommendations
         trackTopic(content.trim());
 
-        // Immediate client-side title on first message 
-        if (isFirstMessage && onNewTitle) {
-            onNewTitle(generateFallbackTitle(content.trim()));
-        }
+        // Immediate client-side fallback title removed to let backend handle it
 
         const userMsg: ChatMessage = {
             id: crypto.randomUUID(),
@@ -366,10 +374,15 @@ export function useLangGraphChat(initialSessionId?: string) {
 
     // clearMessages
     const clearMessages = useCallback(() => {
+        if (messages.length === 0 && sidRef.current) {
+            fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
+                method: 'DELETE'
+            }).catch(e => console.warn('Failed to cleanup empty session:', e));
+        }
         setMessages([]);
         setSuggestions([]);
         sidRef.current = crypto.randomUUID();
-    }, []);
+    }, [messages.length]);
 
     // updateFeedback
     const updateFeedback = useCallback(async (messageId: string, score: number) => {
