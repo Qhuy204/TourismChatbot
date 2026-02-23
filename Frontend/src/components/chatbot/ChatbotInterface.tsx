@@ -23,21 +23,16 @@ type ActiveMenu = { id: string; x: number; y: number } | null;
 
 // ── Emotion badge config ─────────────────────────────────────────────────────
 const EMOTION_DISPLAY: Record<Emotion, { emoji: string; label: string; color: string }> = {
-    happy: { emoji: '😊', label: 'Vui vẻ', color: '#f59e0b' },
-    excited: { emoji: '🔥', label: 'Hứng khởi', color: '#f97316' },
-    curious: { emoji: '🤔', label: 'Tò mò', color: '#8b5cf6' },
-    calm: { emoji: '😌', label: 'Bình thản', color: '#1d6de0' },
-    frustrated: { emoji: '😤', label: 'Bực bội', color: '#64748b' },
-    sad: { emoji: '😢', label: 'Buồn', color: '#6366f1' },
+    positive: { emoji: '😊', label: 'Tích cực', color: '#f97316' },
+    surprise: { emoji: '😮', label: 'Bất ngờ', color: '#8b5cf6' },
+    negative: { emoji: '😤', label: 'Tiêu cực', color: '#64748b' },
     neutral: { emoji: '💬', label: '', color: '#1d6de0' },
 };
 
 const EMOTION_GREETINGS: Partial<Record<Emotion, string>> = {
-    happy: '😊 Thấy bạn vui quá! Hôm nay muốn khám phá điểm đến nào?',
-    excited: '🔥 Năng lượng tuyệt vời! Cùng lên kế hoạch chuyến đi ngay nào!',
-    curious: '🤔 Bạn có vẻ tò mò! Hãy hỏi mình bất cứ điều gì về du lịch VN.',
-    frustrated: '😌 Mình ở đây để giúp. Hãy nói cho mình biết bạn cần gì.',
-    sad: '💙 Hãy để mình giúp bạn tìm một chuyến đi thật ý nghĩa.',
+    positive: '😊 Tuyệt vời! Bạn đang cảm thấy rất tích cực. Hôm nay mình đi đâu nhỉ?',
+    surprise: '😮 Có điều gì làm bạn bất ngờ sao? Hãy kể cho mình nghe nhé!',
+    negative: '😌 Đừng lo, mình ở đây để hỗ trợ bạn. Hãy cho mình biết vấn đề của bạn.',
 };
 
 const navItems = [
@@ -94,7 +89,6 @@ function groupSessionsByTime(sessions: ReturnType<typeof useSessionManager>['ses
     };
 
     sessions.forEach(s => {
-        if (s.messageCount === 0 && s.id !== activeSessionId) return;
         if (s.isPinned) { groups['Được ghim'].push(s); return; }
         const d = s.updatedAt;
         if (d >= today) groups['Hôm nay'].push(s);
@@ -145,13 +139,14 @@ export function ChatbotInterface() {
 
     useEffect(() => {
         const init = async () => {
-            if (!sessionManager.activeSessionId && sessionManager.sessions.length === 0 && !sessionManager.isLoading) {
+            // Only create a session if we are definitely not loading, have no active session, and no sessions exist
+            if (!sessionManager.isLoading && !sessionManager.activeSessionId && sessionManager.sessions.length === 0) {
+                console.log("Creating initial session...");
                 await sessionManager.createSession();
             }
         };
         init();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [sessionManager.isLoading, sessionManager.activeSessionId, sessionManager.sessions.length]);
 
     const {
         messages, isLoading, sendMessage, clearMessages,
@@ -183,12 +178,19 @@ export function ChatbotInterface() {
 
     useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-    // Sync emotion from backend
+    // Sync emotion from backend (with backward compatibility)
     useEffect(() => {
         const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.emotion);
         if (lastAssistant?.emotion) {
-            emotionTheme.setEmotionFromBackend(lastAssistant.emotion);
-            setCurrentEmotion(lastAssistant.emotion as Emotion);
+            let emotionValue = lastAssistant.emotion;
+            const oldMap: Record<string, string> = {
+                'happy': 'positive', 'excited': 'positive', 'calm': 'positive',
+                'frustrated': 'negative', 'sad': 'negative', 'curious': 'surprise'
+            };
+            if (oldMap[emotionValue]) emotionValue = oldMap[emotionValue];
+
+            emotionTheme.setEmotionFromBackend(emotionValue);
+            setCurrentEmotion(emotionValue as Emotion);
         }
     }, [messages, emotionTheme]);
 
@@ -345,8 +347,8 @@ export function ChatbotInterface() {
     const displayName = user?.user_metadata?.display_name ?? user?.email?.split('@')[0] ?? 'Bạn';
     const initials = displayName.slice(0, 2).toUpperCase();
     const sidebarW = leftCollapsed ? 64 : 260;
-    const emotionInfo = EMOTION_DISPLAY[currentEmotion];
-    const emotionGreeting = EMOTION_GREETINGS[currentEmotion];
+    const emotionInfo = EMOTION_DISPLAY[currentEmotion] || EMOTION_DISPLAY.neutral;
+    const emotionGreeting = EMOTION_GREETINGS[currentEmotion] || '';
     const groupedSessions = groupSessionsByTime(sessionManager.sessions.slice(0, visibleCount), sessionManager.activeSessionId);
 
     return (

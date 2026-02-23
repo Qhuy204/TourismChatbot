@@ -147,7 +147,7 @@ class TestGeminiClient:
         from langgraph_agent.utils.gemini_client import gemini_fast
         
         schema = {
-            "emotion": "string (calm|excited|neutral)",
+            "emotion": "string (positive|negative|surprise|neutral)",
             "confidence": "float 0-1"
         }
         

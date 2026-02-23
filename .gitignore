@@ -62,3 +62,6 @@ Backend/data/chroma_vqa/
 Backend/model/
 VQA/
 REPORT_APP_BUILD.md
+
+# agent configs
+/.agents

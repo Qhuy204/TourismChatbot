@@ -11,34 +11,25 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
-export type Emotion = 'neutral' | 'calm' | 'excited' | 'curious' | 'frustrated' | 'happy' | 'sad';
+export type Emotion = 'neutral' | 'positive' | 'negative' | 'surprise';
 
 // ─── Emotion keyword maps (mirrors Backend emotion.yaml) ─────────────────────
-const EMOTION_KEYWORDS: Record<Emotion, string[]> = {
-    happy: [
+const EMOTION_KEYWORDS: Record<Exclude<Emotion, 'neutral'>, string[]> = {
+    positive: [
         'tuyệt vời', 'hay quá', 'thích', 'yêu', 'wow', 'amazing', 'great', 'awesome',
         'xinh', 'đẹp', '!!', ':)', '😍', '😊', '🎉', '❤️', 'haha', 'vui',
-        'tuyệt', 'ngon', 'hype', 'thích quá', 'quá đẹp', 'phê'
+        'tuyệt', 'ngon', 'hype', 'thích quá', 'quá đẹp', 'phê',
+        'không thể tin', 'OMG', 'siêu', 'cực', 'đỉnh', 'mê', 'idol', '🔥', '💥',
+        'cảm ơn', 'tốt thôi', 'bình thường', 'ổn', 'ok', 'được', 'thanks', 'thank you'
     ],
-    excited: [
-        'không thể tin', 'bất ngờ', 'OMG', 'wow', 'wow!!!', 'siêu', 'cực', 'đỉnh',
-        'mê', 'idol', 'amazing', '🔥', '💥', 'phải thử', 'muốn đi ngay',
-    ],
-    curious: [
+    surprise: [
         '?', 'sao', 'tại sao', 'như thế nào', 'ở đâu', 'khi nào', 'có không', 'what', 'how', 'where', 'why',
-        'muốn biết', 'cho hỏi', 'tôi cần', 'tư vấn', 'gợi ý',
+        'muốn biết', 'cho hỏi', 'tôi cần', 'tư vấn', 'gợi ý', 'không ngờ', 'bất ngờ'
     ],
-    calm: [
-        'cảm ơn', 'tốt thôi', 'bình thường', 'ổn', 'ok', 'được', 'thanks', 'thank you', 'appreciate',
-    ],
-    frustrated: [
+    negative: [
         'chán', 'tệ', 'tồi', 'không tốt', 'thất vọng', 'khó chịu', 'bad', 'terrible', 'awful',
-        'không hiểu', 'khó', 'sai', 'lỗi', 'không được', ':(',
+        'không hiểu', 'khó', 'sai', 'lỗi', 'không được', ':(', 'buồn', 'nhớ', 'tiếc', 'đau', 'khóc', '😢', '😞', '😔'
     ],
-    sad: [
-        'buồn', 'nhớ', 'tiếc', 'đau', 'khóc', '😢', '😞', '😔', 'lonely', 'miss', 'sad', 'lost',
-    ],
-    neutral: [],
 };
 
 // ─── Emotion → color palette ─────────────────────────────────────────────────
@@ -49,45 +40,24 @@ export const EMOTION_PALETTES: Record<Emotion, {
     bgCard: string;
     mode: 'light' | 'dark' | 'keep';
 }> = {
-    happy: {
-        primary: '#f59e0b',  // amber
-        primaryHsl: '38 96% 54%',
-        accent: '#f97316',
-        bgCard: '#fffbeb',
-        mode: 'light',
-    },
-    excited: {
+    positive: {
         primary: '#f97316',  // orange
         primaryHsl: '25 95% 55%',
-        accent: '#ef4444',
+        accent: '#f59e0b',
         bgCard: '#fff7ed',
         mode: 'light',
     },
-    curious: {
-        primary: '#8b5cf6',  // violet-ish purple (not too bright)
+    surprise: {
+        primary: '#8b5cf6',  // violet-ish purple
         primaryHsl: '263 70% 60%',
         accent: '#06b6d4',
         bgCard: undefined as unknown as string,
         mode: 'keep',
     },
-    calm: {
-        primary: '#1d6de0',  // default blue
-        primaryHsl: '218 78% 50%',
-        accent: '#06b6d4',
-        bgCard: undefined as unknown as string,
-        mode: 'keep',
-    },
-    frustrated: {
-        primary: '#64748b',  // slate, calming
+    negative: {
+        primary: '#64748b',  // slate
         primaryHsl: '215 20% 45%',
-        accent: '#94a3b8',
-        bgCard: undefined as unknown as string,
-        mode: 'dark',
-    },
-    sad: {
-        primary: '#6366f1',  // indigo, introspective
-        primaryHsl: '239 68% 68%',
-        accent: '#818cf8',
+        accent: '#475569',
         bgCard: undefined as unknown as string,
         mode: 'dark',
     },
@@ -108,7 +78,6 @@ export function detectEmotionFromText(text: string): { emotion: Emotion; confide
     const scores: Partial<Record<Emotion, number>> = {};
 
     for (const [emotion, keywords] of Object.entries(EMOTION_KEYWORDS) as [Emotion, string[]][]) {
-        if (emotion === 'neutral') continue;
         const score = keywords.reduce((acc, kw) => acc + (lower.includes(kw) ? 1 : 0), 0);
         if (score > 0) scores[emotion] = score;
     }
@@ -189,11 +158,30 @@ export function useEmotionTheme() {
 
     /**
      * Update emotion from backend response metadata.
+     * Supports mapping from old labels for backward compatibility.
      */
     const setEmotionFromBackend = useCallback((backendEmotion: string, confidence: number = 0.8) => {
-        const mapped = backendEmotion as Emotion;
-        if (!EMOTION_PALETTES[mapped]) return;
-        setEmotionState(mapped);
+        let mapped = backendEmotion as any;
+
+        // Backward compatibility mapping
+        const oldMap: Record<string, Emotion> = {
+            'happy': 'positive',
+            'excited': 'positive',
+            'calm': 'positive',
+            'frustrated': 'negative',
+            'sad': 'negative',
+            'curious': 'surprise'
+        };
+
+        if (oldMap[mapped]) {
+            mapped = oldMap[mapped];
+        }
+
+        if (!EMOTION_PALETTES[mapped as Emotion]) {
+            mapped = 'neutral';
+        }
+
+        setEmotionState(mapped as Emotion);
         setEmotionConfidence(confidence);
     }, []);
 

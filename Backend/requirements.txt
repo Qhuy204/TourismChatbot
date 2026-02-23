@@ -21,6 +21,7 @@ sentence-transformers>=2.2.2
 # ============== ML / NLP ==============
 transformers>=4.36.0
 torch>=2.1.0  # CPU version, use torch-cuda for GPU
+onnxruntime>=1.16.0
 
 # ============== Database ==============
 supabase>=2.3.0

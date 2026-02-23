@@ -17,11 +17,10 @@ class IntentType(str, Enum):
 
 
 class EmotionType(str, Enum):
-    """Detected user emotions"""
-    CALM = "calm"
-    EXCITED = "excited"
-    CURIOUS = "curious"
-    FRUSTRATED = "frustrated"
+    """Detected user emotions (matches ONNX model output labels)"""
+    POSITIVE = "positive"
+    NEGATIVE = "negative"
+    SURPRISE = "surprise"
     NEUTRAL = "neutral"
 
 

@@ -1,115 +1,123 @@
-from typing import Tuple
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
 
-from ..state import MessageProcessingState, EmotionType
-from ..utils.gemini_client import gemini_fast
-from ..utils.qwen_client import qwen_client
-
-
-import os
+import numpy as np
+import onnxruntime as ort
 import yaml
+from transformers import AutoTokenizer
 
-# Initialize configs from YAML
-_config_path = os.path.join(os.path.dirname(__file__), "..", "configs", "emotion.yaml")
+from ..state import EmotionType, MessageProcessingState
+
+
+
+_CONFIG_PATH = Path(__file__).resolve().parent.parent / "configs" / "emotion.yaml"
+
 try:
-    with open(_config_path, "r", encoding="utf-8") as f:
-        _config = yaml.safe_load(f)
-except Exception as e:
-    print(f"⚠️ Error loading emotion config: {e}")
-    _config = {"emotion_keywords": {}}
+    with open(_CONFIG_PATH, "r", encoding="utf-8") as _f:
+        _config = yaml.safe_load(_f) or {}
+except Exception as _e:
+    print(f"⚠️ Error loading emotion config: {_e}")
+    _config = {}
 
-# Convert string mapping from YAML to Enum mapping
-_raw_keywords = _config.get("emotion_keywords", {})
-EMOTION_KEYWORDS = {
-    EmotionType(k): v for k, v in _raw_keywords.items()
-}
+_model_cfg = _config.get("model", {})
 
+# Resolve model path relative to Backend/
+_MODEL_DIR = Path(__file__).resolve().parents[2] / _model_cfg.get(
+    "path", "model/EmotionDetection/onnx-int8"
+)
+_MAX_LENGTH: int = _model_cfg.get("max_length", 128)
+_CONFIDENCE_THRESHOLD: float = _model_cfg.get("confidence_threshold", 0.4)
+_DEFAULT_EMOTION: str = _model_cfg.get("default_emotion", "neutral")
 
-def detect_by_keywords(message: str) -> Tuple[EmotionType, float]:
-    """Fast keyword-based emotion detection"""
-    message_lower = message.lower()
-    
-    scores = {}
-    for emotion, keywords in EMOTION_KEYWORDS.items():
-        score = sum(1 for kw in keywords if kw in message_lower)
-        if score > 0:
-            scores[emotion] = score
-    
-    if not scores:
-        return EmotionType.NEUTRAL, 0.7
-    
-    best_emotion = max(scores, key=scores.get)
-    confidence = min(scores[best_emotion] / 2, 1.0)
-    
-    return best_emotion, confidence
+# Map model output id → EmotionType
+_ID2LABEL = {0: "positive", 1: "negative", 2: "surprise", 3: "neutral"}
 
 
-async def detect_by_llm(message: str, history: list = None, model_mode: str = "gemini") -> EmotionType:
-    """LLM-based emotion detection for nuanced cases"""
-    context = ""
-    if history and len(history) > 0:
-        recent = history[-2:]
-        context = "\n".join([f"{t.get('role')}: {t.get('content', '')[:50]}" for t in recent])
-    
-    prompt = f"""Phân tích emotion của user từ tin nhắn sau.
+# Singleton Detector
+@dataclass
+class _PredictionResult:
+    label: str
+    confidence: float
+    all_scores: dict[str, float]
 
-Tin nhắn: "{message}"
-{f'Context: {context}' if context else ''}
 
-Chọn MỘT trong: calm, excited, curious, frustrated, neutral
-Chỉ trả về tên emotion:"""
-    
-    # Define system_instruction (assuming it's needed for the new parameter)
-    system_instruction = "You are an emotion detection model. Your task is to identify the user's emotion from their message."
+class EmotionDetector:
 
-    try:
-        if model_mode == "qwen":
-            response = await qwen_client.generate(
-                prompt,
-                system_instruction=system_instruction,
-                temperature=0.1,
-                max_tokens=100
-            )
-        else:
-            response = await gemini_fast.generate(
-                prompt,
-                system_instruction=system_instruction,
-                temperature=0.1,
-                max_tokens=100
-            )
-        result = response.strip().lower()
-        
-        # Map to enum
-        for emotion in EmotionType:
-            if emotion.value in result:
-                return emotion
-        
-        return EmotionType.NEUTRAL
-    except Exception:
-        return EmotionType.NEUTRAL
+    _instance: Optional["EmotionDetector"] = None
 
+    def __init__(self, model_dir: str | Path = _MODEL_DIR) -> None:
+        model_dir = Path(model_dir)
+        onnx_files = list(model_dir.glob("*.onnx"))
+        if not onnx_files:
+            raise FileNotFoundError(f"No .onnx file found in {model_dir}")
+
+        self._tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+        self._session = ort.InferenceSession(
+            str(onnx_files[0]),
+            providers=["CPUExecutionProvider"],
+        )
+        self._input_names = [inp.name for inp in self._session.get_inputs()]
+        print(f"✅ EmotionDetector loaded ({onnx_files[0].name})")
+
+    # class-level singleton access 
+    @classmethod
+    def get(cls) -> "EmotionDetector":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    # inference
+    def predict(self, text: str) -> _PredictionResult:
+        """Run emotion inference on a single text. ~5-10 ms on CPU."""
+        tokens = self._tokenizer(
+            text,
+            return_tensors="np",
+            truncation=True,
+            max_length=_MAX_LENGTH,
+            padding=True,
+        )
+        ort_inputs = {k: v for k, v in tokens.items() if k in self._input_names}
+        logits: np.ndarray = self._session.run(None, ort_inputs)[0][0]
+
+        # Softmax
+        exp = np.exp(logits - np.max(logits))
+        probs = exp / exp.sum()
+
+        pred_id = int(np.argmax(probs))
+        label = _ID2LABEL[pred_id]
+
+        return _PredictionResult(
+            label=label,
+            confidence=float(probs[pred_id]),
+            all_scores={_ID2LABEL[i]: float(p) for i, p in enumerate(probs)},
+        )
+
+
+# LangGraph Node
 
 async def detect_emotion(state: MessageProcessingState) -> MessageProcessingState:
-    """
-    LangGraph node: Detect user emotion.
-    Hybrid approach: keywords first, LLM for low confidence.
-    """
-    # Try keyword-based first
-    emotion, confidence = detect_by_keywords(state.message)
-    
-    # LLM fallback for low confidence
-    if confidence < 0.6:
-        emotion = await detect_by_llm(
-            message=state.message, 
-            history=state.history,
-            model_mode=state.model_mode
-        )
-        confidence = 0.8
-    
+    try:
+        detector = EmotionDetector.get()
+        result = detector.predict(state.message)
+
+        # Map label → EmotionType enum
+        try:
+            emotion = EmotionType(result.label)
+        except ValueError:
+            emotion = EmotionType.NEUTRAL
+
+        confidence = result.confidence
+
+        # Fall back to neutral if confidence is too low
+        if confidence < _CONFIDENCE_THRESHOLD:
+            emotion = EmotionType(_DEFAULT_EMOTION)
+
+    except Exception as e:
+        print(f"⚠️ Emotion detection error: {e}")
+        emotion = EmotionType.NEUTRAL
+        confidence = 0.0
+
     state.emotion = emotion
     state.emotion_confidence = confidence
-    
-    # Validate (prevent invalid values)
-    if state.emotion not in EmotionType:
-        state.emotion = EmotionType.NEUTRAL
-    
     return state

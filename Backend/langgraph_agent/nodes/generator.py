@@ -9,25 +9,20 @@ from .summarizer import build_context_prompt
 
 # Emotion-based response styling
 EMOTION_STYLES = {
-    EmotionType.EXCITED: {
-        "tone": "enthusiastic and energetic",
+    EmotionType.POSITIVE: {
+        "tone": "enthusiastic and friendly",
         "emoji": True,
         "length": "concise"
     },
-    EmotionType.FRUSTRATED: {
+    EmotionType.NEGATIVE: {
         "tone": "empathetic and helpful",
         "emoji": False,
         "length": "clear and direct"
     },
-    EmotionType.CURIOUS: {
-        "tone": "informative and detailed",
-        "emoji": False,
-        "length": "comprehensive"
-    },
-    EmotionType.CALM: {
-        "tone": "friendly and conversational",
+    EmotionType.SURPRISE: {
+        "tone": "informative and engaging",
         "emoji": True,
-        "length": "balanced"
+        "length": "comprehensive"
     },
     EmotionType.NEUTRAL: {
         "tone": "helpful and professional",

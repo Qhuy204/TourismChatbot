@@ -503,10 +503,6 @@ async def get_history(session_id: str):
 
 @app.post("/langgraph/locations/insert")
 async def insert_location(request: LocationInsertRequest):
-    """
-    Smart insert location with automatic deduplication.
-    Actions: >=85% skip, 60-85% merge, <60% insert new.
-    """
     from langgraph_agent.memory.store import insert_location_smart
     
     result = await insert_location_smart(
@@ -523,7 +519,6 @@ async def insert_location(request: LocationInsertRequest):
 
 @app.get("/langgraph/locations/check-duplicate/{name}")
 async def check_location_dup(name: str, threshold: float = 0.85):
-    """Check if a location name has duplicates"""
     from langgraph_agent.memory.store import check_location_duplicate
     
     duplicates = await check_location_duplicate(name, threshold)

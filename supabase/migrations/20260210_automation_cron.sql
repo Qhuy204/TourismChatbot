@@ -1,6 +1,6 @@
---   1. Enable pg_cron extension
---   2. Schedule nightly cleanup for locations (deduplication)
---   3. Schedule nightly refresh for popular questions analytics
+-- Enable pg_cron extension
+-- Schedule nightly cleanup for locations (deduplication)
+-- Schedule nightly refresh for popular questions analytics
 
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 

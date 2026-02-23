@@ -4,6 +4,7 @@ Persists validated facts to database and invalidates cache
 """
 import os
 from typing import List, Dict, Optional
+from datetime import datetime, timezone
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
@@ -134,7 +135,7 @@ async def log_chat(
         return False
         
     try:
-        # Log user message
+        # 1. Log user message
         client.table("chat_logs").insert({
             "user_id": user_id,
             "session_id": session_id,
@@ -144,15 +145,32 @@ async def log_chat(
             "context": {"attachments": attachments} if attachments else None
         }).execute()
         
-        # Log assistant response
+        # 2. Log assistant response
+        # Merge emotion/intent into context for frontend history loading
+        context = debug or {}
+        context["emotion"] = emotion
+        context["intent"] = intent
+        
         client.table("chat_logs").insert({
             "user_id": user_id,
             "session_id": session_id,
             "role": "assistant", 
             "message": response,
-            "context": debug,  # Store debug info in context column (JSONB)
+            "context": context,
             "model_used": "langgraph"
         }).execute()
+
+        # 3. Update session metadata (updated_at and message_count)
+        # Fetch current count to increment safely
+        session_res = client.table("chat_sessions").select("message_count").eq("id", session_id).execute()
+        current_count = 0
+        if session_res.data:
+            current_count = session_res.data[0].get("message_count") or 0
+        
+        client.table("chat_sessions").update({
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "message_count": current_count + 1 # Increment for the new turn
+        }).eq("id", session_id).execute()
         
         return True
             
