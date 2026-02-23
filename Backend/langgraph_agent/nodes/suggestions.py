@@ -1,7 +1,3 @@
-"""
-Suggestions Generator Node
-Generates personalized suggested prompts using Gemini
-"""
 import json
 import re
 from typing import List, Dict, Optional
@@ -59,39 +55,45 @@ async def generate_suggestions(
 ) -> OutputState:
     """
     LangGraph node: Generate LLM-powered suggestions.
-    Uses Gemini to create 5 context-aware prompts based on the LATEST response only.
+    Now optimized to run IN PARALLEL with generate node by using state instead of response.
     """
     exclude = exclude or []
     
-    # 1. Extract location name properly
-    latest_response = output_state.response or ""
-    location_name = extract_location_name(latest_response[:500])
+    # 1. Extract location name from context instead of response
+    location_name = "địa điểm này"
+    
+    # Try getting location from recent context/message first
+    context_text = processing_state.message
+    if processing_state.retrieved_context:
+        for item in processing_state.retrieved_context:
+            ans = item.get("answer", "")
+            if ans:
+                context_text += " " + ans
+                break
+                
+    location_name = extract_location_name(context_text[:500])
     
     # 2. Build prompt for Gemini - diverse suggestions
-    prompt = f"""Dựa trên câu trả lời về "{location_name}", hãy tạo ra 5 câu hỏi gợi ý NGẮN (dưới 35 ký tự) và ĐA DẠNG.
+    prompt = f"""Dựa trên ngữ cảnh về "{location_name}" người dùng đang hỏi, hãy tạo ra 5 câu hỏi gợi ý NGẮN (dưới 35 ký tự) và ĐA DẠNG.
 
 Yêu cầu:
 - MỖI câu hỏi phải thuộc category KHÁC NHAU: schedule, food, weather, stay, tips, experience
-- PHẢI ghi đầy đủ tên địa điểm trong câu hỏi
+- Cố gắng đề cập tên địa điểm trong câu hỏi nếu tự nhiên
 - KHÔNG dùng "Giá vé", "Cách đến" - hãy sáng tạo hơn!
 - KHÔNG bắt đầu bằng "Gợi ý", "Top"
 
 Trả về JSON array THUẦN:
-[{{"text":"Du lịch {location_name} mấy ngày?","category":"schedule"}}]"""
+[{"text":"Du lịch mấy ngày là vừa?","category":"schedule"}]"""
 
     try:
-        if processing_state.model_mode == "qwen":
-            response = await qwen_client.generate(
-                prompt=prompt,
-                temperature=0.7,
-                max_tokens=400
-            )
-        else:
-            response = await gemini_fast.generate(
-                prompt=prompt,
-                temperature=0.7,
-                max_tokens=400
-            )
+        from ..utils.gemini_client import gemini_fast
+        
+        # We always use gemini_fast for blazing fast parallelism
+        response = await gemini_fast.generate(
+            prompt=prompt,
+            temperature=0.7,
+            max_tokens=400
+        )
         
         # ROBUST JSON extraction
         clean = response.strip()
@@ -126,10 +128,10 @@ Trả về JSON array THUẦN:
     # FALLBACK with diverse suggestions (not hardcoded templates)
     output_state.suggested_prompts = [
         {"text": f"Du lịch {location_name} mấy ngày?", "category": "schedule"},
-        {"text": f"Đặc sản {location_name} là gì?", "category": "food"},
-        {"text": f"Đi {location_name} mùa nào đẹp?", "category": "weather"},
-        {"text": f"Chỗ ở gần {location_name}?", "category": "stay"},
-        {"text": "Điểm đến lân cận?", "category": "open_ended"}
+        {"text": f"Đặc sản ở đây là gì?", "category": "food"},
+        {"text": "Đi mùa nào đẹp nhất?", "category": "weather"},
+        {"text": "Chỗ ở gần đây?", "category": "stay"},
+        {"text": "Điểm tham quan lân cận?", "category": "open_ended"}
     ]
     
     return output_state

@@ -198,6 +198,12 @@ class VQAVectorStore:
             ids=ids
         )
     
+    from functools import lru_cache
+    
+    @lru_cache(maxsize=128)
+    def _cached_encode(self, text: str):
+        return self.encoder.encode(text).tolist()
+
     def search(
         self,
         query: str,
@@ -215,8 +221,8 @@ class VQAVectorStore:
                 metadata={"hnsw:space": "cosine"}
             )
 
-        # Generate query embedding
-        query_embedding = self.encoder.encode(query).tolist()
+        # Generate query embedding using cache
+        query_embedding = self._cached_encode(query)
         
         results = self.collection.query(
             query_embeddings=[query_embedding],

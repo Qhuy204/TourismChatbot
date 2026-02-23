@@ -9,8 +9,8 @@ from ..retrieval.vqa_store import get_vqa_store
 
 
 # Configuration
-DEFAULT_K = 5
-MIN_SCORE = 0.4
+DEFAULT_K = 3
+MIN_SCORE = 0.45
 
 
 async def retrieve_context(state: MessageProcessingState) -> MessageProcessingState:
@@ -37,9 +37,8 @@ async def retrieve_context(state: MessageProcessingState) -> MessageProcessingSt
             min_score=MIN_SCORE
         )
         
-        # Verify image links (remove dead ones)
-        await verify_image_urls(results)
-        
+        # Remove HTTP verification from critical path for speed
+        # Only keep the results
         state.retrieved_context = results
     except Exception as e:
         print(f"Retrieval error: {e}")
@@ -81,9 +80,13 @@ def format_context_for_prompt(context: List[Dict]) -> str:
         return ""
     
     lines = ["Thông tin tham khảo (bạn có thể dùng các URL ảnh này để hiển thị ảnh cho người dùng bằng Markdown):"]
-    for i, item in enumerate(context, 1):
+    for i, item in enumerate(context[:3], 1):
         q = item.get("question", "")
         a = item.get("answer", "")
+        # Truncate answer to save context tokens and reduce TTFT
+        if len(a) > 300:
+            a = a[:297] + "..."
+            
         img = item.get("image_url", "")
         score = item.get("score", 0)
         

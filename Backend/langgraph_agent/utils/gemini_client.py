@@ -80,8 +80,10 @@ class GeminiClient:
         if system_instruction:
             config.system_instruction = system_instruction
         
-        # Switching to sync call as workaround for aiohttp DNS error in current environment
-        response = self.client.models.generate_content(
+        # Wrap sync call in a thread to fully avoid blocking the async event loop!
+        import asyncio
+        response = await asyncio.to_thread(
+            self.client.models.generate_content,
             model=self.model_name,
             contents=prompt,
             config=config
@@ -157,18 +159,26 @@ class GeminiClient:
         # Add text prompt
         contents.append(prompt)
         
-        # Use sync generator in executor to avoid blocking
-        response_stream = self.client.models.generate_content_stream(
-            model=self.model_name,
-            contents=contents,
-            config=config
-        )
+        # Use threaded iteration to prevent blocking between chunks
+        def get_stream():
+            return self.client.models.generate_content_stream(
+                model=self.model_name,
+                contents=contents,
+                config=config
+            )
+            
+        import asyncio
+        response_stream = await asyncio.to_thread(get_stream)
+        iterator = iter(response_stream)
         
-        for chunk in response_stream:
-            if chunk.text:
-                yield chunk.text
-                # Allow event loop to process other tasks
-                await asyncio.sleep(0)
+        while True:
+            try:
+                # Fetch next chunk in a separate thread
+                chunk = await asyncio.to_thread(next, iterator)
+                if chunk.text:
+                    yield chunk.text
+            except StopIteration:
+                break
     
     def generate_sync(
         self,
@@ -186,7 +196,6 @@ class GeminiClient:
         
         if system_instruction:
             config.system_instruction = system_instruction
-        
         response = self.client.models.generate_content(
             model=self.model_name,
             contents=prompt,

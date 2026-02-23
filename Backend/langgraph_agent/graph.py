@@ -474,7 +474,26 @@ async def run_graph_stream(
         "emotion": state["processing"].emotion.value if state["processing"].emotion else "neutral"
     }
 
-    # 2. Stream Generation with timing
+    # 2. Fan-out: Start suggestions in background while streaming
+    # We pass the state with retrieved_context (and an empty response)
+    # The new suggestions node will rely purely on context if response is empty
+    state_for_suggestions = {
+        "user_id": state["user_id"],
+        "session_id": state["session_id"],
+        "message": state["message"],
+        "history": state["history"],
+        "user_context": state["user_context"],
+        "processing": state["processing"],
+        "output": OutputState(),  # Copy to avoid race conditions
+        "model_mode": state["model_mode"],
+        "attachments": state["attachments"]
+    }
+    
+    # Send a fallback suggestions payload early
+    t0_sugg = time.time()
+    suggestions_task = asyncio.create_task(node_suggestions(state_for_suggestions))
+    
+    # 3. Stream Generation with timing
     t0 = time.time()
     full_response = ""
     async for chunk in generate_response_stream(state["processing"], state["user_context"]):
@@ -487,12 +506,19 @@ async def run_graph_stream(
         yield {"type": "content", "content": chunk}
     timings["generate"] = round((time.time() - t0) * 1000)
 
-    # 3. Post-processing
+    # 4. Post-processing
     state["output"].response = full_response
     
-    t0 = time.time()
-    state = await node_suggestions(state)
-    timings["suggestions"] = round((time.time() - t0) * 1000)
+    try:
+        suggestions_state = await suggestions_task
+        state["output"].suggested_prompts = suggestions_state["output"].suggested_prompts
+    except Exception as e:
+        print(f"Parallel suggestions task failed: {e}")
+        state["output"].suggested_prompts = [
+            {"text": "Bạn muốn biết thêm thông tin gì?", "category": "open_ended"}
+        ]
+        
+    timings["suggestions"] = round((time.time() - t0_sugg) * 1000)
     
     # FAST EXTRACTION for UI responsiveness
     t0 = time.time()

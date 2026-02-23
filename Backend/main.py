@@ -385,12 +385,20 @@ async def track_event(request: EventRequest):
         return {"status": "error", "message": str(e)}
 
 
+class ContextualSuggestionsRequest(BaseModel):
+    locations: List[str]
+    last_question: Optional[str] = None
+    last_response: Optional[str] = None
+    user_messages: Optional[List[str]] = []
+    limit: int = 4
+
 @app.post("/langgraph/contextual_suggestions")
 async def get_contextual_suggestions(request: ContextualSuggestionsRequest):
     from langgraph_agent.utils.gemini_client import gemini_fast
     
     locations = request.locations[:3]  # Max 3 locations
     last_question = request.last_question or ""
+    last_response = request.last_response or ""
     limit = min(request.limit, 5)
     
     if not locations:
@@ -399,6 +407,8 @@ async def get_contextual_suggestions(request: ContextualSuggestionsRequest):
     try:
         locations_str = ", ".join(locations)
         context_hint = f"\nCâu hỏi trước: {last_question}" if last_question else ""
+        if last_response:
+            context_hint += f"\nPhản hồi tự động: {last_response}"
         
         # Analyze user style if messages provided
         style_instruction = ""

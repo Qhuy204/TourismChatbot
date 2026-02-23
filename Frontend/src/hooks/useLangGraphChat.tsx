@@ -54,7 +54,7 @@ export function useLangGraphChat(initialSessionId?: string) {
 
     const sidRef = useRef<string>(initialSessionId || savedSessionId || crypto.randomUUID());
 
-    // ── Load chat history when session + auth ready ──────────────────────────
+    // Load chat history when session + auth ready
     useEffect(() => {
         const loadHistory = async (sid: string) => {
             if (!user?.id) return;
@@ -89,7 +89,7 @@ export function useLangGraphChat(initialSessionId?: string) {
         }
     }, [cookiesLoaded, user?.id]);
 
-    // ── Handle session switch ────────────────────────────────────────────────
+    // Handle session switch
     useEffect(() => {
         if (!initialSessionId || initialSessionId === sidRef.current) return;
         sidRef.current = initialSessionId;
@@ -129,19 +129,19 @@ export function useLangGraphChat(initialSessionId?: string) {
             .finally(() => setIsLoading(false));
     }, [initialSessionId]);
 
-    // ── Persist cookies on session change ───────────────────────────────────
+    // Persist cookies on session change
     useEffect(() => {
         if (cookiesLoaded && sidRef.current) saveSession(sidRef.current);
     }, [cookiesLoaded, saveSession]);
 
-    // ── Cache messages ───────────────────────────────────────────────────────
+    // Cache messages
     useEffect(() => {
         if (messages.length > 0 && !messages.some(m => m.isLoading)) {
             sessionMessagesCache[sidRef.current] = messages;
         }
     }, [messages]);
 
-    // ── Auto-title from first message (ChatGPT-style) ───────────────────────
+    // Auto-title from first message
     const generateFallbackTitle = useCallback((msgContent: string): string => {
         // Vietnamese & English filler words to strip
         const fillers = new Set(['tôi', 'bạn', 'mình', 'cho', 'về', 'có', 'không', 'ở', 'với', 'và', 'là', 'thì', 'mà', 'của', 'the', 'a', 'an', 'is', 'are', 'in', 'on', 'at', 'to', 'for', 'of', 'can', 'you', 'me', 'i', 'what', 'how']);
@@ -153,7 +153,7 @@ export function useLangGraphChat(initialSessionId?: string) {
         return title.length > 2 ? (title.charAt(0).toUpperCase() + title.slice(1)) : msgContent.slice(0, 40);
     }, []);
 
-    // ── sendMessage ──────────────────────────────────────────────────────────
+    // sendMessage
     const sendMessage = useCallback(async (
         content: string,
         attachments?: Array<{ url: string; type: string; name?: string }>,
@@ -170,7 +170,7 @@ export function useLangGraphChat(initialSessionId?: string) {
         // Track topic for histogram-based recommendations
         trackTopic(content.trim());
 
-        // Immediate client-side title on first message (ChatGPT behavior)
+        // Immediate client-side title on first message 
         if (isFirstMessage && onNewTitle) {
             onNewTitle(generateFallbackTitle(content.trim()));
         }
@@ -244,7 +244,7 @@ export function useLangGraphChat(initialSessionId?: string) {
 
                             if (data.new_title && onNewTitle) onNewTitle(data.new_title);
 
-                            // ── Location-based contextual suggestions ──
+                            // Location-based contextual suggestions
                             if (data.extracted_locations?.length > 0) {
                                 const locationNames: string[] = data.extracted_locations.map((loc: Record<string, string>) => loc.name);
                                 setRecentLocations(locationNames.slice(0, 3));
@@ -296,7 +296,7 @@ export function useLangGraphChat(initialSessionId?: string) {
         }
     }, [user?.id, messages, modelMode, trackTopic, updateRecentLocations]);
 
-    // ── fetchInitialSuggestions: histogram-based personalization ─────────────
+    // fetchInitialSuggestions: histogram-based personalization
     const fetchInitialSuggestions = useCallback(async (topics?: string[]) => {
         if (!user?.id) return;
 
@@ -325,7 +325,7 @@ export function useLangGraphChat(initialSessionId?: string) {
         }
     }, [user?.id, messages.length, preferences]);
 
-    // ── refreshSuggestions: location-context or fallback ────────────────────
+    // refreshSuggestions: location-context or fallback
     const refreshSuggestions = useCallback(async () => {
         if (!user?.id) return;
 
@@ -335,11 +335,19 @@ export function useLangGraphChat(initialSessionId?: string) {
 
         if (locations.length > 0) {
             const userMsgs = messages.filter(m => m.role === 'user').slice(-5).map(m => m.content);
+            const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.isLoading);
+            const lastResponse = lastAssistant?.content?.slice(0, 500) || '';
+
             try {
                 const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/contextual_suggestions`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ locations: locations.slice(0, 3), limit: 4, user_messages: userMsgs }),
+                    body: JSON.stringify({
+                        locations: locations.slice(0, 3),
+                        limit: 4,
+                        user_messages: userMsgs,
+                        last_response: lastResponse
+                    }),
                 });
                 if (res.ok) {
                     const data = await res.json();
@@ -362,14 +370,14 @@ export function useLangGraphChat(initialSessionId?: string) {
         } catch (e) { console.error('Fallback suggestions failed:', e); }
     }, [user?.id, recentLocations, preferences, messages]);
 
-    // ── clearMessages ────────────────────────────────────────────────────────
+    // clearMessages
     const clearMessages = useCallback(() => {
         setMessages([]);
         setSuggestions([]);
         sidRef.current = crypto.randomUUID();
     }, []);
 
-    // ── updateFeedback ───────────────────────────────────────────────────────
+    // updateFeedback
     const updateFeedback = useCallback(async (messageId: string, score: number) => {
         setMessages(prev => prev.map(m => m.id === messageId ? { ...m, feedbackScore: score } : m));
 
@@ -385,7 +393,7 @@ export function useLangGraphChat(initialSessionId?: string) {
         }
     }, [messages, user?.id]);
 
-    // ── switchSession ────────────────────────────────────────────────────────
+    // switchSession
     const switchSession = useCallback((newSid: string) => {
         if (messages.length > 0 && !messages.some(m => m.isLoading)) {
             sessionMessagesCache[sidRef.current] = messages;

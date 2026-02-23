@@ -136,12 +136,7 @@ async def generate_response(
             )
             model_name = "qwen3-vl-8b-unsloth"
         else:
-            # Choose model based on complexity
-            use_pro = (
-                len(processing_state.retrieved_context) > 3 or 
-                len(processing_state.message) > 200
-            )
-            client = gemini_pro if use_pro else gemini_fast
+            client = gemini_fast
             
             response_text = await client.generate(
                 prompt=final_prompt,
@@ -248,13 +243,8 @@ async def generate_response_stream(
         ):
             yield chunk
     else:
-        use_pro = (
-            len(processing_state.retrieved_context) > 3 or 
-            len(processing_state.message) > 200
-        )
-        client = gemini_pro if use_pro else gemini_fast
-        
-        async for chunk in client.generate_stream(
+        # We exclusively use gemini_fast (gemini-3-flash-preview) for blazing fast TTFT
+        async for chunk in gemini_fast.generate_stream(
             prompt=final_prompt,
             system_instruction=system_prompt,
             temperature=0.7,
