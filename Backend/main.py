@@ -401,11 +401,15 @@ async def get_contextual_suggestions(request: ContextualSuggestionsRequest):
     last_response = request.last_response or ""
     limit = min(request.limit, 5)
     
-    if not locations:
+    if not locations and not request.user_messages and not last_response:
         return {"suggestions": []}
     
     try:
-        locations_str = ", ".join(locations)
+        if locations:
+            locations_str = f"Người dùng đang tìm hiểu về các địa điểm: {', '.join(locations)}\n"
+        else:
+            locations_str = "Dựa trên nội dung cuộc trò chuyện hiện tại:\n"
+            
         context_hint = f"\nCâu hỏi trước: {last_question}" if last_question else ""
         if last_response:
             context_hint += f"\nPhản hồi tự động: {last_response}"
@@ -421,7 +425,7 @@ PHONG CÁCH CỦA USER (Hãy bắt chước tone giọng này):
 - Nếu user hỏi ngắn gọn -> Hãy hỏi ngắn, trực diện.
 """
 
-        prompt = f"""Người dùng đang tìm hiểu về các địa điểm: {locations_str}{context_hint}
+        prompt = f"""{locations_str}{context_hint}
 {style_instruction}
 
 Tạo {limit} câu hỏi gợi ý tiếp theo TỰ NHIÊN, NGẮN GỌN (dưới 15 từ).
@@ -434,7 +438,7 @@ QUY TẮC QUAN TRỌNG:
 
 QUY TẮC JSON:
 - Output phải là VALID JSON.
-- Text field chứa dấu ngoặc kép (") phải được escape bằng backslash (\").
+- Text field chứa dấu ngoặc kép (") phải được escape bằng backslash (\\").
 - KHÔNG ĐƯỢC có trailing comma.
 
 VD tốt: "Thác nào đẹp nhất Tây Nguyên", "Buôn Đôn có gì chơi", "Cà phê ở đâu ngon nhất", "Nên đi mùa nào"
