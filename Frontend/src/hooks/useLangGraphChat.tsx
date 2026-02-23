@@ -297,7 +297,7 @@ export function useLangGraphChat(initialSessionId?: string) {
     }, [user?.id, messages, modelMode, trackTopic, updateRecentLocations]);
 
     // fetchInitialSuggestions: histogram-based personalization
-    const fetchInitialSuggestions = useCallback(async (topics?: string[]) => {
+    const fetchInitialSuggestions = useCallback(async (topics?: string[], forceSet: boolean = false) => {
         if (!user?.id) return;
 
         // Sort topics by frequency from cookie histogram
@@ -318,7 +318,7 @@ export function useLangGraphChat(initialSessionId?: string) {
             if (res.ok) {
                 const data = await res.json();
                 setInitialData(data);
-                if (messages.length === 0) setSuggestions(data.suggestions || []);
+                if (messages.length === 0 || forceSet) setSuggestions(data.suggestions || []);
             }
         } catch (e) {
             console.error('Initial suggestions failed:', e);
@@ -329,46 +329,40 @@ export function useLangGraphChat(initialSessionId?: string) {
     const refreshSuggestions = useCallback(async () => {
         if (!user?.id) return;
 
-        const locations = recentLocations.length > 0
-            ? recentLocations
-            : (preferences?.recentLocations || preferences?.askedTopics?.slice(0, 3) || []);
-
-        if (locations.length > 0) {
-            const userMsgs = messages.filter(m => m.role === 'user').slice(-5).map(m => m.content);
-            const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.isLoading);
-            const lastResponse = lastAssistant?.content?.slice(0, 500) || '';
-
-            try {
-                const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/contextual_suggestions`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        locations: locations.slice(0, 3),
-                        limit: 4,
-                        user_messages: userMsgs,
-                        last_response: lastResponse
-                    }),
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.suggestions?.length > 0) { setSuggestions(data.suggestions); return; }
-                }
-            } catch (e) { console.warn('Refresh suggestions error:', e); }
+        // KHI VÀO ĐOẠN CHAT TRỐNG => Dùng Suggest Toàn cục (Global - Histogram)
+        if (messages.length === 0) {
+            await fetchInitialSuggestions(undefined, true);
+            return;
         }
 
-        // Fallback: initial suggestions
+        // KHI VÀO CHAT ĐÃ CÓ CONVERSATION => Dùng Suggest Cục bộ (Local - Context)
+        const locations = recentLocations.slice(0, 3);
+        const userMsgs = messages.filter(m => m.role === 'user').slice(-5).map(m => m.content);
+        const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && !m.isLoading);
+        const lastResponse = lastAssistant?.content?.slice(0, 500) || '';
+
         try {
-            const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/initial_suggestions`, {
+            const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/contextual_suggestions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: user.id, topics: preferences?.askedTopics || [] }),
+                body: JSON.stringify({
+                    locations: locations, // Có thể rỗng, DB Backend tự linh hoạt fallback sang user_msgs 
+                    limit: 4,
+                    user_messages: userMsgs,
+                    last_response: lastResponse
+                }),
             });
             if (res.ok) {
                 const data = await res.json();
-                setSuggestions(data.suggestions || []);
+                if (data.suggestions?.length > 0) {
+                    setSuggestions(data.suggestions);
+                    return;
+                }
             }
-        } catch (e) { console.error('Fallback suggestions failed:', e); }
-    }, [user?.id, recentLocations, preferences, messages]);
+        } catch (e) {
+            console.warn('Refresh contextual suggestions error:', e);
+        }
+    }, [user?.id, messages, recentLocations, fetchInitialSuggestions]);
 
     // clearMessages
     const clearMessages = useCallback(() => {
