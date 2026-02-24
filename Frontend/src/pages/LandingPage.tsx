@@ -9,19 +9,19 @@ import {
 } from 'lucide-react';
 
 const quickActions = [
-    { icon: Search, label: 'Smart RAG', desc: 'Real-time Vietnam data', color: '#1d6de0' },
-    { icon: Map, label: 'Itineraries', desc: 'AI-generated schedules', color: '#06b6d4' },
-    { icon: Image, label: 'Multi-Modal', desc: 'Analyze travel photos', color: '#8b5cf6' },
-    { icon: Mic, label: 'Voice Guide', desc: 'Smarter voice assistance', color: '#10b981' },
+    { icon: Search, label: 'RAG Search', desc: 'Real-time Vietnam DB', color: '#1d6de0' },
+    { icon: Map, label: 'Route Plan', desc: 'Optimum itineraries', color: '#06b6d4' },
+    { icon: Image, label: 'AI Vision', desc: 'Analyze travel photos', color: '#8b5cf6' },
+    { icon: Mic, label: 'Voice companion', desc: 'Smart voice navigation', color: '#10b981' },
 ];
 
 const features = [
-    { icon: MessageSquare, label: 'Contextual Chat', desc: 'Natural dialogue with deep memory of your preferences.' },
-    { icon: Zap, label: 'RAG Retrieval', desc: 'Instant access to up-to-date Vietnam tourism data and local secrets.' },
-    { icon: Image, label: 'Visual Analysis', desc: 'Identify landmarks, menus, and documents using advanced AI vision.' },
-    { icon: Globe, label: 'Multi-Lingual', desc: 'Seamlessly switch between Vietnamese, English, and other languages.' },
-    { icon: Shield, label: 'Secure & Private', desc: 'Enterprise-grade encryption for all your personal travel data.' },
-    { icon: BarChart3, label: 'Smart Insights', desc: 'Discover travel patterns and personalized recommendations.' },
+    { icon: MessageSquare, label: 'Intent & Context', desc: 'Natural dialogue with deep memory of your preferences.' },
+    { icon: Zap, label: 'Real-time tool calling', desc: 'Instant access to Live Weather, Exchange Rates, and local data.' },
+    { icon: Image, label: 'Multi-Modal Vision', desc: 'Identify landmarks, menus, and documents using advanced AI layers.' },
+    { icon: Globe, label: 'Global Intelligence', desc: 'Seamlessly switch between multiple LLM models (Gemini/Qwen).' },
+    { icon: Shield, label: 'Enterprise Security', desc: 'Secure data management with vector-level protection.' },
+    { icon: BarChart3, label: 'Travel Analytics', desc: 'Discover travel patterns and data-driven recommendations.' },
 ];
 
 const stats = [
