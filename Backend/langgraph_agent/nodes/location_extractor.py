@@ -167,28 +167,31 @@ async def extract_locations(response_text: str) -> List[ExtractedLocation]:
     
     print(f"🔍 Extracting locations from response ({len(response_text)} chars)...")
     
-    prompt = f"""Trích xuất tất cả địa điểm du lịch Việt Nam được đề cập trong đoạn văn sau.
-
-Với mỗi địa điểm, cung cấp:
-- name: Tên đầy đủ của địa điểm
-- city: Thành phố (nếu biết)
-- province: Tỉnh/Thành (nếu biết)
-- category: Một trong: beach, heritage, nature, food, temple, city, mountain, island, museum, other
-- description: Mô tả ngắn từ văn bản (nếu có đề cập)
+    prompt = f"""Trích xuất danh sách các địa điểm du lịch Việt Nam cụ thể được đề cập trong văn bản.
+Chỉ trích xuất các địa điểm thực tế (danh lam, thắng cảnh, bảo tàng, v.v.), bỏ qua các tên chung chung như "thành phố", "tỉnh".
 
 Văn bản:
-{response_text[:2000]}
+{response_text[:2500]}
 
-Trả về JSON với format:
-{{"locations": [{{"name": "...", "city": "...", "province": "...", "category": "...", "description": "..."}}]}}
+Trả về JSON array các object:
+{{
+  "locations": [
+    {{
+      "name": "Tên địa điểm",
+      "city": "Thành phố/Thị xã",
+      "province": "Tỉnh/Thành",
+      "category": "beach|heritage|nature|food|temple|city|mountain|island|museum|other",
+      "description": "Mô tả cực ngắn (dưới 15 từ)"
+    }}
+  ]
+}}
+Nếu không có địa điểm nào, trả về {{"locations": []}}."""
 
-Nếu không có địa điểm nào, trả về: {{"locations": []}}"""
-    
     try:
         result = await gemini_fast.generate_json(
             prompt=prompt,
-            schema={"locations": "array of location objects"},
-            max_tokens=2048  # Increase to prevent JSON truncation
+            schema={"locations": "array of objects"},
+            max_tokens=4096  # Increased to prevent truncation
         )
         
         locations = []

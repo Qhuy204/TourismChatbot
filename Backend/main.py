@@ -435,25 +435,20 @@ PHONG CÁCH CỦA USER (Hãy bắt chước tone giọng này):
         prompt = f"""{locations_str}{context_hint}
 {style_instruction}
 
-Tạo {limit} câu hỏi gợi ý tiếp theo TỰ NHIÊN, NGẮN GỌN (dưới 15 từ).
+Tạo {limit} câu hỏi gợi ý tiếp theo TỰ NHIÊN, NGẮN GỌN (dưới 15 từ) để kích thích cuộc hội thoại.
 
-QUY TẮC QUAN TRỌNG:
-- KHÔNG dùng format "Du lịch X mấy ngày?" - quá máy móc.
-- KHÔNG dùng quá nhiều "nhỉ", "ha", "ta", "cơ" - nghe sẽ giả tạo.
-- Tập trung vào câu hỏi thực tế, như người dùng đang tò mò.
-- KHÔNG lặp lại ý.
+QUY TẮC:
+- Đa dạng chủ đề: ăn uống, lịch trình, thời tiết, kinh nghiệm, khách sạn.
+- Câu hỏi thực tế, như một người dùng thật đang tò mò (Vd: "Đi Hội An mùa nào thì bớt đông?").
+- KHÔNG dùng "Gợi ý", "Top", "Du lịch X mấy ngày?" máy móc.
 
-QUY TẮC JSON:
-- Output phải là VALID JSON.
-- Text field chứa dấu ngoặc kép (") phải được escape bằng backslash (\\").
-- KHÔNG ĐƯỢC có trailing comma.
-
-VD tốt: "Thác nào đẹp nhất Tây Nguyên", "Buôn Đôn có gì chơi", "Cà phê ở đâu ngon nhất", "Nên đi mùa nào"
-
-Trả về JSON nguyên vẹn, đảm bảo điền nội dung cụ thể không viết tắt:
+Trả về JSON mẫu:
 {{
     "suggestions": [
-        {{"text": "<Gợi ý 1>", "category": "experience|food|tips|schedule"}}
+        {{ "text": "Hội An có món gì ngon ngoài Cao Lầu không?", "category": "food" }},
+        {{ "text": "Buổi tối ở Phố Cổ có hoạt động gì thú vị?", "category": "experience" }},
+        {{ "text": "Nên ở khách sạn nào gần trung tâm?", "category": "stay" }},
+        {{ "text": "Có tour đi Cù Lao Chàm trong ngày không?", "category": "discovery" }}
     ]
 }}"""
         
@@ -462,12 +457,24 @@ Trả về JSON nguyên vẹn, đảm bảo điền nội dung cụ thể không
             "properties": {
                 "suggestions": {
                     "type": "array",
-                    "items": {"type": "object"}
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                            "category": {"type": "string"}
+                        },
+                        "required": ["text"]
+                    }
                 }
-            }
+            },
+            "required": ["suggestions"]
         })
         
-        return {"suggestions": result.get("suggestions", [])[:limit]}
+        suggestions = result.get("suggestions", [])
+        if not isinstance(suggestions, list):
+            suggestions = []
+            
+        return {"suggestions": suggestions[:limit]}
     except Exception as e:
         print(f"⚠️ Error generating contextual suggestions: {e}")
         # Fallback to simple suggestions

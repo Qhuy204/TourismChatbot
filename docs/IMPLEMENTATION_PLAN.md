@@ -13,7 +13,8 @@
 3. [PHASE 3: Hotel & Price Database (CSDL Giá cả)](#phase-3)
 4. [PHASE 4: Booking Integration (Affiliate Links)](#phase-4)
 5. [PHASE 5: Wishlist & UI Cards](#phase-5)
-6. [Phụ lục: So sánh API Providers](#appendix)
+6. [PHASE 6: Production Scaling (100+ Requests)](#phase-6)
+7. [Phụ lục: So sánh API Providers](#appendix)
 
 ---
 
@@ -520,6 +521,71 @@ LocationCard:
 ```
 
 #### Ước lượng thời gian: **2-3 ngày**
+
+---
+
+<a id="phase-6"></a>
+## PHASE 6: Production Scaling (100+ Concurrent Requests)
+
+### 🎯 Mục tiêu
+Đưa hệ thống lên mức độ "Production-ready", chịu tải đồng thời 100+ người dùng nhắn tin mà không bị sập hay trễ (Latency < 3s).
+
+### 📊 Capacity Planning (RTX 3060 12GB + Gemini Paid Tier 1)
+
+| Thành phần | Cấu hình hiện tại | Nâng cấp Production | Khả năng đáp ứng |
+|:---|:---|:---|:---|
+| **API LLM** | Gemini Free (15 RPM) | **Gemini Paid Tier 1** | Giới hạn RPM/TPM tăng 10-50x |
+| **Backend Server** | Uvicorn (1 worker) | **Gunicorn (4-8 workers)** | Xử lý đa luồng, tận dụng đa nhân CPU |
+| **GPU Engine** | Native inference | **vLLM / TGI** | Continuous Batching (xử lý 100 người cùng lúc) |
+| **Connectivity** | Quick Tunnel (Temporary) | **Cloudflare Named Tunnel** | Link cố định, băng thông cao, ổn định |
+| **Cache** | None | **Redis Vector Cache** | Trả lời ngay lập tức 40-60% câu hỏi trùng lặp |
+
+### 🔧 Giải pháp kỹ thuật
+
+#### 6.1 Cloudflare Named Tunnel (Dùng Domain riêng)
+Thay vì dùng Quick Tunnel ngẫu nhiên, ta sử dụng Domain riêng để có kết nối cố định và chuyên nghiệp.
+
+```bash
+# Cài đặt Named Tunnel
+cloudflared tunnel create vivi-backend
+cloudflared tunnel route dns vivi-backend api.vivitourism.com
+cloudflared tunnel run --url http://localhost:8000 vivi-backend
+```
+
+#### 6.2 Redis Semantic Caching
+Sử dụng Redis để lưu trữ "Câu hỏi - Câu trả lời". Nếu User hỏi câu tương tự (Ví dụ: "Đà Nẵng đi đâu chơi?" vs "Tư vấn chỗ chơi ở Đà Nẵng"), hệ thống trả về kết quả từ Cache luôn.
+
+```python
+# 1. User gửi query
+# 2. Vectorize query -> search trong Redis
+# 3. Nếu Similarity > 0.95 -> Trả về cached_response (0ms GPU)
+# 4. Nếu không -> Chạy LLM -> Lưu kết quả mới vào Redis
+```
+
+#### 6.3 Multi-process Backend (Gunicorn + Uvicorn)
+Tận dụng tối đa tài nguyên PC bằng cách chạy nhiều tiến trình Backend song song.
+
+```bash
+gunicorn main:app \
+  -w 4 \
+  -k uvicorn.workers.UvicornWorker \
+  --bind 0.0.0.0:8000 \
+  --timeout 120
+```
+
+#### 6.4 Gemini Paid Tier 1 Management
+- **Quản lý Quota:** Theo dõi số lượng Token sử dụng trên Google Cloud Console.
+- **Auto-fallback:** Nếu đạt giới hạn Paid Tier (hiếm khi xảy ra ở Tier 1), tự động đảo qua API key dự phòng.
+
+### 🏗️ Files cần tạo/sửa
+
+| File | Hành động | Mô tả |
+|:---|:---|:---|
+| `Backend/langgraph_agent/utils/cache.py` | **TẠO MỚI** | Redis Semantic Cache logic |
+| `Backend/docker-compose.yml` | **TẠO MỚI** | Chạy Redis + Cloudflare + Backend trong Docker |
+| `Backend/.env` | **SỬA** | Thêm `REDIS_URL`, `CF_TUNNEL_TOKEN` |
+
+#### Ước lượng thời gian: **3-4 ngày**
 
 ---
 

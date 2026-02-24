@@ -46,6 +46,14 @@ def _get_types():
     return types
 
 
+try:
+    from langsmith import traceable
+except ImportError:
+    # Fallback if langsmith not installed
+    def traceable(func=None, **kwargs):
+        if func is None: return lambda f: f
+        return func
+
 class GeminiClient:
     """
     Centralized Gemini API wrapper.
@@ -61,7 +69,8 @@ class GeminiClient:
         if self._client is None:
             self._client = _get_client()
         return self._client
-    
+
+    @traceable(run_type="llm")
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     async def generate(
         self,
@@ -101,6 +110,7 @@ class GeminiClient:
                 print(f"🚫 Prompt blocked. Feedback: {response.prompt_feedback}")
         return response.text or ""
 
+    @traceable(run_type="llm")
     async def generate_stream(
         self,
         prompt: str,
@@ -211,22 +221,31 @@ class GeminiClient:
         
         return response.text or ""
     
+    @traceable(run_type="llm")
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     async def generate_json(
         self,
         prompt: str,
-        schema: Dict[str, Any],
+        schema: Optional[Dict[str, Any]] = None,
         temperature: float = 0.3,
         max_tokens: int = 4096  # Higher limit since gemini-3 generates <thought>
     ) -> Dict[str, Any]:
         """Generate structured JSON output natively using Gemini API"""
         types = _get_types()
-        config = types.GenerateContentConfig(
-            temperature=temperature,
-            max_output_tokens=max_tokens,
-            response_mime_type="application/json",
-            response_schema=schema,
-        )
+        
+        # Build config
+        config_kwargs = {
+            "temperature": temperature,
+            "max_output_tokens": max_tokens,
+            "response_mime_type": "application/json",
+        }
+        
+        # ONLY add response_schema if it's a valid Schema object or a complex dict
+        # Simplified dicts like {"key": "type"} cause ValidationErrors in the new SDK
+        if schema and isinstance(schema, dict) and "type" in schema:
+            config_kwargs["response_schema"] = schema
+            
+        config = types.GenerateContentConfig(**config_kwargs)
         
         import asyncio
         response = await asyncio.to_thread(
@@ -242,14 +261,19 @@ class GeminiClient:
         clean_text = response.text.strip()
         
         # 1. Remove <thought> blocks (gemini-3 specific quirk)
-        clean_text = re.sub(r"<thought>.*?</thought>\s*", "", clean_text, flags=re.DOTALL).strip()
+        # Use a more aggressive regex for nested or multiple thought blocks
+        clean_text = re.sub(r"<thought>.*?</thought>", "", clean_text, flags=re.DOTALL).strip()
         
         # 2. Clean markdown code blocks
-        if clean_text.startswith("```"):
-            clean_text = re.sub(r"^```(?:json)?\s*\n?", "", clean_text)
-            clean_text = re.sub(r"\n?```\s*$", "", clean_text)
-        clean_text = clean_text.strip()
-            
+        if "```" in clean_text:
+            # Extract content between ```json and ``` or just ``` and ```
+            match = re.search(r"```(?:json)?\s*(.*?)\s*```", clean_text, re.DOTALL)
+            if match:
+                clean_text = match.group(1).strip()
+            else:
+                clean_text = re.sub(r"```(?:json)?\s*", "", clean_text)
+                clean_text = re.sub(r"\s*```", "", clean_text).strip()
+        
         try:
             return json.loads(clean_text)
         except json.JSONDecodeError as dec_err:
@@ -263,22 +287,38 @@ class GeminiClient:
                 start_idx = -1
                 end_idx = -1
                 
-                if first_curly != -1 and last_curly != -1 and (first_square == -1 or first_curly < first_square):
+                if first_curly != -1 and (first_square == -1 or first_curly < first_square):
                     start_idx = first_curly
                     end_idx = last_curly
-                elif first_square != -1 and last_square != -1:
+                elif first_square != -1:
                     start_idx = first_square
                     end_idx = last_square
-                    
-                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-                    json_str = clean_text[start_idx:end_idx+1]
-                    # Simple fix for trailing commas before closing braces/brackets
-                    json_str = re.sub(r",\s*([\]}])", r"\1", json_str)
-                    return json.loads(json_str)
-            except Exception:
+                
+                if start_idx != -1:
+                    # If end_idx is -1 or before start_idx, the JSON is likely truncated
+                    if end_idx <= start_idx:
+                        # Attempt to fix truncated JSON by closing brackets
+                        json_str = clean_text[start_idx:]
+                        open_braces = json_str.count("{") - json_str.count("}")
+                        open_brackets = json_str.count("[") - json_str.count("]")
+                        
+                        # Clean trailing junk like commas or partial keys
+                        json_str = re.sub(r",\s*$", "", json_str)
+                        json_str = re.sub(r",\s*\"[^\"]*$", "", json_str)
+                        
+                        json_str += "]" * open_brackets
+                        json_str += "}" * open_braces
+                        return json.loads(json_str)
+                    else:
+                        json_str = clean_text[start_idx:end_idx+1]
+                        # Simple fix for trailing commas before closing braces/brackets
+                        json_str = re.sub(r",\s*([\]}])", r"\1", json_str)
+                        return json.loads(json_str)
+            except Exception as e:
+                print(f"⚠️ Last-ditch JSON fix failed: {e}")
                 pass
                 
-            print(f"Failed to parse JSON (err: {dec_err}): {response.text[:300]}...")
+            print(f"❌ Failed to parse JSON (err: {dec_err}). Raw output: {response.text[:200]}...")
             return {}
     
     async def classify(

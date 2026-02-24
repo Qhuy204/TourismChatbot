@@ -10,7 +10,7 @@ import { useEmotionTheme, type Emotion } from '@/hooks/useEmotionTheme';
 import {
     MessageSquare, Image, Mic, Search, BookOpen,
     PenLine, Bot, Send, Loader2, ThumbsUp, ThumbsDown,
-    Plus, ChevronRight, ChevronLeft, LogOut,
+    Plus, ChevronRight, ChevronLeft, LogOut, Menu,
     Zap as ZapIcon, User, X, FileImage, ArrowDown,
     RefreshCw, Sun, Moon, Pin, Pencil, Trash2, MoreVertical, Check,
     Settings, Sparkles, Sliders, HelpCircle, Shield, Bell, AppWindow, Database, Users, Lock
@@ -18,10 +18,10 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { translations, type AppLanguage } from '../../locales';
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// Types
 type ActiveMenu = { id: string; x: number; y: number } | null;
 
-// ── Emotion badge config ─────────────────────────────────────────────────────
+// Emotion badge config
 const EMOTION_DISPLAY: Record<Emotion, { emoji: string; label: string; color: string }> = {
     positive: { emoji: '😊', label: 'Tích cực', color: '#f97316' },
     surprise: { emoji: '😮', label: 'Tò mò', color: '#8b5cf6' },
@@ -50,7 +50,7 @@ const quickActions = [
     { icon: Mic, label: 'Hỗ trợ giọng nói', desc: 'Hỏi đáp tự nhiên', color: '#10b981' },
 ];
 
-// ── Markdown components ──────────────────────────────────────────────────────
+// Markdown components  
 const mdComponents: Components = {
     img: ({ src, alt }) => (
         <div style={{ margin: '8px 0' }}>
@@ -71,7 +71,7 @@ function processContent(content: string): string {
     );
 }
 
-// ── Group sessions by time as ChatGPT does ───────────────────────────────────
+//   Group sessions by time as ChatGPT does                  ─
 function groupSessionsByTime(sessions: ReturnType<typeof useSessionManager>['sessions'], activeSessionId: string | null) {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -101,7 +101,7 @@ function groupSessionsByTime(sessions: ReturnType<typeof useSessionManager>['ses
     return Object.entries(groups).filter(([, v]) => v.length > 0);
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
+// Main component  
 export function ChatbotInterface() {
     const { user, signOut } = useAuth();
     const { theme, toggleTheme } = useThemeMode();
@@ -113,6 +113,7 @@ export function ChatbotInterface() {
     const [rightOpen, setRightOpen] = useState(false);
     const [currentEmotion, setCurrentEmotion] = useState<Emotion>('neutral');
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [activeSettingsTab, setActiveSettingsTab] = useState('general');
     const [appLanguage, setAppLanguage] = useState<'vi' | 'en' | 'auto'>(() => (localStorage.getItem('vivi-lang') as any) || 'auto');
@@ -352,10 +353,24 @@ export function ChatbotInterface() {
     const groupedSessions = groupSessionsByTime(sessionManager.sessions.slice(0, visibleCount), sessionManager.activeSessionId);
 
     return (
-        <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
+        <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)', position: 'relative' }}>
+            {/* Mobile Overlay */}
+            {mobileSidebarOpen && <div className="mobile-overlay" onClick={() => setMobileSidebarOpen(false)} />}
 
             {/* ── Left Sidebar ── */}
-            <div style={{ width: sidebarW, flexShrink: 0, background: 'var(--bg-card)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', transition: 'width 0.2s ease', position: 'relative' }}>
+            <div
+                className={mobileSidebarOpen ? "sidebar-mobile-visible" : "sidebar-mobile-hidden"}
+                style={{
+                    width: sidebarW,
+                    flexShrink: 0,
+                    background: 'var(--bg-card)',
+                    borderRight: '1px solid var(--border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    transition: 'width 0.2s ease, left 0.3s ease',
+                    position: 'relative'
+                }}
+            >
 
                 {/* Logo row */}
                 <div style={{ padding: leftCollapsed ? '14px 0' : '14px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: leftCollapsed ? 'center' : 'flex-start', gap: 8 }}>
@@ -418,7 +433,10 @@ export function ChatbotInterface() {
                                                 </div>
                                             ) : (
                                                 <div
-                                                    onClick={() => handleSessionChange(s.id)}
+                                                    onClick={() => {
+                                                        handleSessionChange(s.id);
+                                                        setMobileSidebarOpen(false);
+                                                    }}
                                                     style={{
                                                         padding: '6px 14px',
                                                         cursor: 'pointer',
@@ -565,7 +583,7 @@ export function ChatbotInterface() {
                 </div>
             </div>
 
-            {/* ── Context Menu (portal-style fixed) ── */}
+            {/*   Context Menu (portal-style fixed)   */}
             {contextMenu && (
                 <div
                     onClick={e => e.stopPropagation()}
@@ -587,12 +605,19 @@ export function ChatbotInterface() {
                 </div>
             )}
 
-            {/* ── Main Chat ── */}
-            <div className="chat-main-area" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+            {/*   Main Chat   */}
+            <div className="chat-main-area main-content-mobile" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
 
                 {/* Header — shows chat title */}
-                <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-card)', flexShrink: 0, minHeight: 52 }}>
+                <div className="chat-header-mobile" style={{ padding: '10px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-card)', flexShrink: 0, minHeight: 52 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, overflowX: 'hidden' }}>
+                        <button
+                            className="mobile-only"
+                            onClick={() => setMobileSidebarOpen(true)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', marginRight: 8, padding: 4 }}
+                        >
+                            <Menu size={20} />
+                        </button>
                         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                             {chatTitle}
                         </span>
@@ -608,7 +633,7 @@ export function ChatbotInterface() {
                                 <RefreshCw size={11} /> Mới
                             </button>
                         )}
-                        <button onClick={() => setRightOpen(!rightOpen)} style={{ padding: '5px 10px', background: 'var(--bg-muted)', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, fontFamily: 'inherit' }}>
+                        <button className="desktop-only" onClick={() => setRightOpen(!rightOpen)} style={{ padding: '5px 10px', background: 'var(--bg-muted)', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, fontFamily: 'inherit' }}>
                             {rightOpen ? '→' : '←'}
                         </button>
                     </div>
@@ -646,7 +671,7 @@ export function ChatbotInterface() {
                                 </div>
                             )}
 
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 24, maxWidth: 480, width: '100%' }}>
+                            <div className="quick-actions-mobile" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 24, maxWidth: 480, width: '100%' }}>
                                 {quickActions.map(({ icon: Icon, label, desc, color }) => (
                                     <button key={label} onClick={() => handleSuggestion(label)} style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit', transition: 'all 0.2s' }}
                                         onMouseOver={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.background = `${color}08`; }}
@@ -702,7 +727,7 @@ export function ChatbotInterface() {
                 {suggestions.length > 0 && messages.length > 0 && (
                     <div style={{ padding: '10px 0px 5px 20px', borderTop: '1px solid var(--border)', background: 'var(--bg-card)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
                         <Sparkles size={14} color="var(--primary)" />
-                        {suggestions.slice(0, 3).map((s, i) => {
+                        {suggestions.slice(0, 5).map((s, i) => {
                             const text = typeof s === 'string' ? s : (s as { text: string }).text;
                             return (
                                 <button key={i} onClick={() => handleSuggestion(text)} style={{ padding: '4px 12px', borderRadius: 100, border: '1px solid var(--border)', background: 'var(--bg-muted)', cursor: 'pointer', fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'inherit', transition: 'all 0.2s' }}
@@ -773,9 +798,9 @@ export function ChatbotInterface() {
                 </div>
             </div>
 
-            {/* ── Right Panel ── */}
+            {/*   Right Panel   */}
             {rightOpen && (
-                <div style={{ width: 260, flexShrink: 0, background: 'var(--bg-card)', borderLeft: '1px solid var(--border)', padding: 16, overflowY: 'auto' }}>
+                <div className="right-panel-mobile" style={{ width: 260, flexShrink: 0, background: 'var(--bg-card)', borderLeft: '1px solid var(--border)', padding: 16, overflowY: 'auto' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                         <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Context</h3>
                         <button onClick={() => setRightOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={15} /></button>
@@ -813,12 +838,12 @@ export function ChatbotInterface() {
                 </div>
             )}
 
-            {/* ── Settings Modal Mock ── */}
+            {/*   Settings Modal Mock   */}
             {settingsOpen && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ width: 800, height: 600, background: 'var(--bg)', borderRadius: 16, display: 'flex', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', border: '1px solid var(--border)' }}>
-                        <div style={{ width: 230, background: 'var(--bg-card)', borderRight: '1px solid var(--border)', padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <div style={{ padding: '0 10px 14px', fontSize: 16, fontWeight: 600, color: 'var(--text)' }}>Settings</div>
+                    <div className="settings-modal-mobile" style={{ width: 800, height: 600, maxWidth: '95vw', maxHeight: '90vh', background: 'var(--bg)', borderRadius: 16, display: 'flex', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', border: '1px solid var(--border)' }}>
+                        <div className="settings-sidebar-mobile" style={{ width: 230, background: 'var(--bg-card)', borderRight: '1px solid var(--border)', padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <div className="desktop-only" style={{ padding: '0 10px 14px', fontSize: 16, fontWeight: 600, color: 'var(--text)' }}>Settings</div>
                             {[
                                 { id: 'general', icon: Settings, label: 'General' },
                                 { id: 'notifications', icon: Bell, label: 'Notifications' },
@@ -927,7 +952,7 @@ export function ChatbotInterface() {
     );
 }
 
-// ── Message Bubble ────────────────────────────────────────────────────────────
+//   Message Bubble     
 function MessageBubble({ message, onFeedback }: { message: ChatMessage; onFeedback: (id: string, score: number) => void }) {
     const isUser = message.role === 'user';
     const emotionDisplay = message.emotion ? EMOTION_DISPLAY[message.emotion as Emotion] : null;
@@ -945,7 +970,7 @@ function MessageBubble({ message, onFeedback }: { message: ChatMessage; onFeedba
                 )}
             </div>
 
-            <div style={{ maxWidth: '78%', display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
+            <div className="bubble-max-width-mobile" style={{ maxWidth: '78%', display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
                 {isUser && message.attachments && message.attachments.length > 0 && (
                     <div style={{ marginBottom: 6, display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end' }}>
                         {message.attachments.map((att, i) =>

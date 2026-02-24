@@ -70,54 +70,58 @@ async def generate_suggestions(
     context_str += f"User: {processing_state.message[:300]}"
     
     # Prompt LLM to predict follow-ups based on conversation state
-    prompt = f"""Dựa trên đoạn hội thoại ngắn sau, hãy gợi ý 5 câu hỏi tiếp theo NGẮN GỌN (dưới 15 từ) mà người dùng có thể muốn hỏi tiếp.
+    prompt = f"""Dựa trên đoạn hội thoại ngắn sau, hãy gợi ý ít nhất 5 câu hỏi tiếp theo NGẮN GỌN (dưới 15 từ) mà người dùng có thể muốn hỏi tiếp.
 
 Đoạn hội thoại:
 {context_str}
 
 Yêu cầu:
-- Câu hỏi TỰ NHIÊN, như một người dùng thật đang tò mò (Vd: "Ở đó có món gì ngon không?").
-- ĐA DẠNG về chủ đề (lịch trình, món ăn, thời tiết, kinh nghiệm).
-- Gắn với ngữ cảnh của đoạn chat, KHÔNG hỏi chung chung.
-- KHÔNG dùng "Giá vé", "Cách đến" chung chung - hãy sáng tạo hơn!
-- KHÔNG bắt đầu bằng "Gợi ý", "Top".
+- Câu hỏi TỰ NHIÊN, đa dạng chủ đề (ẩm thực, lịch trình, thời tiết, kinh phí).
+- KHÔNG dùng "Gợi ý", "Top".
+- Chỉ trả về JSON array của các object.
 
-Trả về JSON array THUẦN:
-[{{ "text":"Nên đi mùa nào đẹp nhất?", "category":"weather" }}]"""
+Trả về JSON array mẫu:
+[
+  {{ "text": "Hội An có đặc sản gì ngon?", "category": "food" }},
+  {{ "text": "Lịch trình đi 3 ngày 2 đêm như thế nào?", "category": "schedule" }},
+  {{ "text": "Thời tiết tháng này có thích hợp đi không?", "category": "weather" }},
+  {{ "text": "Có khách sạn nào gần Phố Cổ giá rẻ không?", "category": "stay" }},
+  {{ "text": "Cách di chuyển từ Đà Nẵng đến đây?", "category": "transport" }}
+]"""
 
     try:
         from ..utils.gemini_client import gemini_fast
         
-        response = await gemini_fast.generate(
+        result = await gemini_fast.generate_json(
             prompt=prompt,
+            schema={
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "text": {"type": "string"},
+                        "category": {"type": "string"}
+                    },
+                    "required": ["text"]
+                }
+            },
             temperature=0.7,
-            max_tokens=400
+            max_tokens=600
         )
         
-        # ROBUST JSON extraction
-        clean = response.strip()
-        if "```" in clean:
-            parts = clean.split("```")
-            for part in parts:
-                if part.strip().startswith("[") or part.strip().startswith("json"):
-                    clean = part.replace("json", "").strip()
-                    break
+        # result might be a list directly if the schema is array
+        suggestions_data = result if isinstance(result, list) else result.get("suggestions", [])
         
-        start_idx = clean.find("[")
-        end_idx = clean.rfind("]")
-        
-        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            json_str = clean[start_idx:end_idx + 1]
-            suggestions_data = json.loads(json_str)
-            
+        if suggestions_data:
             formatted_suggestions = []
             for item in suggestions_data:
+                if not isinstance(item, dict): continue
                 text = item.get("text", "").strip()
                 category = item.get("category", "next_step")
-                if text and len(text) < 60:
+                if text and len(text) < 65:
                     formatted_suggestions.append({"text": text, "category": category})
             
-            if len(formatted_suggestions) >= 3:
+            if len(formatted_suggestions) >= 2:
                 output_state.suggested_prompts = formatted_suggestions[:5]
                 return output_state
                 
