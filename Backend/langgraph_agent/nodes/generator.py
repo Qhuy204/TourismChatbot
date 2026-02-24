@@ -35,39 +35,79 @@ EMOTION_STYLES = {
 def build_system_prompt(
     user_context: UserContextState,
     emotion: EmotionType,
-    intent: IntentType
+    intent: IntentType,
+    language: str = "vi"
 ) -> str:
     """Build system prompt with user context and emotion styling"""
     style = EMOTION_STYLES.get(emotion, EMOTION_STYLES[EmotionType.NEUTRAL])
     
-    # Base prompt
-    prompt_parts = [
-        "Bạn là trợ lý du lịch Việt Nam thân thiện và am hiểu.",
-        "CHỈ nhúng ảnh nếu URL có trong 'Thông tin tham khảo' bằng cú pháp: ![Mô tả](URL). KHÔNG TỰ BỊA URL ẢNH.",
-        f"Phong cách trả lời: {style['tone']}.",
-    ]
+    # Base prompt based on language
+    base_prompts = {
+        "vi": [
+            "Bạn là trợ lý du lịch Việt Nam thân thiện và am hiểu.",
+            "Hãy trả lời bằng tiếng Việt.",
+            "CHỈ nhúng ảnh nếu URL có trong 'Thông tin tham khảo' bằng cú pháp: ![Mô tả](URL). KHÔNG TỰ BỊA URL ẢNH.",
+            f"Phong cách trả lời: {style['tone']}."
+        ],
+        "en": [
+            "You are a friendly and knowledgeable Vietnam travel assistant.",
+            "Respond in English.",
+            "ONLY embed images if the URL is in the 'Reference context' using syntax: ![Description](URL). DO NOT MAKE UP IMAGE URLS.",
+            f"Response style: {style['tone']}."
+        ],
+        "zh": [
+            "你是一个友好且博学的越南旅游助手。",
+            "用中文回答（简体中文）。",
+            "仅在“参考信息”中包含 URL 时，才使用语法嵌入图像：![描述](URL)。 不要编造图像 URL。",
+            f"回复风格：{style['tone']}。"
+        ]
+    }
+    
+    prompt_parts = base_prompts.get(language, base_prompts["vi"]).copy()
     
     # Add user preferences if available
     if user_context.preferred_cities:
         cities = ", ".join(user_context.preferred_cities[:3])
-        prompt_parts.append(f"User thích: {cities}.")
+        pref_label = {"vi": "User thích", "en": "User likes", "zh": "用户喜欢"}.get(language, "User thích")
+        prompt_parts.append(f"{pref_label}: {cities}.")
     
     if user_context.travel_style:
-        prompt_parts.append(f"Phong cách du lịch: {user_context.travel_style}.")
+        style_label = {"vi": "Phong cách du lịch", "en": "Travel style", "zh": "旅行风格"}.get(language, "Phong cách du lịch")
+        prompt_parts.append(f"{style_label}: {user_context.travel_style}.")
     
     if user_context.interests:
         interests = ", ".join(user_context.interests[:3])
-        prompt_parts.append(f"Sở thích: {interests}.")
+        interest_label = {"vi": "Sở thích", "en": "Interests", "zh": "兴趣"}.get(language, "Sở thích")
+        prompt_parts.append(f"{interest_label}: {interests}.")
     
     # Intent-specific instructions
-    if intent == IntentType.CHIT_CHAT:
-        prompt_parts.append("Đây là chit-chat, hãy trả lời ngắn gọn và thân thiện.")
-    elif intent == IntentType.NEGATIVE_FEEDBACK:
-        prompt_parts.append("User đang không hài lòng, hãy xin lỗi và cải thiện.")
+    intent_instr = {
+        "vi": {
+            IntentType.CHIT_CHAT: "Đây là chit-chat, hãy trả lời ngắn gọn và thân thiện.",
+            IntentType.NEGATIVE_FEEDBACK: "User đang không hài lòng, hãy xin lỗi và cải thiện.",
+            "emoji": "Có thể dùng emoji phù hợp."
+        },
+        "en": {
+            IntentType.CHIT_CHAT: "This is chit-chat, respond briefly and friendly.",
+            IntentType.NEGATIVE_FEEDBACK: "User is dissatisfied, apologize and improve.",
+            "emoji": "You can use appropriate emojis."
+        },
+        "zh": {
+            IntentType.CHIT_CHAT: "这是闲聊，回答要简短友好。",
+            IntentType.NEGATIVE_FEEDBACK: "用户不满意，道歉并改进。",
+            "emoji": "可以使用适当的表情符号。"
+        }
+    }.get(language, {
+            IntentType.CHIT_CHAT: "Đây là chit-chat, hãy trả lời ngắn gọn và thân thiện.",
+            IntentType.NEGATIVE_FEEDBACK: "User đang không hài lòng, hãy xin lỗi và cải thiện.",
+            "emoji": "Có thể dùng emoji phù hợp."
+        })
+        
+    if intent in intent_instr:
+        prompt_parts.append(intent_instr[intent])
     
-    # Emoji instruction
     if style['emoji']:
-        prompt_parts.append("Có thể dùng emoji phù hợp.")
+        prompt_parts.append(intent_instr.get("emoji", ""))
     
     return " ".join(prompt_parts)
 
@@ -85,7 +125,8 @@ async def generate_response(
     system_prompt = build_system_prompt(
         user_context=user_context,
         emotion=processing_state.emotion,
-        intent=processing_state.intent
+        intent=processing_state.intent,
+        language=processing_state.language
     )
     
     # Build conversation context
@@ -122,7 +163,12 @@ async def generate_response(
     prompt_parts.append("Hội thoại:")
     prompt_parts.append(conversation)
     prompt_parts.append("")
-    prompt_parts.append("Trả lời (chi tiết, hữu ích):")
+    instr = {
+        "vi": "Trả lời (chi tiết, hữu ích):",
+        "en": "Response (detailed, helpful):",
+        "zh": "回答（详细、有用）："
+    }.get(processing_state.language, "Trả lời (chi tiết, hữu ích):")
+    prompt_parts.append(instr)
     
     final_prompt = "\n".join(prompt_parts)
     
@@ -175,7 +221,12 @@ async def generate_response(
         
     except Exception as e:
         print(f"Generation error: {e}")
-        output_state.response = "Xin lỗi, tôi gặp lỗi khi xử lý. Bạn có thể thử lại không?"
+        err_msg = {
+            "vi": "Xin lỗi, tôi gặp lỗi khi xử lý. Bạn có thể thử lại không?",
+            "en": "Sorry, I encountered an error. Could you try again?",
+            "zh": "抱歉，处理时出错。你能再试一次吗？"
+        }.get(processing_state.language, "Xin lỗi, tôi gặp lỗi khi xử lý. Bạn có thể thử lại không?")
+        output_state.response = err_msg
         output_state.model_used = "error"
     
     return output_state
@@ -188,7 +239,8 @@ async def generate_response_stream(
     system_prompt = build_system_prompt(
         user_context=user_context,
         emotion=processing_state.emotion,
-        intent=processing_state.intent
+        intent=processing_state.intent,
+        language=processing_state.language
     )
     
     conversation = build_context_prompt(
@@ -220,7 +272,12 @@ async def generate_response_stream(
     prompt_parts.append("Hội thoại:")
     prompt_parts.append(conversation)
     prompt_parts.append("")
-    prompt_parts.append("Trả lời (chi tiết, hữu ích):")
+    instr = {
+        "vi": "Trả lời (chi tiết, hữu ích):",
+        "en": "Response (detailed, helpful):",
+        "zh": "回答（详细、有用）："
+    }.get(processing_state.language, "Trả lời (chi tiết, hữu ích):")
+    prompt_parts.append(instr)
     
     final_prompt = "\n".join(prompt_parts)
     

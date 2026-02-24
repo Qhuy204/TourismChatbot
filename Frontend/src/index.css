@@ -465,6 +465,10 @@ textarea::placeholder {
   background: rgba(255, 255, 255, 0.05) !important;
 }
 
+.btn-close-settings:hover {
+  background: var(--border) !important;
+}
+
 @media (max-width: 768px) {
   .settings-tab-btn {
     width: auto !important;

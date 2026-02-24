@@ -58,9 +58,9 @@ export default function ContactPage() {
                                     Need help with technical issues or products?
                                 </p>
                                 {[
-                                    { icon: Mail, text: 'support@aibot.vn' },
-                                    { icon: Phone, text: '+84 (0) 123 456 789' },
-                                    { icon: MapPin, text: 'Ho Chi Minh City, Vietnam' },
+                                    { icon: Mail, text: 'truongquochuy234@gmail.com' },
+                                    { icon: Phone, text: '+84 (0) 856 012 976' },
+                                    { icon: MapPin, text: 'Hanoi, Vietnam' },
                                 ].map(({ icon: Icon, text }) => (
                                     <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
                                         <div style={{

@@ -26,6 +26,7 @@ class ChatRequest(BaseModel):
     history: List[Dict] = []
     model_mode: Optional[str] = "gemini"
     attachments: Optional[List[Dict]] = None  # [{url, type, name}]
+    language: Optional[str] = "vi"
 
 
 class SuggestionItem(BaseModel):
@@ -88,6 +89,7 @@ class RecommendationsRequest(BaseModel):
     topics: Optional[List[str]] = None
     recent_locations: Optional[List[str]] = None
     limit: int = 5
+    language: Optional[str] = "vi"
 
 
 class ContextualSuggestionsRequest(BaseModel):
@@ -204,7 +206,8 @@ async def chat(request: ChatRequest):
             session_id=request.session_id,
             message=request.message,
             history=request.history,
-            model_mode=request.model_mode
+            model_mode=request.model_mode,
+            language=request.language
         )
         
         # Convert suggestions to response format
@@ -244,7 +247,8 @@ async def chat_stream(request: ChatRequest):
                 message=request.message,
                 history=request.history,
                 model_mode=request.model_mode,
-                attachments=request.attachments
+                attachments=request.attachments,
+                language=request.language
             ):
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
         except Exception as e:
@@ -297,17 +301,41 @@ async def get_initial_suggestions(request: RecommendationsRequest):
     all_interests = list(set((prefs.get("interests") or []) + topics))
     preferred_cities = prefs.get("preferred_cities") or []
     
-    # Default suggestions for new users
-    default_data = {
-        "welcome_message": "Xin chào! Tôi có thể giúp gì cho chuyến du lịch của bạn?",
-        "suggestions": [
-            {"text": "Địa điểm du lịch hot nhất 2026", "category": "trending"},
-            {"text": "Gợi ý du lịch biển đẹp", "category": "discovery"},
-            {"text": "Lịch trình Đà Nẵng 3 ngày", "category": "itinerary"},
-            {"text": "Ẩm thực đường phố Hà Nội", "category": "food"},
-            {"text": "Cẩm nang du lịch trải nghiệm", "category": "tips"}
-        ]
+    # Default suggestions based on language
+    defaults = {
+        "vi": {
+            "welcome_message": "Xin chào! Tôi có thể giúp gì cho chuyến du lịch của bạn?",
+            "suggestions": [
+                {"text": "Địa điểm du lịch hot nhất 2026", "category": "trending"},
+                {"text": "Gợi ý du lịch biển đẹp", "category": "discovery"},
+                {"text": "Lịch trình Đà Nẵng 3 ngày", "category": "itinerary"},
+                {"text": "Ẩm thực đường phố Hà Nội", "category": "food"},
+                {"text": "Cẩm nang du lịch trải nghiệm", "category": "tips"}
+            ]
+        },
+        "en": {
+            "welcome_message": "Hello! How can I help with your travel plans?",
+            "suggestions": [
+                {"text": "Top trending destinations 2026", "category": "trending"},
+                {"text": "Beautiful beach recommendations", "category": "discovery"},
+                {"text": "3-day Da Nang itinerary", "category": "itinerary"},
+                {"text": "Hanoi street food guide", "category": "food"},
+                {"text": "Adventure travel handbook", "category": "tips"}
+            ]
+        },
+        "zh": {
+            "welcome_message": "您好！我能为您的旅游计划提供什么帮助？",
+            "suggestions": [
+                {"text": "2026年热门旅游目的地", "category": "trending"},
+                {"text": "美丽海滩推荐", "category": "discovery"},
+                {"text": "岘港3日游行程", "category": "itinerary"},
+                {"text": "河内街头美食指南", "category": "food"},
+                {"text": "探险旅游手册", "category": "tips"}
+            ]
+        }
     }
+    
+    default_data = defaults.get(request.language, defaults["vi"])
     
     if not all_interests and not preferred_cities:
         return default_data
@@ -318,7 +346,13 @@ async def get_initial_suggestions(request: RecommendationsRequest):
         city_str = ", ".join(preferred_cities[:3]) if preferred_cities else ""
         recent_loc_str = ", ".join(recent_locations[:3]) if recent_locations else ""
         
-        prompt = f"""Bạn là trợ lý du lịch AI thông minh. 
+        lang_instruction = {
+            "vi": "Hãy trả lời bằng tiếng Việt.",
+            "en": "Respond in English.",
+            "zh": "用中文回答（简体中文）。"
+        }.get(request.language, "Hãy trả lời bằng tiếng Việt.")
+        
+        prompt = f"""Bạn là trợ lý du lịch AI thông minh. {lang_instruction}
 Người dùng đặc biệt quan tâm các chủ đề: {interest_str}
 {f"Các địa điểm tìm kiếm gần nhất: {recent_loc_str}" if recent_loc_str else f"Địa điểm yêu thích: {city_str}" if city_str else ""}
 
@@ -396,8 +430,9 @@ class ContextualSuggestionsRequest(BaseModel):
     locations: List[str]
     last_question: Optional[str] = None
     last_response: Optional[str] = None
-    user_messages: Optional[List[str]] = []
+    user_messages: Optional[List[Dict]] = []
     limit: int = 4
+    language: Optional[str] = "vi"
 
 @app.post("/langgraph/contextual_suggestions")
 async def get_contextual_suggestions(request: ContextualSuggestionsRequest):
@@ -412,6 +447,12 @@ async def get_contextual_suggestions(request: ContextualSuggestionsRequest):
         return {"suggestions": []}
     
     try:
+        lang_instruction = {
+            "vi": "Hãy trả lời bằng tiếng Việt.",
+            "en": "Respond in English.",
+            "zh": "用中文回答（简体中文）。"
+        }.get(request.language, "Hãy trả lời bằng tiếng Việt.")
+
         if locations:
             locations_str = f"Người dùng đang tìm hiểu về các địa điểm: {', '.join(locations)}\n"
         else:
@@ -424,16 +465,20 @@ async def get_contextual_suggestions(request: ContextualSuggestionsRequest):
         # Analyze user style if messages provided
         style_instruction = ""
         if request.user_messages:
-            samples = "\n".join([f'- "{msg}"' for msg in request.user_messages[-5:]])
+            # Handle list of dicts or list of strings
+            msg_list = []
+            for m in request.user_messages[-5:]:
+                if isinstance(m, dict): msg_list.append(m.get("content", ""))
+                else: msg_list.append(str(m))
+            samples = "\n".join([f'- "{msg}"' for msg in msg_list])
             style_instruction = f"""
 PHONG CÁCH CỦA USER (Hãy bắt chước tone giọng này):
 {samples}
-- Nếu user dùng từ đệm "nhỉ", "ha" -> Dùng 1 chút cho tự nhiên, NHƯNG KHÔNG LẠM DỤNG.
-- Nếu user hỏi ngắn gọn -> Hãy hỏi ngắn, trực diện.
 """
 
         prompt = f"""{locations_str}{context_hint}
 {style_instruction}
+{lang_instruction}
 
 Tạo {limit} câu hỏi gợi ý tiếp theo TỰ NHIÊN, NGẮN GỌN (dưới 15 từ) để kích thích cuộc hội thoại.
 

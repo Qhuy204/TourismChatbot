@@ -46,6 +46,7 @@ class GraphState(TypedDict):
     
     # Configuration
     model_mode: str
+    language: str
 
 
  
@@ -114,7 +115,8 @@ async def node_init(state: GraphState) -> GraphState:
         message=state["message"],
         history=state.get("history", []),
         model_mode=mode,
-        attachments=state.get("attachments", [])
+        attachments=state.get("attachments", []),
+        language=state.get("language", "vi")
     )
     state["output"] = OutputState()
     return state
@@ -300,7 +302,8 @@ async def run_graph(
     session_id: str,
     message: str,
     history: List[Dict] = None,
-    model_mode: str = "gemini"
+    model_mode: str = "gemini",
+    language: str = "vi"
 ) -> Dict:
     """
     Run the full graph pipeline.
@@ -320,7 +323,8 @@ async def run_graph(
         "user_context": None,
         "processing": None,
         "output": None,
-        "model_mode": model_mode
+        "model_mode": model_mode,
+        "language": language
     }
     
     # Run graph
@@ -410,7 +414,8 @@ async def run_graph_stream(
     message: str,
     history: List[Dict] = None,
     model_mode: str = "gemini",
-    attachments: List[Dict] = None
+    attachments: List[Dict] = None,
+    language: str = "vi"
 ):
     """
     Streamed version of run_graph.
@@ -431,7 +436,8 @@ async def run_graph_stream(
         "processing": None,
         "output": None,
         "model_mode": model_mode,
-        "attachments": attachments or []
+        "attachments": attachments or [],
+        "language": language
     }
     
     # Run setup nodes manually with timing

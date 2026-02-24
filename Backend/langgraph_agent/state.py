@@ -88,6 +88,7 @@ class MessageProcessingState:
     
     # Attachments (images for vision models)
     attachments: List[Dict] = field(default_factory=list)  # [{url, type, name}]
+    language: str = "vi"
     
     # Retrieved context
     retrieved_context: List[Dict] = field(default_factory=list)

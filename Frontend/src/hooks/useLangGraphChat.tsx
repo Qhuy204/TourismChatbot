@@ -33,7 +33,7 @@ export interface SuggestionItem {
 // Per-session message cache (avoids re-fetching on tab switch)
 const sessionMessagesCache: Record<string, ChatMessage[]> = {};
 
-export function useLangGraphChat(initialSessionId?: string) {
+export function useLangGraphChat(initialSessionId?: string, language: string = 'vi') {
     const { user } = useAuth();
     const {
         sessionId: savedSessionId,
@@ -170,7 +170,8 @@ export function useLangGraphChat(initialSessionId?: string) {
         attachments?: Array<{ url: string; type: string; name?: string }>,
         memoryShareEnabled: boolean = false,
         onNewTitle?: (title: string) => void,
-        overrideModelMode?: 'gemini' | 'qwen'
+        overrideModelMode?: 'gemini' | 'qwen',
+        language?: string
     ) => {
         if (!content.trim() || !user?.id) return;
         setError(null);
@@ -217,6 +218,7 @@ export function useLangGraphChat(initialSessionId?: string) {
                     memory_scope: memoryShareEnabled ? 'global' : 'session',
                     model_mode: overrideModelMode || modelMode,
                     attachments: attachments?.map(a => ({ url: a.url, type: a.type, name: a.name || 'image' })),
+                    language: language || 'vi'
                 }),
             });
 
@@ -325,7 +327,8 @@ export function useLangGraphChat(initialSessionId?: string) {
                 body: JSON.stringify({
                     user_id: user.id,
                     topics: mergedTopics,
-                    recent_locations: recentLocations
+                    recent_locations: recentLocations,
+                    language: language
                 }),
             });
             if (res.ok) {
@@ -362,7 +365,8 @@ export function useLangGraphChat(initialSessionId?: string) {
                     locations: locations, // Có thể rỗng, DB Backend tự linh hoạt fallback sang user_msgs 
                     limit: 4,
                     user_messages: userMsgs,
-                    last_response: lastResponse
+                    last_response: lastResponse,
+                    language: language
                 }),
             });
             if (res.ok) {

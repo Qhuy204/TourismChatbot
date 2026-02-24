@@ -8,38 +8,41 @@ import {
     Bot, BarChart3, Globe, Shield, Map
 } from 'lucide-react';
 
-const quickActions = [
-    { icon: Search, label: 'RAG Search', desc: 'Real-time Vietnam DB', color: '#1d6de0' },
-    { icon: Map, label: 'Route Plan', desc: 'Optimum itineraries', color: '#06b6d4' },
-    { icon: Image, label: 'AI Vision', desc: 'Analyze travel photos', color: '#8b5cf6' },
-    { icon: Mic, label: 'Voice companion', desc: 'Smart voice navigation', color: '#10b981' },
-];
-
-const features = [
-    { icon: MessageSquare, label: 'Intent & Context', desc: 'Natural dialogue with deep memory of your preferences.' },
-    { icon: Zap, label: 'Real-time tool calling', desc: 'Instant access to Live Weather, Exchange Rates, and local data.' },
-    { icon: Image, label: 'Multi-Modal Vision', desc: 'Identify landmarks, menus, and documents using advanced AI layers.' },
-    { icon: Globe, label: 'Global Intelligence', desc: 'Seamlessly switch between multiple LLM models (Gemini/Qwen).' },
-    { icon: Shield, label: 'Enterprise Security', desc: 'Secure data management with vector-level protection.' },
-    { icon: BarChart3, label: 'Travel Analytics', desc: 'Discover travel patterns and data-driven recommendations.' },
-];
-
-const stats = [
-    { value: '100%', label: 'Destination Coverage', icon: TrendingUp },
-    { value: '50%', label: 'Faster Trip Planning', icon: Clock },
-    { value: '90%', label: 'User Satisfaction', icon: Star },
-];
-
-const steps = [
-    { num: '01', title: 'Contextual Input', desc: 'Ask anything or upload your travel documents.' },
-    { num: '02', title: 'AI Processing', desc: 'Gemini & Qwen models analyze your request instantly.' },
-    { num: '03', title: 'Data Retrieval', desc: 'We fetch real-time data from our Vietnam Knowledge Base.' },
-    { num: '04', title: 'Instant Result', desc: 'Receive perfect plans, maps, and local insights.' },
-];
+import { useLanguage } from '@/hooks/useLanguage';
 
 export default function LandingPage() {
     const navigate = useNavigate();
     const { user } = useAuth();
+    const { t } = useLanguage();
+
+    const quickActions = [
+        { icon: Search, label: t.search, desc: 'Real-time Vietnam DB', color: '#1d6de0' },
+        { icon: Map, label: 'Route Plan', desc: 'Optimum itineraries', color: '#06b6d4' },
+        { icon: Image, label: 'AI Vision', desc: 'Analyze travel photos', color: '#8b5cf6' },
+        { icon: Mic, label: 'Voice companion', desc: 'Smart voice navigation', color: '#10b981' },
+    ];
+
+    const features = [
+        { icon: MessageSquare, label: t.feat1, desc: t.feat1Desc },
+        { icon: Zap, label: t.feat2, desc: t.feat2Desc },
+        { icon: Image, label: t.feat3, desc: t.feat3Desc },
+        { icon: Globe, label: t.feat4, desc: t.feat4Desc },
+        { icon: Shield, label: t.feat5, desc: t.feat5Desc },
+        { icon: BarChart3, label: t.feat6, desc: t.feat6Desc },
+    ];
+
+    const stats = [
+        { value: '100%', label: t.statsCoverage, icon: TrendingUp },
+        { value: '50%', label: t.statsFaster, icon: Clock },
+        { value: '90%', label: t.statsSatisfaction, icon: Star },
+    ];
+
+    const steps = [
+        { num: '01', title: t.step1, desc: t.step1Desc },
+        { num: '02', title: t.step2, desc: t.step2Desc },
+        { num: '03', title: t.step3, desc: t.step3Desc },
+        { num: '04', title: t.step4, desc: t.step4Desc },
+    ];
 
     return (
         <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
@@ -55,7 +58,7 @@ export default function LandingPage() {
                     }}>
                         <Zap size={14} color="var(--primary)" />
                         <span style={{ fontSize: 13, color: 'var(--primary)', fontWeight: 600 }}>
-                            All-in-one AI Travel Assistant
+                            {t.features}
                         </span>
                     </div>
 
@@ -67,8 +70,8 @@ export default function LandingPage() {
                         marginBottom: 20,
                         letterSpacing: '-2px',
                     }}>
-                        All-in-one AI Assistant.<br className="desktop-only" />
-                        <span className="text-gradient">Personalized, Fast and Free</span>
+                        {t.heroTitle}<br className="desktop-only" />
+                        <span className="text-gradient">{t.heroSubtitle}</span>
                     </h1>
 
                     <p style={{
@@ -78,8 +81,7 @@ export default function LandingPage() {
                         margin: '0 auto 32px',
                         lineHeight: 1.6,
                     }}>
-                        Your intelligent travel companion for Vietnam. Discover destinations,
-                        plan itineraries, and get real-time travel insights — all powered by AI.
+                        {t.heroDesc}
                     </p>
 
                     <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -88,14 +90,14 @@ export default function LandingPage() {
                             style={{ padding: '14px 32px', fontSize: 16, borderRadius: 12 }}
                             onClick={() => navigate(user ? '/app' : '/auth')}
                         >
-                            {user ? 'Go to Dashboard' : 'Get Started Free'}
+                            {user ? t.goDashboard : t.getStarted}
                         </button>
                         <button
                             className="btn-outline"
                             style={{ padding: '14px 32px', fontSize: 16, borderRadius: 12 }}
                             onClick={() => navigate('/features')}
                         >
-                            See how it works
+                            {t.howItWorks}
                         </button>
                     </div>
                 </div>
@@ -140,10 +142,10 @@ export default function LandingPage() {
                             {/* Main Chat */}
                             <div style={{ padding: 24, background: 'var(--bg-card)' }}>
                                 <h3 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
-                                    Xin chào! 👋
+                                    {t.ask.split(' ')[0]}! 👋
                                 </h3>
                                 <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
-                                    Tôi có thể giúp bạn lên kế hoạch du lịch hôm nay không?
+                                    {t.heroDesc.split('.')[0]}?
                                 </p>
                                 <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
                                     {quickActions.map(({ icon: Icon, label, desc, color }) => (
@@ -170,7 +172,7 @@ export default function LandingPage() {
                                     border: '1px solid var(--border)',
                                     borderRadius: 10, padding: '10px 14px',
                                 }}>
-                                    <span style={{ flex: 1, fontSize: 13, color: 'var(--text-muted)' }}>Bạn muốn đi đâu ở Việt Nam? Ví dụ: Lịch trình Đà Nẵng 3 ngày...</span>
+                                    <span style={{ flex: 1, fontSize: 13, color: 'var(--text-muted)' }}>{t.ask}</span>
                                     <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         <ArrowRight size={13} color="white" />
                                     </div>
@@ -185,7 +187,7 @@ export default function LandingPage() {
             <section style={{ padding: '48px 0', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
                 <div className="container" style={{ textAlign: 'center' }}>
                     <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 28, letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600 }}>
-                        Trusted by explorers worldwide
+                        {t.trustedBy}
                     </p>
                     <div style={{ display: 'flex', gap: 'clamp(24px, 5vw, 48px)', justifyContent: 'center', flexWrap: 'wrap', opacity: 0.5 }}>
                         {['DeepMind', 'Gemini', 'Unsloth', 'LangGraph', 'Supabase'].map(name => (
@@ -202,10 +204,10 @@ export default function LandingPage() {
                 <div className="container">
                     <div style={{ textAlign: 'center', marginBottom: 56 }}>
                         <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.2rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 12 }}>
-                            Explore Our Simple, <span className="text-gradient">Easy Process</span>
+                            {t.processTitle.split(',')[0]}, <span className="text-gradient">{t.processTitle.split(',')[1] || t.processTitle}</span>
                         </h2>
                         <p style={{ color: 'var(--text-muted)', fontSize: 15 }}>
-                            Get started in minutes, not hours
+                            {t.processSubtitle}
                         </p>
                     </div>
                     <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24 }}>
@@ -252,10 +254,10 @@ export default function LandingPage() {
                 <div className="container">
                     <div style={{ textAlign: 'center', marginBottom: 56 }}>
                         <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.2rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 12 }}>
-                            All Possible <span className="text-gradient">AI Solutions</span>
+                            {t.features}
                         </h2>
                         <p style={{ color: 'var(--text-muted)', fontSize: 15, maxWidth: 500, margin: '0 auto' }}>
-                            Everything you need for the perfect travel experience
+                            {t.heroDesc}
                         </p>
                     </div>
                     <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
@@ -292,10 +294,10 @@ export default function LandingPage() {
                             <Zap size={28} color="white" />
                         </div>
                         <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.2rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 12 }}>
-                            Ready to Explore Vietnam?
+                            {t.ctaTitle}
                         </h2>
                         <p style={{ color: 'var(--text-muted)', fontSize: 16, maxWidth: 440, margin: '0 auto 36px' }}>
-                            Join thousands of travelers who use ViVi to discover hidden gems and plan perfect trips with the power of AI.
+                            {t.ctaDesc}
                         </p>
                         <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
                             <button
@@ -303,7 +305,7 @@ export default function LandingPage() {
                                 style={{ padding: '14px 36px', fontSize: 16, borderRadius: 12 }}
                                 onClick={() => navigate(user ? '/app' : '/auth')}
                             >
-                                {user ? 'Go to Dashboard' : 'Start for Free'} <ArrowRight size={16} style={{ display: 'inline', marginLeft: 6 }} />
+                                {user ? t.goDashboard : t.getStarted} <ArrowRight size={16} style={{ display: 'inline', marginLeft: 6 }} />
                             </button>
                             <button
                                 className="btn-outline"
@@ -315,7 +317,7 @@ export default function LandingPage() {
                         </div>
                         <p style={{ marginTop: 20, fontSize: 13, color: 'var(--text-muted)' }}>
                             <CheckCircle size={13} style={{ display: 'inline', marginRight: 4 }} color="var(--primary)" />
-                            Free plan available for all explorers
+                            {t.freePlan}
                         </p>
                     </div>
                 </div>
