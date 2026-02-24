@@ -44,12 +44,12 @@ export default function LandingPage() {
             <Navbar />
 
             {/* ── Hero ── */}
-            <section className="bg-network" style={{ padding: '100px 0 80px' }}>
+            <section className="bg-network py-mobile-12" style={{ padding: '120px 0 80px' }}>
                 <div className="container" style={{ textAlign: 'center' }}>
                     <div style={{
                         display: 'inline-flex', alignItems: 'center', gap: 8,
                         background: 'rgba(29,109,224,0.12)', border: '1px solid var(--border-strong)',
-                        padding: '6px 16px', borderRadius: 100, marginBottom: 32,
+                        padding: '6px 16px', borderRadius: 100, marginBottom: 24,
                     }}>
                         <Zap size={14} color="var(--primary)" />
                         <span style={{ fontSize: 13, color: 'var(--primary)', fontWeight: 600 }}>
@@ -58,39 +58,39 @@ export default function LandingPage() {
                     </div>
 
                     <h1 style={{
-                        fontSize: 'clamp(2.5rem, 6vw, 4.5rem)',
+                        fontSize: 'clamp(2.2rem, 8vw, 4.5rem)',
                         fontWeight: 800,
                         lineHeight: 1.1,
                         color: 'var(--text)',
-                        marginBottom: 24,
+                        marginBottom: 20,
                         letterSpacing: '-2px',
                     }}>
-                        All-in-one AI Assistant.<br />
+                        All-in-one AI Assistant.<br className="desktop-only" />
                         <span className="text-gradient">Personalized, Fast and Free</span>
                     </h1>
 
                     <p style={{
-                        fontSize: 18,
+                        fontSize: 16,
                         color: 'var(--text-secondary)',
-                        maxWidth: 560,
-                        margin: '0 auto 40px',
-                        lineHeight: 1.7,
+                        maxWidth: 600,
+                        margin: '0 auto 32px',
+                        lineHeight: 1.6,
                     }}>
                         Your intelligent travel companion for Vietnam. Discover destinations,
                         plan itineraries, and get real-time travel insights — all powered by AI.
                     </p>
 
-                    <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
                         <button
                             className="btn-primary animate-glow"
-                            style={{ padding: '14px 36px', fontSize: 16, borderRadius: 12 }}
+                            style={{ padding: '14px 32px', fontSize: 16, borderRadius: 12 }}
                             onClick={() => navigate('/app')}
                         >
                             Get Started Free
                         </button>
                         <button
                             className="btn-outline"
-                            style={{ padding: '14px 36px', fontSize: 16, borderRadius: 12 }}
+                            style={{ padding: '14px 32px', fontSize: 16, borderRadius: 12 }}
                             onClick={() => navigate('/features')}
                         >
                             Explore Features →
@@ -100,21 +100,21 @@ export default function LandingPage() {
             </section>
 
             {/* ── Dashboard Preview ── */}
-            <section style={{ padding: '80px 0', background: 'var(--bg-muted)' }}>
+            <section className="py-mobile-12" style={{ padding: '80px 0', background: 'var(--bg-muted)' }}>
                 <div className="container">
                     <div style={{
                         background: 'var(--bg-card)',
                         border: '1px solid var(--border)',
                         borderRadius: 20,
-                        padding: 32,
+                        padding: 'clamp(16px, 4vw, 32px)',
                         boxShadow: 'var(--shadow-glow)',
-                        maxWidth: 900,
+                        maxWidth: 1000,
                         margin: '0 auto',
                     }}>
                         {/* Mini App Preview */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 0, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)', minHeight: 420 }}>
+                        <div className="flex-col-mobile" style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 0, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)', minHeight: 460 }}>
                             {/* Sidebar */}
-                            <div style={{ background: 'var(--bg)', padding: '20px 12px', borderRight: '1px solid var(--border)' }}>
+                            <div className="hidden-mobile" style={{ background: 'var(--bg)', padding: '24px 16px', borderRight: '1px solid var(--border)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, padding: '0 4px' }}>
                                     <div style={{ width: 28, height: 28, borderRadius: 7, background: 'linear-gradient(135deg, #1d6de0, #06b6d4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         <Zap size={13} color="white" />
@@ -143,7 +143,7 @@ export default function LandingPage() {
                                 <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
                                     How can I help you plan your trip today?
                                 </p>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+                                <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
                                     {quickActions.map(({ icon: Icon, label, desc, color }) => (
                                         <div key={label} style={{
                                             padding: '14px 16px', borderRadius: 10,
@@ -196,17 +196,17 @@ export default function LandingPage() {
             </section>
 
             {/* ── Process Steps ── */}
-            <section style={{ padding: '100px 0' }}>
+            <section className="py-mobile-12" style={{ padding: '100px 0' }}>
                 <div className="container">
-                    <div style={{ textAlign: 'center', marginBottom: 64 }}>
-                        <h2 style={{ fontSize: 36, fontWeight: 800, color: 'var(--text)', marginBottom: 16 }}>
+                    <div style={{ textAlign: 'center', marginBottom: 56 }}>
+                        <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.2rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 12 }}>
                             Explore Our Simple, <span className="text-gradient">Easy Process</span>
                         </h2>
-                        <p style={{ color: 'var(--text-muted)', fontSize: 16 }}>
+                        <p style={{ color: 'var(--text-muted)', fontSize: 15 }}>
                             Get started in minutes, not hours
                         </p>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24 }}>
+                    <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24 }}>
                         {steps.map(({ num, title, desc }) => (
                             <div key={num} className="card" style={{ padding: 28, textAlign: 'center' }}>
                                 <div style={{
@@ -227,9 +227,9 @@ export default function LandingPage() {
             </section>
 
             {/* ── Stats ── */}
-            <section style={{ padding: '80px 0', background: 'var(--bg-muted)' }}>
+            <section className="py-mobile-12" style={{ padding: '80px 0', background: 'var(--bg-muted)' }}>
                 <div className="container">
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 32 }}>
+                    <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 32 }}>
                         {stats.map(({ value, label, icon: Icon }) => (
                             <div key={label} style={{ textAlign: 'center' }}>
                                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
@@ -246,17 +246,17 @@ export default function LandingPage() {
             </section>
 
             {/* ── Features Grid ── */}
-            <section style={{ padding: '100px 0' }}>
+            <section className="py-mobile-12" style={{ padding: '100px 0' }}>
                 <div className="container">
-                    <div style={{ textAlign: 'center', marginBottom: 64 }}>
-                        <h2 style={{ fontSize: 36, fontWeight: 800, color: 'var(--text)', marginBottom: 16 }}>
+                    <div style={{ textAlign: 'center', marginBottom: 56 }}>
+                        <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.2rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 12 }}>
                             All Possible <span className="text-gradient">AI Solutions</span>
                         </h2>
-                        <p style={{ color: 'var(--text-muted)', fontSize: 16, maxWidth: 500, margin: '0 auto' }}>
+                        <p style={{ color: 'var(--text-muted)', fontSize: 15, maxWidth: 500, margin: '0 auto' }}>
                             Everything you need for the perfect travel experience
                         </p>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
+                    <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
                         {features.map(({ icon: Icon, label, desc }) => (
                             <div key={label} className="card" style={{ padding: 28, display: 'flex', gap: 16 }}>
                                 <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(29,109,224,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -273,9 +273,9 @@ export default function LandingPage() {
             </section>
 
             {/* ── CTA ── */}
-            <section style={{ padding: '100px 0', background: 'var(--bg-muted)' }}>
+            <section className="py-mobile-12" style={{ padding: '100px 0', background: 'var(--bg-muted)' }}>
                 <div className="container" style={{ textAlign: 'center' }}>
-                    <div style={{
+                    <div className="py-mobile-12 px-mobile-6" style={{
                         background: 'var(--bg-card)',
                         border: '1px solid var(--border-strong)',
                         borderRadius: 24, padding: '64px 48px',
@@ -289,7 +289,7 @@ export default function LandingPage() {
                         }}>
                             <Zap size={28} color="white" />
                         </div>
-                        <h2 style={{ fontSize: 36, fontWeight: 800, color: 'var(--text)', marginBottom: 16 }}>
+                        <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.2rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 12 }}>
                             Ready to Explore Vietnam?
                         </h2>
                         <p style={{ color: 'var(--text-muted)', fontSize: 16, maxWidth: 440, margin: '0 auto 36px' }}>

@@ -5,13 +5,13 @@ export function Footer() {
     const year = new Date().getFullYear();
 
     return (
-        <footer style={{
+        <footer className="py-mobile-12" style={{
             background: 'var(--bg-card)',
             borderTop: '1px solid var(--border)',
             padding: '60px 0 32px',
         }}>
             <div className="container">
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 40, marginBottom: 48 }}>
+                <div className="grid-cols-mobile-2" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 40, marginBottom: 48 }}>
                     {/* Brand */}
                     <div>
                         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', marginBottom: 16 }}>
@@ -133,13 +133,6 @@ export function Footer() {
                 </div>
             </div>
 
-            <style>{`
-        @media (max-width: 768px) {
-          footer > div > div:first-child > div:first-child {
-            grid-template-columns: 1fr 1fr !important;
-          }
-        }
-      `}</style>
         </footer>
     );
 }

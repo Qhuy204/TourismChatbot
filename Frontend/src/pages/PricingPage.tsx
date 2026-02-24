@@ -68,25 +68,25 @@ export default function PricingPage() {
             <Navbar />
 
             {/* Hero */}
-            <section className="bg-network" style={{ padding: '80px 0 60px' }}>
+            <section className="bg-network py-mobile-12" style={{ padding: '80px 0 60px' }}>
                 <div className="container" style={{ maxWidth: 640 }}>
-                    <h1 style={{ fontSize: 48, fontWeight: 800, color: 'var(--text)', marginBottom: 16, lineHeight: 1.1 }}>
+                    <h1 style={{ fontSize: 'clamp(2.2rem, 4.5vw, 3rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 16, lineHeight: 1.1 }}>
                         Plans for Teams of<br />
                         <span className="text-gradient">Every Size</span>
                     </h1>
-                    <p style={{ fontSize: 17, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                    <p style={{ fontSize: 16, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
                         Simple, Transparent Pricing That Grows With Your App. No Limits, No Barriers.
                     </p>
                 </div>
             </section>
 
             {/* Pricing Cards */}
-            <section style={{ padding: '80px 0' }}>
+            <section className="py-mobile-12" style={{ padding: '80px 0' }}>
                 <div className="container">
-                    <h2 style={{ textAlign: 'center', fontSize: 30, fontWeight: 800, color: 'var(--text)', marginBottom: 56 }}>
+                    <h2 style={{ textAlign: 'center', fontSize: 'clamp(1.5rem, 3.5vw, 1.8rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 44 }}>
                         Flexible Plans for Every Team
                     </h2>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, alignItems: 'start' }}>
+                    <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, alignItems: 'start' }}>
                         {plans.map(({ name, price, period, description, icon: Icon, cta, ctaStyle, features, highlight }) => (
                             <div
                                 key={name}
@@ -154,12 +154,12 @@ export default function PricingPage() {
             </section>
 
             {/* FAQ CTA */}
-            <section style={{ padding: '80px 0', background: 'var(--bg-muted)' }}>
+            <section className="py-mobile-12" style={{ padding: '80px 0', background: 'var(--bg-muted)' }}>
                 <div className="container" style={{ textAlign: 'center' }}>
-                    <h2 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>
+                    <h2 style={{ fontSize: 'clamp(1.5rem, 3.5vw, 1.8rem)', fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>
                         Still have questions?
                     </h2>
-                    <p style={{ color: 'var(--text-muted)', marginBottom: 28 }}>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 15, marginBottom: 28 }}>
                         Our team is happy to help you find the right plan.
                     </p>
                     <button

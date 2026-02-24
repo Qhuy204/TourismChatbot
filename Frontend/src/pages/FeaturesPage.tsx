@@ -86,29 +86,29 @@ export default function FeaturesPage() {
             <Navbar />
 
             {/* Hero */}
-            <section className="bg-network" style={{ padding: '80px 0 60px' }}>
+            <section className="bg-network py-mobile-12" style={{ padding: '80px 0 60px' }}>
                 <div className="container" style={{ maxWidth: 640 }}>
                     <div style={{
                         display: 'inline-flex', alignItems: 'center', gap: 8,
                         background: 'rgba(29,109,224,0.12)', border: '1px solid var(--border-strong)',
-                        padding: '5px 14px', borderRadius: 100, marginBottom: 24,
+                        padding: '5px 14px', borderRadius: 100, marginBottom: 20,
                     }}>
                         <Zap size={13} color="var(--primary)" />
                         <span style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600 }}>Explore Features</span>
                     </div>
-                    <h1 style={{ fontSize: 48, fontWeight: 800, color: 'var(--text)', marginBottom: 16, lineHeight: 1.1 }}>
+                    <h1 style={{ fontSize: 'clamp(2.2rem, 4.5vw, 3rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 16, lineHeight: 1.1 }}>
                         Explore Our <span className="text-gradient">Features</span>
                     </h1>
-                    <p style={{ fontSize: 17, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                    <p style={{ fontSize: 16, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
                         Everything you need to plan, discover, and experience Vietnam — all powered by cutting-edge AI.
                     </p>
                 </div>
             </section>
 
             {/* Feature Cards */}
-            <section style={{ padding: '80px 0' }}>
+            <section className="py-mobile-12" style={{ padding: '80px 0' }}>
                 <div className="container">
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 28 }}>
+                    <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'clamp(16px, 3vw, 28px)' }}>
                         {featureGroups.map(({ title, desc, icon: Icon, color, points }) => (
                             <div key={title} className="card" style={{ padding: 36 }}>
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18, marginBottom: 24 }}>
@@ -142,19 +142,19 @@ export default function FeaturesPage() {
             </section>
 
             {/* Bottom feature: Workflow */}
-            <section style={{ padding: '80px 0', background: 'var(--bg-muted)' }}>
+            <section className="py-mobile-12" style={{ padding: '80px 0', background: 'var(--bg-muted)' }}>
                 <div className="container" style={{ textAlign: 'center', maxWidth: 700 }}>
                     <Search size={40} color="var(--primary)" style={{ margin: '0 auto 20px' }} />
-                    <h2 style={{ fontSize: 30, fontWeight: 800, color: 'var(--text)', marginBottom: 16 }}>
+                    <h2 style={{ fontSize: 'clamp(1.5rem, 4vw, 1.8rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 16 }}>
                         Powered by Advanced AI
                     </h2>
-                    <p style={{ color: 'var(--text-muted)', fontSize: 16, lineHeight: 1.7, marginBottom: 32 }}>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.7, marginBottom: 28 }}>
                         Combining Gemini and Qwen models with real-time retrieval for accurate, up-to-date travel information about Vietnam destinations.
                     </p>
-                    <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
                         {['Gemini 3.0 Flash', 'RAG Retrieval', 'Supabase Vector DB', 'LangGraph Agents'].map(tag => (
                             <span key={tag} style={{
-                                padding: '6px 16px', borderRadius: 100, fontSize: 13, fontWeight: 600,
+                                padding: '6px 14px', borderRadius: 100, fontSize: 12, fontWeight: 600,
                                 background: 'rgba(29,109,224,0.1)', color: 'var(--primary)',
                                 border: '1px solid var(--border-strong)',
                             }}>

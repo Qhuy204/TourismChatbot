@@ -339,14 +339,14 @@ textarea::placeholder {
     height: 100vh !important;
     transition: left 0.3s ease !important;
   }
-  
+
   .sidebar-mobile-visible {
     position: fixed !important;
     left: 0 !important;
     z-index: 2000;
     height: 100vh !important;
     transition: left 0.3s ease !important;
-    box-shadow: 0 0 50px rgba(0,0,0,0.5) !important;
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.5) !important;
     width: 280px !important;
   }
 
@@ -386,14 +386,14 @@ textarea::placeholder {
   .chat-header-mobile {
     padding: 8px 12px !important;
   }
-  
+
   .mobile-overlay {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0, 0, 0, 0.5);
     z-index: 1500;
   }
 }
@@ -406,7 +406,52 @@ textarea::placeholder {
   .mobile-only {
     display: flex;
   }
+
   .desktop-only {
     display: none !important;
   }
+
+  /* Generic Responsive Grid */
+  .grid-cols-mobile-1 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .grid-cols-mobile-2 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Flex direction change */
+  .flex-col-mobile {
+    flex-direction: column !important;
+  }
+
+  /* Padding/Margin overrides */
+  .py-mobile-12 {
+    padding-top: 48px !important;
+    padding-bottom: 48px !important;
+  }
+
+  .mt-mobile-0 {
+    margin-top: 0 !important;
+  }
+
+  .hidden-mobile {
+    display: none !important;
+  }
+}
+
+.grid-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.grid-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }

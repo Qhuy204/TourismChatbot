@@ -33,11 +33,11 @@ export default function AboutPage() {
             </section>
 
             {/* Main Story */}
-            <section style={{ padding: '80px 0' }}>
+            <section className="py-mobile-12" style={{ padding: '80px 0' }}>
                 <div className="container">
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, alignItems: 'center' }}>
+                    <div className="flex-col-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'clamp(32px, 5vw, 64px)', alignItems: 'center' }}>
                         {/* Image collage */}
-                        <div style={{ position: 'relative', height: 420 }}>
+                        <div className="hidden-mobile" style={{ position: 'relative', height: 420 }}>
                             <div style={{
                                 position: 'absolute', top: 0, left: 0,
                                 width: 250, height: 200, borderRadius: 20,
@@ -74,7 +74,7 @@ export default function AboutPage() {
 
                         {/* Text */}
                         <div>
-                            <h2 style={{ fontSize: 32, fontWeight: 800, color: 'var(--text)', marginBottom: 24, lineHeight: 1.2 }}>
+                            <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.2rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 24, lineHeight: 1.2 }}>
                                 We're Revolutionizing How<br />
                                 <span className="text-gradient">Travelers Explore Vietnam.</span>
                             </h2>
@@ -85,9 +85,9 @@ export default function AboutPage() {
                                 Our AI is trained on thousands of destinations, local guides, reviews, and cultural insights — giving you answers that feel like advice from a local friend who happens to know everything.
                             </p>
                             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                                {['Vietnam Travel Expert', 'AI-Powered', 'Multilingual', 'Real-Time Data'].map(tag => (
+                                {['Travel Expert', 'AI-Powered', 'Multilingual', 'Real-Time'].map(tag => (
                                     <span key={tag} style={{
-                                        padding: '6px 14px', borderRadius: 100, fontSize: 13, fontWeight: 600,
+                                        padding: '6px 14px', borderRadius: 100, fontSize: 12, fontWeight: 600,
                                         background: 'rgba(29,109,224,0.1)', color: 'var(--primary)',
                                         border: '1px solid var(--border-strong)',
                                     }}>{tag}</span>
@@ -99,12 +99,12 @@ export default function AboutPage() {
             </section>
 
             {/* Stats */}
-            <section style={{ padding: '80px 0', background: 'var(--bg-muted)' }}>
+            <section className="py-mobile-12" style={{ padding: '80px 0', background: 'var(--bg-muted)' }}>
                 <div className="container">
-                    <h2 style={{ textAlign: 'center', fontSize: 28, fontWeight: 800, color: 'var(--text)', marginBottom: 52 }}>
+                    <h2 style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: 'var(--text)', marginBottom: 44 }}>
                         Connecting Worldwide Teams
                     </h2>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 32 }}>
+                    <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 32 }}>
                         {stats.map(({ value, label, icon: Icon }) => (
                             <div key={label} className="card" style={{ padding: 32, textAlign: 'center' }}>
                                 <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(29,109,224,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
@@ -119,25 +119,25 @@ export default function AboutPage() {
             </section>
 
             {/* Team */}
-            <section style={{ padding: '80px 0' }}>
+            <section className="py-mobile-12" style={{ padding: '80px 0' }}>
                 <div className="container">
-                    <h2 style={{ textAlign: 'center', fontSize: 28, fontWeight: 800, color: 'var(--text)', marginBottom: 52 }}>
+                    <h2 style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: 'var(--text)', marginBottom: 44 }}>
                         The Team Behind AIBOT
                     </h2>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24 }}>
+                    <div className="grid-cols-mobile-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24 }}>
                         {team.map(({ name, role, initials }) => (
-                            <div key={name} className="card" style={{ padding: 28, textAlign: 'center' }}>
+                            <div key={name} className="card" style={{ padding: '24px 16px', textAlign: 'center' }}>
                                 <div style={{
-                                    width: 72, height: 72, borderRadius: '50%',
+                                    width: 64, height: 64, borderRadius: '50%',
                                     background: 'linear-gradient(135deg, #1d6de0, #06b6d4)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     margin: '0 auto 16px',
-                                    fontSize: 22, fontWeight: 800, color: 'white',
+                                    fontSize: 18, fontWeight: 800, color: 'white',
                                 }}>
                                     {initials}
                                 </div>
-                                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{name}</div>
-                                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{role}</div>
+                                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{name}</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{role}</div>
                             </div>
                         ))}
                     </div>

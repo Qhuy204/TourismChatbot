@@ -17,21 +17,21 @@ export default function ContactPage() {
             <Navbar />
 
             {/* Hero */}
-            <section className="bg-network" style={{ padding: '80px 0 60px' }}>
+            <section className="bg-network py-mobile-12" style={{ padding: '80px 0 60px' }}>
                 <div className="container" style={{ maxWidth: 640 }}>
-                    <h1 style={{ fontSize: 48, fontWeight: 800, color: 'var(--text)', marginBottom: 16, lineHeight: 1.1 }}>
+                    <h1 style={{ fontSize: 'clamp(2.2rem, 4.5vw, 3rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 16, lineHeight: 1.1 }}>
                         We'd Love to <span className="text-gradient">Hear From You</span>
                     </h1>
-                    <p style={{ fontSize: 17, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                    <p style={{ fontSize: 16, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
                         Have a question about AIBOT? Want a demo or enterprise plan? Reach out and we'll get back to you within 24 hours.
                     </p>
                 </div>
             </section>
 
             {/* Contact Body */}
-            <section style={{ padding: '80px 0' }}>
+            <section className="py-mobile-12" style={{ padding: '80px 0' }}>
                 <div className="container">
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 52, alignItems: 'start' }}>
+                    <div className="flex-col-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 'clamp(32px, 5vw, 52px)', alignItems: 'start' }}>
                         {/* Left: Contact Info */}
                         <div>
                             <h2 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>
@@ -104,7 +104,7 @@ export default function ContactPage() {
                                         Fill out the form and our team will reach out to you promptly.
                                     </p>
                                     <form onSubmit={handleSubmit}>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                                        <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
                                             <div>
                                                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>First Name</label>
                                                 <input
@@ -136,7 +136,7 @@ export default function ContactPage() {
                                                 onChange={e => setForm({ ...form, email: e.target.value })}
                                             />
                                         </div>
-                                        <div style={{ marginBottom: 28 }}>
+                                        <div style={{ marginBottom: 24 }}>
                                             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Message</label>
                                             <textarea
                                                 rows={5}
