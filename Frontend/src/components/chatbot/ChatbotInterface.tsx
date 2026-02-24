@@ -105,6 +105,8 @@ function groupSessionsByTime(sessions: ReturnType<typeof useSessionManager>['ses
 function CustomComboBox({ value, options, onChange }: { value: string; options: { label: string; value: string; color?: string }[]; onChange: (v: string) => void }) {
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const { theme } = useThemeMode();
+    const isDark = theme === 'dark';
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -141,10 +143,12 @@ function CustomComboBox({ value, options, onChange }: { value: string; options: 
             {open && (
                 <div style={{
                     position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-                    minWidth: 200, background: 'rgba(15, 23, 42, 0.85)',
+                    minWidth: 200,
+                    background: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.95)',
                     backdropFilter: 'blur(20px) saturate(180%)', borderRadius: 18,
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)', zIndex: 3100,
+                    border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.08)',
+                    boxShadow: isDark ? '0 20px 50px rgba(0, 0, 0, 0.5)' : '0 20px 50px rgba(0, 0, 0, 0.1)',
+                    zIndex: 3100,
                     padding: '8px', display: 'flex', flexDirection: 'column', gap: 2
                 }}>
                     {options.map((opt) => (
@@ -155,17 +159,17 @@ function CustomComboBox({ value, options, onChange }: { value: string; options: 
                             style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                 width: '100%', padding: '10px 12px',
-                                background: opt.value === value ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                                background: opt.value === value ? (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)') : 'transparent',
                                 border: 'none', borderRadius: 12,
                                 color: 'var(--text)', fontSize: 14, cursor: 'pointer',
                                 transition: 'all 0.2s', textAlign: 'left'
                             }}
-                            onMouseOver={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)'}
-                            onMouseOut={e => e.currentTarget.style.background = opt.value === value ? 'rgba(255, 255, 255, 0.08)' : 'transparent'}
+                            onMouseOver={e => e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.06)'}
+                            onMouseOut={e => e.currentTarget.style.background = opt.value === value ? (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'}
                         >
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                 {opt.color && <div style={{ width: 10, height: 10, borderRadius: '50%', background: opt.color }} />}
-                                <span>{opt.label}</span>
+                                <span style={{ fontWeight: opt.value === value ? 600 : 400 }}>{opt.label}</span>
                             </div>
                             {opt.value === value && <Check size={14} color="var(--primary)" strokeWidth={3} />}
                         </button>
