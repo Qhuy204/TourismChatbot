@@ -240,10 +240,7 @@ body {
 }
 
 /* ─── Emotion Theme Overrides ─── */
-[data-emotion="happy"] .chat-main-area,
-[data-emotion="excited"] .chat-main-area {
-  /* Warm tint overlay on bg — applied via JS data-theme switch */
-}
+/* Emotion indicator dot in chat */
 
 /* Emotion indicator dot in chat */
 .emotion-badge {
