@@ -9,10 +9,7 @@ const stats = [
 ];
 
 const team = [
-    { name: 'Nguyen Huy', role: 'AI Research Lead', initials: 'NH' },
-    { name: 'Tran Linh', role: 'Product Designer', initials: 'TL' },
-    { name: 'Le Minh', role: 'Backend Engineer', initials: 'LM' },
-    { name: 'Pham Thu', role: 'Data Scientist', initials: 'PT' },
+    { name: 'Qhuy', role: 'Full-stack AI Developer / Founder', initials: 'QH' },
 ];
 
 export default function AboutPage() {
@@ -27,7 +24,7 @@ export default function AboutPage() {
                         <span className="text-gradient">Story</span> About Us
                     </h1>
                     <p style={{ fontSize: 17, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                        We're a team of AI researchers, designers, and travel enthusiasts on a mission to make Vietnam exploration accessible for everyone.
+                        Built by a passionate developer on a mission to make Vietnam exploration accessible, fast, and intelligent for everyone.
                     </p>
                 </div>
             </section>
@@ -122,22 +119,23 @@ export default function AboutPage() {
             <section className="py-mobile-12" style={{ padding: '80px 0' }}>
                 <div className="container">
                     <h2 style={{ textAlign: 'center', fontSize: 24, fontWeight: 800, color: 'var(--text)', marginBottom: 44 }}>
-                        The Team Behind AIBOT
+                        The Developer Behind AIBOT
                     </h2>
-                    <div className="grid-cols-mobile-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24 }}>
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
                         {team.map(({ name, role, initials }) => (
-                            <div key={name} className="card" style={{ padding: '24px 16px', textAlign: 'center' }}>
+                            <div key={name} className="card" style={{ padding: '32px 48px', textAlign: 'center', maxWidth: 300, width: '100%' }}>
                                 <div style={{
-                                    width: 64, height: 64, borderRadius: '50%',
+                                    width: 80, height: 80, borderRadius: '50%',
                                     background: 'linear-gradient(135deg, #1d6de0, #06b6d4)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    margin: '0 auto 16px',
-                                    fontSize: 18, fontWeight: 800, color: 'white',
+                                    margin: '0 auto 20px',
+                                    fontSize: 22, fontWeight: 800, color: 'white',
+                                    boxShadow: '0 8px 16px rgba(29, 109, 224, 0.2)',
                                 }}>
                                     {initials}
                                 </div>
-                                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{name}</div>
-                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{role}</div>
+                                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{name}</div>
+                                <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>{role}</div>
                             </div>
                         ))}
                     </div>
