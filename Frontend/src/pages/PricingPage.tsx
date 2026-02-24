@@ -95,8 +95,8 @@ export default function PricingPage() {
                                     borderRadius: 16,
                                     border: highlight ? '2px solid var(--primary)' : '1px solid var(--border)',
                                     background: highlight
-                                        ? 'linear-gradient(135deg, rgba(29,109,224,0.12) 0%, var(--bg-card) 100%)'
-                                        : 'var(--bg-card)',
+                                        ? 'linear-gradient(135deg, rgba(29, 109, 224, 0.15) 0%, var(--bg-card) 100%)'
+                                        : 'linear-gradient(135deg, var(--bg-card) 0%, var(--bg-muted) 100%)',
                                     boxShadow: highlight ? 'var(--shadow-glow)' : 'var(--shadow)',
                                     position: 'relative',
                                 }}
@@ -104,8 +104,9 @@ export default function PricingPage() {
                                 {highlight && (
                                     <div style={{
                                         position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)',
-                                        background: 'var(--primary)', color: 'white',
+                                        background: 'var(--primary-gradient)', color: 'white',
                                         padding: '4px 16px', borderRadius: 100, fontSize: 12, fontWeight: 700,
+                                        boxShadow: '0 4px 12px rgba(29, 109, 224, 0.3)',
                                     }}>
                                         Most Popular
                                     </div>

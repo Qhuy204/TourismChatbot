@@ -32,7 +32,7 @@ export function Navbar() {
                 <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
                     <img src="/Logo.png" alt="ViVi" style={{ width: 38, height: 38, borderRadius: 10, objectFit: 'cover' }} />
                     <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.5px' }}>
-                        Vi<span style={{ color: 'var(--primary)' }}>Vi</span>
+                        Vi<span className="text-gradient">Vi</span>
                     </span>
                 </Link>
 
