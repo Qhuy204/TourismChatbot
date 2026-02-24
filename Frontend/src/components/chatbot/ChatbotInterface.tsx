@@ -107,7 +107,9 @@ export function ChatbotInterface() {
     const { theme, toggleTheme } = useThemeMode();
     const navigate = useNavigate();
     const sessionManager = useSessionManager();
-    const emotionTheme = useEmotionTheme();
+    const [emotionEnabled, setEmotionEnabled] = useState(() => localStorage.getItem('vivi-emotion-enabled') !== 'false');
+    const [customAccent, setCustomAccent] = useState(() => localStorage.getItem('vivi-custom-accent') || '#1d6de0');
+    const emotionTheme = useEmotionTheme({ enabled: emotionEnabled, customAccent });
     const [activeNav, setActiveNav] = useState('chat');
     const [leftCollapsed, setLeftCollapsed] = useState(false);
     const [rightOpen, setRightOpen] = useState(false);
@@ -880,7 +882,16 @@ export function ChatbotInterface() {
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                         {[
                                             { label: t.appearance, type: 'select', value: theme, options: [{ label: 'Light', value: 'light' }, { label: 'Dark', value: 'dark' }], onChange: (val: string) => { if (val === 'light' && theme !== 'light') toggleTheme(); else if (val === 'dark' && theme !== 'dark') toggleTheme(); } },
-                                            { label: t.accentColor, value: 'Default', isColor: true },
+                                            {
+                                                label: t.accentColor,
+                                                type: 'color',
+                                                value: customAccent,
+                                                onChange: (val: string) => {
+                                                    setCustomAccent(val);
+                                                    localStorage.setItem('vivi-custom-accent', val);
+                                                    if (!emotionEnabled) document.documentElement.style.setProperty('--primary', val);
+                                                }
+                                            },
                                             {
                                                 label: t.language,
                                                 type: 'select',
@@ -892,7 +903,6 @@ export function ChatbotInterface() {
                                                 }
                                             },
                                             { label: t.spokenLanguage, value: 'Auto-detect', desc: "For best results, select the language you mainly speak. If it's not listed, it may still be supported via auto-detection." },
-                                            { label: t.voice, value: 'Breeze', hasPlay: true }
                                         ].map((item, i, arr) => (
                                             <div key={item.label} style={{ display: 'flex', alignItems: item.desc ? 'flex-start' : 'center', justifyContent: 'space-between', padding: '20px 0', borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
                                                 <div>
@@ -900,15 +910,15 @@ export function ChatbotInterface() {
                                                     {item.desc && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, maxWidth: 380, lineHeight: 1.5 }}>{item.desc}</div>}
                                                 </div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                                                    {item.hasPlay && <button style={{ background: 'var(--bg-muted)', border: '1px solid var(--border)', padding: '6px 14px', borderRadius: 8, fontSize: 14, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>▶ {t.play}</button>}
                                                     {item.type === 'select' ? (
                                                         <select value={item.value} onChange={(e) => item.onChange && item.onChange(e.target.value)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: 14, outline: 'none', cursor: 'pointer' }}>
                                                             {(item.options || []).map(opt => <option key={opt.value} value={opt.value} style={{ background: 'var(--bg-card)' }}>{opt.label}</option>)}
                                                         </select>
+                                                    ) : item.type === 'color' ? (
+                                                        <input type="color" value={item.value} onChange={(e) => item.onChange && item.onChange(e.target.value)} style={{ width: 30, height: 30, padding: 0, border: 'none', borderRadius: 4, background: 'transparent', cursor: 'pointer' }} />
                                                     ) : (
                                                         <div onClick={(item as any).onClick} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: (item as any).onClick ? 'pointer' : 'default', fontSize: 14, color: 'var(--text-secondary)' }}>
-                                                            {(item as any).isColor && <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#8b5cf6' }} />}
-                                                            {item.value} {(item as any).onClick && <ChevronRight size={18} color="var(--text-muted)" style={{ transform: 'rotate(90deg)' }} />}
+                                                            {item.value}
                                                         </div>
                                                     )}
                                                 </div>
@@ -933,6 +943,42 @@ export function ChatbotInterface() {
                             {activeSettingsTab === 'personalization' && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                                     <div style={{ fontSize: 14, color: 'var(--text-muted)' }}>Tailor the assistant to your preferences.</div>
+                                    <div style={{ padding: '20px 0', borderBottom: '1px solid var(--border)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <div>
+                                                <div style={{ fontSize: 15, color: 'var(--text)', marginBottom: 8 }}>{t.emotionTheme}</div>
+                                                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t.emotionThemeDesc}</div>
+                                            </div>
+                                            <div
+                                                onClick={() => {
+                                                    const newValue = !emotionEnabled;
+                                                    setEmotionEnabled(newValue);
+                                                    localStorage.setItem('vivi-emotion-enabled', String(newValue));
+                                                    // Force immediate reset if disabled
+                                                    if (!newValue) {
+                                                        const root = document.documentElement;
+                                                        root.style.setProperty('--primary', customAccent);
+                                                        root.style.setProperty('--primary-accent', '#06b6d4');
+                                                        root.removeAttribute('data-emotion');
+                                                    }
+                                                }}
+                                                style={{
+                                                    width: 44, height: 24,
+                                                    background: emotionEnabled ? 'var(--primary)' : 'var(--bg-muted)',
+                                                    borderRadius: 20, position: 'relative', cursor: 'pointer',
+                                                    transition: 'all 0.2s', border: '1px solid var(--border)'
+                                                }}
+                                            >
+                                                <div style={{
+                                                    width: 18, height: 18, background: 'white', borderRadius: '50%',
+                                                    position: 'absolute', top: 2,
+                                                    left: emotionEnabled ? 22 : 2,
+                                                    transition: 'all 0.2s',
+                                                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                                                }}></div>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <div style={{ padding: '20px 0', borderBottom: '1px solid var(--border)' }}>
                                         <div style={{ fontSize: 15, color: 'var(--text)', marginBottom: 8 }}>Memory</div>
                                         <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>ViVi will become more helpful as it chats with you.</div>

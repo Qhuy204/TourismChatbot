@@ -33,7 +33,9 @@ export const translations = {
         contextHere: 'Chat context sẽ hiện ở đây',
         messages: 'tin nhắn',
         emotion: 'Cảm xúc',
-        you: 'Bạn'
+        you: 'Bạn',
+        emotionTheme: 'Chủ đề theo cảm xúc',
+        emotionThemeDesc: 'Tự động đổi màu sắc giao diện theo tâm trạng của cuộc trò chuyện.'
     },
     en: {
         newChat: 'New chat',
@@ -69,7 +71,9 @@ export const translations = {
         contextHere: 'Chat context will appear here',
         messages: 'messages',
         emotion: 'Emotion',
-        you: 'You'
+        you: 'You',
+        emotionTheme: 'Emotion-based theme',
+        emotionThemeDesc: 'Automatically change UI colors based on the mood of the conversation.'
     }
 };
 export type AppLanguage = 'vi' | 'en' | 'auto';

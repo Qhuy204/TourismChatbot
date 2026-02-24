@@ -91,7 +91,9 @@ export function detectEmotionFromText(text: string): { emotion: Emotion; confide
 }
 
 // Hook
-export function useEmotionTheme() {
+export function useEmotionTheme(config?: { enabled?: boolean; customAccent?: string }) {
+    const enabled = config?.enabled ?? (localStorage.getItem('vivi-emotion-enabled') !== 'false');
+    const customAccent = config?.customAccent ?? (localStorage.getItem('vivi-custom-accent') || '#1d6de0');
     const { user } = useAuth();
     const [emotion, setEmotionState] = useState<Emotion>('neutral');
     const [emotionConfidence, setEmotionConfidence] = useState(0);
@@ -115,12 +117,24 @@ export function useEmotionTheme() {
 
     // Apply CSS variables when emotion changes
     useEffect(() => {
+        const isAppPath = window.location.pathname.startsWith('/app') || window.location.pathname.startsWith('/chat');
+        const isEnabled = localStorage.getItem('vivi-emotion-enabled') !== 'false';
+
+        if (!isAppPath || !enabled) {
+            // Reset to neutral/default if not in app or disabled
+            const root = document.documentElement;
+            root.style.setProperty('--primary', customAccent);
+            root.style.setProperty('--primary-accent', EMOTION_PALETTES.neutral.accent);
+            root.removeAttribute('data-emotion');
+            return;
+        }
+
         const palette = EMOTION_PALETTES[emotion] ?? EMOTION_PALETTES.neutral;
         const root = document.documentElement;
         root.style.setProperty('--primary', palette.primary);
         root.style.setProperty('--primary-accent', palette.accent);
         root.setAttribute('data-emotion', emotion);
-    }, [emotion]);
+    }, [emotion, enabled, customAccent]);
 
     /**
      * Call this every time the user sends a message.
