@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import { useLangGraphChat, type ChatMessage } from '@/hooks/useLangGraphChat';
@@ -7,6 +8,7 @@ import { useEventTracking } from '@/hooks/useEventTracking';
 import { useAuth } from '@/hooks/useAuth';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import { useEmotionTheme, type Emotion } from '@/hooks/useEmotionTheme';
+import { useLanguage } from '@/hooks/useLanguage';
 import {
     MessageSquare, Image, Mic, Search, BookOpen,
     PenLine, Bot, Send, Loader2, ThumbsUp, ThumbsDown,
@@ -107,16 +109,44 @@ function CustomComboBox({ value, options, onChange }: { value: string; options: 
     const containerRef = useRef<HTMLDivElement>(null);
     const { theme } = useThemeMode();
     const isDark = theme === 'dark';
+    const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
+
+    const updateCoords = useCallback(() => {
+        if (containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            setCoords({
+                top: rect.bottom,
+                left: rect.left,
+                width: rect.width
+            });
+        }
+    }, []);
+
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+            const target = e.target as Node;
+            if (
+                containerRef.current && !containerRef.current.contains(target) &&
+                dropdownRef.current && !dropdownRef.current.contains(target)
+            ) {
                 setOpen(false);
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+        if (open) {
+            document.addEventListener('mousedown', handleClickOutside);
+            updateCoords();
+            window.addEventListener('resize', updateCoords);
+            // Catch scroll in any parent (like the modal content)
+            window.addEventListener('scroll', updateCoords, true);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('resize', updateCoords);
+            window.removeEventListener('scroll', updateCoords, true);
+        };
+    }, [open, updateCoords]);
 
     const selectedOption = options.find(o => o.value === value) || options[0];
 
@@ -140,22 +170,28 @@ function CustomComboBox({ value, options, onChange }: { value: string; options: 
                 <ChevronRight size={14} style={{ transform: open ? 'rotate(-90deg)' : 'rotate(90deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
             </button>
 
-            {open && (
-                <div style={{
-                    position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-                    minWidth: 200,
-                    background: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.95)',
-                    backdropFilter: 'blur(20px) saturate(180%)', borderRadius: 18,
-                    border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.08)',
-                    boxShadow: isDark ? '0 20px 50px rgba(0, 0, 0, 0.5)' : '0 20px 50px rgba(0, 0, 0, 0.1)',
-                    zIndex: 3100,
-                    padding: '8px', display: 'flex', flexDirection: 'column', gap: 2
-                }}>
+            {open && createPortal(
+                <div
+                    ref={dropdownRef}
+                    style={{
+                        position: 'fixed',
+                        top: coords.top + 8,
+                        left: Math.max(10, coords.left + (coords.width - 200)), // Ensure not off-screen left
+                        minWidth: 200,
+                        background: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+                        backdropFilter: 'blur(20px) saturate(180%)', borderRadius: 18,
+                        border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.08)',
+                        boxShadow: isDark ? '0 20px 50px rgba(0, 0, 0, 0.5)' : '0 20px 50px rgba(0, 0, 0, 0.1)',
+                        zIndex: 9999,
+                        padding: '8px', display: 'flex', flexDirection: 'column', gap: 2
+                    }}
+                >
                     {options.map((opt) => (
                         <button
                             key={opt.value}
                             type="button"
                             onClick={() => { onChange(opt.value); setOpen(false); }}
+                            className="settings-tab-btn" // Reusing hover style
                             style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                 width: '100%', padding: '10px 12px',
@@ -164,8 +200,6 @@ function CustomComboBox({ value, options, onChange }: { value: string; options: 
                                 color: 'var(--text)', fontSize: 14, cursor: 'pointer',
                                 transition: 'all 0.2s', textAlign: 'left'
                             }}
-                            onMouseOver={e => e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.06)'}
-                            onMouseOut={e => e.currentTarget.style.background = opt.value === value ? (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)') : 'transparent'}
                         >
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                 {opt.color && <div style={{ width: 10, height: 10, borderRadius: '50%', background: opt.color }} />}
@@ -174,7 +208,8 @@ function CustomComboBox({ value, options, onChange }: { value: string; options: 
                             {opt.value === value && <Check size={14} color="var(--primary)" strokeWidth={3} />}
                         </button>
                     ))}
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
@@ -186,6 +221,7 @@ export function ChatbotInterface() {
     const { theme, toggleTheme } = useThemeMode();
     const navigate = useNavigate();
     const sessionManager = useSessionManager();
+    const { appLanguage, langKey, t, setAppLanguage } = useLanguage();
     const [emotionEnabled, setEmotionEnabled] = useState(() => localStorage.getItem('vivi-emotion-enabled') !== 'false');
     const [customAccent, setCustomAccent] = useState(() => localStorage.getItem('vivi-custom-accent') || '#1d6de0');
     const emotionTheme = useEmotionTheme({ enabled: emotionEnabled, customAccent });
@@ -197,9 +233,6 @@ export function ChatbotInterface() {
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [activeSettingsTab, setActiveSettingsTab] = useState('general');
-    const [appLanguage, setAppLanguage] = useState<'vi' | 'en' | 'auto'>(() => (localStorage.getItem('vivi-lang') as any) || 'auto');
-    const langKey = (appLanguage === 'auto' ? 'vi' : appLanguage) as 'vi' | 'en';
-    const t = translations[langKey] || translations.vi;
     const userMenuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -219,23 +252,15 @@ export function ChatbotInterface() {
     const [visibleCount, setVisibleCount] = useState(20); // lazy load
     const sidebarScrollRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        const init = async () => {
-            // Only create a session if we are definitely not loading, have no active session, and no sessions exist
-            if (!sessionManager.isLoading && !sessionManager.activeSessionId && sessionManager.sessions.length === 0) {
-                console.log("Creating initial session...");
-                await sessionManager.createSession();
-            }
-        };
-        init();
-    }, [sessionManager.isLoading, sessionManager.activeSessionId, sessionManager.sessions.length]);
+    // We no longer auto-create empty sessions on load.
+    // The session will be created on demand when the first message is sent.
 
     const {
         messages, isLoading, sendMessage, clearMessages,
         updateFeedback, suggestions, refreshSuggestions, error,
         switchSession, fetchInitialSuggestions, initialData,
         modelMode, setModelMode, preferences,
-    } = useLangGraphChat(sessionManager.activeSessionId ?? undefined);
+    } = useLangGraphChat(sessionManager.activeSessionId ?? undefined, langKey);
 
     const { trackPageView, trackChatMessage } = useEventTracking();
     const [input, setInput] = useState('');
@@ -302,8 +327,14 @@ export function ChatbotInterface() {
 
     const handleSubmit = async (e?: React.FormEvent) => {
         e?.preventDefault();
-        const sid = sessionManager.activeSessionId;
-        if ((!input.trim() && attachments.length === 0) || isLoading || !sid) return;
+        let sid = sessionManager.activeSessionId;
+        if ((!input.trim() && attachments.length === 0) || isLoading) return;
+
+        // On-demand session creation if none is active
+        if (!sid) {
+            sid = await sessionManager.createSession(input.substring(0, 30) || 'Cuộc trò chuyện mới');
+            if (!sid) return;
+        }
 
         const msg = input.trim();
         setInput('');
@@ -325,7 +356,9 @@ export function ChatbotInterface() {
             msg,
             attachments.length > 0 ? attachments.map(a => ({ url: a.url, type: a.mimeType, name: a.name })) : undefined,
             sessionManager.memoryShareEnabled,
-            (newTitle: string) => sessionManager.renameSession(sid, newTitle)
+            (newTitle: string) => sessionManager.renameSession(sid, newTitle),
+            undefined, // modelMode
+            langKey
         );
     };
 
@@ -383,7 +416,7 @@ export function ChatbotInterface() {
         const sid = sessionManager.activeSessionId;
         if (!sid) return;
         trackChatMessage('user', `(suggestion) ${text}`);
-        sendMessage(text, undefined, sessionManager.memoryShareEnabled, (t: string) => sessionManager.renameSession(sid, t));
+        sendMessage(text, undefined, sessionManager.memoryShareEnabled, (t: string) => sessionManager.renameSession(sid, t), undefined, langKey);
     };
 
     const handleSessionChange = (sid: string) => {
@@ -465,7 +498,7 @@ export function ChatbotInterface() {
                         </div>
                     )}
                     {!leftCollapsed && (
-                        <button onClick={() => sessionManager.createSession()} title="Cuộc trò chuyện mới" style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', flexShrink: 0 }}>
+                        <button onClick={() => sessionManager.setActiveSession(null)} title="Cuộc trò chuyện mới" style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', flexShrink: 0 }}>
                             <Plus size={14} />
                         </button>
                     )}
@@ -481,7 +514,7 @@ export function ChatbotInterface() {
                     {leftCollapsed ? (
                         /* Collapsed: just icons */
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <button onClick={() => sessionManager.createSession()} title={t.newChat} style={{ width: 44, height: 44, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }} onMouseOver={e => e.currentTarget.style.background = 'var(--bg-muted)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                            <button onClick={() => sessionManager.setActiveSession(null)} title={t.newChat} style={{ width: 44, height: 44, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }} onMouseOver={e => e.currentTarget.style.background = 'var(--bg-muted)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
                                 <Plus size={22} />
                             </button>
                         </div>
@@ -921,8 +954,15 @@ export function ChatbotInterface() {
 
             {/*   Settings Modal Mock   */}
             {settingsOpen && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="settings-modal-mobile" style={{ width: 800, height: 600, maxWidth: '95vw', maxHeight: '90vh', background: 'var(--bg)', borderRadius: 16, display: 'flex', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', border: '1px solid var(--border)' }}>
+                <div
+                    onClick={() => setSettingsOpen(false)}
+                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="settings-modal-mobile"
+                        style={{ width: 800, height: 600, maxWidth: '95vw', maxHeight: '90vh', background: 'var(--bg)', borderRadius: 16, display: 'flex', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', border: '1px solid var(--border)' }}
+                    >
                         <div className="settings-sidebar-mobile" style={{ width: 230, background: 'var(--bg-card)', borderRight: '1px solid var(--border)', padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <div className="desktop-only" style={{ padding: '0 10px 14px', fontSize: 16, fontWeight: 600, color: 'var(--text)' }}>Settings</div>
                             {[
@@ -963,7 +1003,14 @@ export function ChatbotInterface() {
                         <div style={{ flex: 1, padding: '24px 32px', overflowY: 'auto' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
                                 <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text)', textTransform: 'capitalize' }}>{activeSettingsTab}</h2>
-                                <button onClick={() => setSettingsOpen(false)} style={{ background: 'var(--bg-muted)', border: '1px solid var(--border)', borderRadius: 50, width: 32, height: 32, cursor: 'pointer', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }} onMouseOver={e => e.currentTarget.style.background = 'var(--border)'} onMouseOut={e => e.currentTarget.style.background = 'var(--bg-muted)'} title="Close"><X size={16} /></button>
+                                <button
+                                    onClick={() => setSettingsOpen(false)}
+                                    className="btn-close-settings"
+                                    style={{ background: 'var(--bg-muted)', border: '1px solid var(--border)', borderRadius: 50, width: 32, height: 32, cursor: 'pointer', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+                                    title="Close"
+                                >
+                                    <X size={16} />
+                                </button>
                             </div>
 
                             {/* MFA Card */}
@@ -1022,7 +1069,12 @@ export function ChatbotInterface() {
                                                 label: t.language,
                                                 type: 'combobox',
                                                 value: appLanguage,
-                                                options: [{ label: 'Auto-detect', value: 'auto' }, { label: 'Tiếng Việt', value: 'vi' }, { label: 'English', value: 'en' }],
+                                                options: [
+                                                    { label: 'Auto-detect', value: 'auto' },
+                                                    { label: 'Tiếng Việt', value: 'vi' },
+                                                    { label: 'English', value: 'en' },
+                                                    { label: '简体中文', value: 'zh' }
+                                                ],
                                                 onChange: (val: string) => {
                                                     setAppLanguage(val as any);
                                                     localStorage.setItem('vivi-lang', val);

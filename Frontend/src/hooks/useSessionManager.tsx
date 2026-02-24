@@ -64,15 +64,12 @@ export function useSessionManager() {
                     preview: s.first_message || '',
                 }));
 
-                // Load active session from cookie/local preference if exists
-                const lastSessionId = localStorage.getItem(`active_session_${user.id}`);
-
+                // We do not auto-restore the last session on mount anymore.
+                // This forces a "New Chat" view, like ChatGPT/Gemini, when navigating to /app.
                 setState(prev => ({
                     ...prev,
                     sessions,
-                    activeSessionId: lastSessionId && sessions.find(s => s.id === lastSessionId)
-                        ? lastSessionId
-                        : (sessions[0]?.id || null),
+                    activeSessionId: null,
                 }));
             } catch (e) {
                 console.error('Failed to load sessions:', e);
@@ -212,7 +209,7 @@ export function useSessionManager() {
     }, []);
 
     // Set active session
-    const setActiveSession = useCallback((sessionId: string) => {
+    const setActiveSession = useCallback((sessionId: string | null) => {
         setState(prev => ({ ...prev, activeSessionId: sessionId }));
     }, []);
 

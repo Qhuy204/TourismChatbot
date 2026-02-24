@@ -2,21 +2,26 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import { useAuth } from '@/hooks/useAuth';
-import { Sun, Moon, Menu, X, LayoutDashboard } from 'lucide-react';
+import { Sun, Moon, Menu, X, LayoutDashboard, Globe } from 'lucide-react';
+import { useLanguage } from '@/hooks/useLanguage';
 
-const navLinks = [
-    { label: 'Home', path: '/' },
-    { label: 'About', path: '/about' },
-    { label: 'Features', path: '/features' },
-    { label: 'Pricing', path: '/pricing' },
-    { label: 'Contact Us', path: '/contact' },
+const navLinks = (t: any) => [
+    { label: t.home, path: '/' },
+    { label: t.about, path: '/about' },
+    { label: t.features, path: '/features' },
+    { label: t.pricing, path: '/pricing' },
+    { label: t.contact, path: '/contact' },
 ];
 
 export function Navbar() {
     const { theme, toggleTheme } = useThemeMode();
     const { user } = useAuth();
+    const { appLanguage, setAppLanguage, t } = useLanguage();
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [langOpen, setLangOpen] = useState(false);
     const navigate = useNavigate();
+
+    const links = navLinks(t);
 
     return (
         <nav style={{
@@ -38,7 +43,7 @@ export function Navbar() {
 
                 {/* Desktop Nav Links */}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }} className="desktop-nav">
-                    {navLinks.map(link => (
+                    {links.map(link => (
                         <Link
                             key={link.path}
                             to={link.path}
@@ -78,6 +83,53 @@ export function Navbar() {
                         {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
                     </button>
 
+                    {/* Language Toggle */}
+                    <div style={{ position: 'relative' }}>
+                        <button
+                            onClick={() => setLangOpen(!langOpen)}
+                            style={{
+                                height: 36, padding: '0 12px', borderRadius: 8,
+                                background: 'var(--bg-muted)',
+                                border: '1px solid var(--border)',
+                                cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: 'var(--text-secondary)',
+                                transition: 'all 0.2s ease',
+                                gap: 6, fontSize: 13, fontWeight: 600
+                            }}
+                        >
+                            <Globe size={14} />
+                            <span>{appLanguage.toUpperCase()}</span>
+                        </button>
+                        {langOpen && (
+                            <div style={{
+                                position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                                borderRadius: 12, padding: 6, boxShadow: 'var(--shadow-lg)',
+                                minWidth: 140, zIndex: 1000
+                            }}>
+                                {[
+                                    { label: 'Tiếng Việt', value: 'vi' },
+                                    { label: 'English', value: 'en' },
+                                    { label: '简体中文', value: 'zh' }
+                                ].map(opt => (
+                                    <button
+                                        key={opt.value}
+                                        onClick={() => { setAppLanguage(opt.value as any); setLangOpen(false); }}
+                                        style={{
+                                            width: '100%', padding: '8px 12px', borderRadius: 8,
+                                            background: appLanguage === opt.value ? 'var(--bg-muted)' : 'transparent',
+                                            border: 'none', color: 'var(--text)', fontSize: 13,
+                                            textAlign: 'left', cursor: 'pointer', transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     {/* Auth Button */}
                     {user ? (
                         <button
@@ -86,8 +138,8 @@ export function Navbar() {
                             style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6 }}
                         >
                             <LayoutDashboard size={14} />
-                            <span className="desktop-only">Go to App</span>
-                            <span className="mobile-only">App</span>
+                            <span className="desktop-only">{t.goDashboard || 'Go to App'}</span>
+                            <span className="mobile-only">{t.goDashboard ? 'App' : 'App'}</span>
                         </button>
                     ) : (
                         <button
@@ -95,7 +147,7 @@ export function Navbar() {
                             onClick={() => navigate('/auth')}
                             style={{ padding: '8px 20px' }}
                         >
-                            Login
+                            {t.logout ? (appLanguage === 'vi' ? 'Đăng nhập' : (appLanguage === 'zh' ? '登录' : 'Login')) : 'Login'}
                         </button>
                     )}
 
@@ -104,7 +156,6 @@ export function Navbar() {
                         onClick={() => setMobileOpen(!mobileOpen)}
                         className="mobile-menu-btn"
                         style={{
-                            display: 'none',
                             background: 'none',
                             border: 'none',
                             color: 'var(--text)',
@@ -124,7 +175,7 @@ export function Navbar() {
                     padding: '12px 0',
                 }}>
                     <div className="container">
-                        {navLinks.map(link => (
+                        {links.map(link => (
                             <Link
                                 key={link.path}
                                 to={link.path}
@@ -146,6 +197,7 @@ export function Navbar() {
             )}
 
             <style>{`
+        .mobile-menu-btn { display: none; }
         @media (max-width: 768px) {
           .desktop-nav { display: none !important; }
           .mobile-menu-btn { display: flex !important; }

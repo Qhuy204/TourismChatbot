@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom';
 import { Github, Twitter, Linkedin } from 'lucide-react';
+import { useLanguage } from '@/hooks/useLanguage';
 
 export function Footer() {
     const year = new Date().getFullYear();
+    const { t } = useLanguage();
 
     return (
         <footer className="py-mobile-12" style={{
@@ -21,7 +23,7 @@ export function Footer() {
                             </span>
                         </Link>
                         <p style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.7, maxWidth: 280 }}>
-                            Your all-in-one AI assistant for travel planning, discovery, and personalized recommendations in Vietnam and beyond.
+                            {t.heroDesc}
                         </p>
                         <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
                             {[Github, Twitter, Linkedin].map((Icon, i) => (
@@ -55,9 +57,9 @@ export function Footer() {
                     {/* Product */}
                     <div>
                         <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16 }}>
-                            Product
+                            {t.features}
                         </h4>
-                        {['Features', 'Pricing', 'About', 'Blog'].map(item => (
+                        {[t.features, t.pricing, t.about, 'Blog'].map(item => (
                             <Link
                                 key={item}
                                 to={`/${item.toLowerCase()}`}
@@ -73,9 +75,9 @@ export function Footer() {
                     {/* Support */}
                     <div>
                         <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16 }}>
-                            Support
+                            {t.help}
                         </h4>
-                        {['Contact Us', 'Help Center', 'Privacy', 'Terms'].map(item => (
+                        {[t.contact, t.help, 'Privacy', 'Terms'].map(item => (
                             <a
                                 key={item}
                                 href="#"
@@ -109,7 +111,7 @@ export function Footer() {
                             onMouseOver={e => (e.currentTarget.style.background = 'var(--primary-hover)')}
                             onMouseOut={e => (e.currentTarget.style.background = 'var(--primary)')}
                         >
-                            Try for Free →
+                            {t.getStarted} →
                         </Link>
                     </div>
                 </div>
@@ -128,7 +130,7 @@ export function Footer() {
                         © {year} ViVi — Việt Nam Virtual Assistant. All rights reserved.
                     </p>
                     <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                        Built with ❤️ for travelers in Vietnam
+                        {t.about} — Built with ❤️ for travelers in Vietnam
                     </p>
                 </div>
             </div>
