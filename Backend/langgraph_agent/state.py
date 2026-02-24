@@ -13,6 +13,10 @@ class IntentType(str, Enum):
     CHIT_CHAT = "chit_chat"
     PREFERENCE_UPDATE = "preference_update"
     NEGATIVE_FEEDBACK = "negative_feedback"
+    ACCOMMODATION = "accommodation"
+    BUDGET_QUERY = "budget_query"
+    FOOD_RECOMMENDATION = "food_recommendation"
+    ITINERARY_REQUEST = "itinerary_request"
     META_INSTRUCTION = "meta_instruction"
 
 

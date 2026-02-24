@@ -256,7 +256,7 @@ export function useLangGraphChat(initialSessionId?: string) {
                             if (data.extracted_locations?.length > 0) {
                                 const locationNames: string[] = data.extracted_locations.map((loc: Record<string, string>) => loc.name);
                                 setRecentLocations(locationNames.slice(0, 3));
-                                updateRecentLocations(locationNames.slice(0, 5));
+                                updateRecentLocations(locationNames);
 
                                 // Track each location with histogram
                                 data.extracted_locations.forEach((loc: Record<string, string>) => {
@@ -316,12 +316,17 @@ export function useLangGraphChat(initialSessionId?: string) {
             .slice(0, 10);
 
         const mergedTopics = Array.from(new Set([...sortedTopics, ...(topics || [])])).slice(0, 10);
+        const recentLocations = preferences?.recentLocations || [];
 
         try {
             const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/initial_suggestions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: user.id, topics: mergedTopics }),
+                body: JSON.stringify({
+                    user_id: user.id,
+                    topics: mergedTopics,
+                    recent_locations: recentLocations
+                }),
             });
             if (res.ok) {
                 const data = await res.json();

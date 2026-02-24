@@ -70,10 +70,10 @@ async def check_relevance(state: MessageProcessingState) -> MessageProcessingSta
     LangGraph node: Check if query is relevant to tourism domain.
     Prevents off-topic queries from using RAG.
     """
-    # Skip for chit_chat - always relevant (no RAG needed)
-    if state.intent == IntentType.CHIT_CHAT:
+    # Skip for simple intents - always relevant (no RAG needed)
+    if state.intent in [IntentType.CHIT_CHAT, IntentType.NEGATIVE_FEEDBACK, IntentType.META_INSTRUCTION]:
         state.is_relevant = True
-        state.relevance_reason = "chit_chat_always_relevant"
+        state.relevance_reason = "simple_intent_always_relevant"
         return state
     
     # Keyword-based check

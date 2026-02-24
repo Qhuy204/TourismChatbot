@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 
 export type Emotion = 'neutral' | 'positive' | 'negative' | 'surprise';
 
-// ─── Emotion keyword maps (mirrors Backend emotion.yaml) ─────────────────────
+// Emotion keyword maps (mirrors Backend emotion.yaml)
 const EMOTION_KEYWORDS: Record<Exclude<Emotion, 'neutral'>, string[]> = {
     positive: [
         'tuyệt vời', 'hay quá', 'thích', 'yêu', 'wow', 'amazing', 'great', 'awesome',
@@ -32,7 +32,7 @@ const EMOTION_KEYWORDS: Record<Exclude<Emotion, 'neutral'>, string[]> = {
     ],
 };
 
-// ─── Emotion → color palette ─────────────────────────────────────────────────
+// Emotion → color palette
 export const EMOTION_PALETTES: Record<Emotion, {
     primary: string;    // CSS hex
     primaryHsl: string; // for --primary-hsl
@@ -90,7 +90,7 @@ export function detectEmotionFromText(text: string): { emotion: Emotion; confide
     return { emotion: best[0], confidence: Math.min(best[1] / 2, 1.0) };
 }
 
-// ─── Hook ────────────────────────────────────────────────────────────────────
+// Hook
 export function useEmotionTheme() {
     const { user } = useAuth();
     const [emotion, setEmotionState] = useState<Emotion>('neutral');

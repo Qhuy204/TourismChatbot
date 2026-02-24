@@ -305,6 +305,25 @@ async def delete_chat_session(session_id: str) -> bool:
         return False
 
 
+async def cleanup_empty_chat_session(session_id: str) -> bool:
+    """Deletes a chat session ONLY if it has zero messages in chat_logs"""
+    client = get_supabase()
+    if not client:
+        return False
+        
+    try:
+        # Check if any logs exist
+        response = client.table("chat_logs").select("id", count="exact").eq("session_id", session_id).limit(1).execute()
+        if response.count == 0:
+            print(f"🧹 Cleaning up empty session: {session_id}")
+            return await delete_chat_session(session_id)
+        return False
+    except Exception as e:
+        print(f"❌ cleanup_empty_chat_session error: {e}")
+        return False
+
+
+
 async def get_user_preferences(user_id: str) -> Dict[str, any]:
     """Fetch user preferences from Supabase"""
     client = get_supabase()
