@@ -101,6 +101,81 @@ function groupSessionsByTime(sessions: ReturnType<typeof useSessionManager>['ses
     return Object.entries(groups).filter(([, v]) => v.length > 0);
 }
 
+// Custom Select Component for Premium UI
+function CustomComboBox({ value, options, onChange }: { value: string; options: { label: string; value: string; color?: string }[]; onChange: (v: string) => void }) {
+    const [open, setOpen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const selectedOption = options.find(o => o.value === value) || options[0];
+
+    return (
+        <div ref={containerRef} style={{ position: 'relative', width: 'fit-content', minWidth: 140 }}>
+            <button
+                type="button"
+                onClick={() => setOpen(!open)}
+                style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    width: '100%', padding: '8px 14px', background: 'var(--bg-muted)',
+                    border: '1px solid var(--border)', borderRadius: 12,
+                    color: 'var(--text)', fontSize: 14, cursor: 'pointer',
+                    transition: 'all 0.2s', outline: 'none', gap: 10
+                }}
+            >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {selectedOption.color && <div style={{ width: 10, height: 10, borderRadius: '50%', background: selectedOption.color }} />}
+                    <span style={{ fontWeight: 500 }}>{selectedOption.label}</span>
+                </div>
+                <ChevronRight size={14} style={{ transform: open ? 'rotate(-90deg)' : 'rotate(90deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
+            </button>
+
+            {open && (
+                <div style={{
+                    position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                    minWidth: 200, background: 'rgba(15, 23, 42, 0.85)',
+                    backdropFilter: 'blur(20px) saturate(180%)', borderRadius: 18,
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)', zIndex: 3100,
+                    padding: '8px', display: 'flex', flexDirection: 'column', gap: 2
+                }}>
+                    {options.map((opt) => (
+                        <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => { onChange(opt.value); setOpen(false); }}
+                            style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                width: '100%', padding: '10px 12px',
+                                background: opt.value === value ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                                border: 'none', borderRadius: 12,
+                                color: 'var(--text)', fontSize: 14, cursor: 'pointer',
+                                transition: 'all 0.2s', textAlign: 'left'
+                            }}
+                            onMouseOver={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)'}
+                            onMouseOut={e => e.currentTarget.style.background = opt.value === value ? 'rgba(255, 255, 255, 0.08)' : 'transparent'}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                {opt.color && <div style={{ width: 10, height: 10, borderRadius: '50%', background: opt.color }} />}
+                                <span>{opt.label}</span>
+                            </div>
+                            {opt.value === value && <Check size={14} color="var(--primary)" strokeWidth={3} />}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // Main component  
 export function ChatbotInterface() {
     const { user, signOut } = useAuth();
@@ -900,11 +975,39 @@ export function ChatbotInterface() {
                                 <>
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                         {[
-                                            { label: t.appearance, type: 'select', value: theme, options: [{ label: 'Light', value: 'light' }, { label: 'Dark', value: 'dark' }], onChange: (val: string) => { if (val === 'light' && theme !== 'light') toggleTheme(); else if (val === 'dark' && theme !== 'dark') toggleTheme(); } },
+                                            {
+                                                label: t.appearance,
+                                                type: 'combobox',
+                                                value: theme,
+                                                options: [
+                                                    { label: 'System', value: 'system' },
+                                                    { label: 'Dark', value: 'dark' },
+                                                    { label: 'Light', value: 'light' }
+                                                ],
+                                                onChange: (val: string) => {
+                                                    if (val === 'system') {
+                                                        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                                                        if (isDark && theme !== 'dark') toggleTheme();
+                                                        else if (!isDark && theme !== 'light') toggleTheme();
+                                                        localStorage.removeItem('theme');
+                                                    } else {
+                                                        if (val === 'light' && theme !== 'light') toggleTheme();
+                                                        else if (val === 'dark' && theme !== 'dark') toggleTheme();
+                                                    }
+                                                }
+                                            },
                                             {
                                                 label: t.accentColor,
-                                                type: 'color',
+                                                type: 'combobox',
                                                 value: customAccent,
+                                                options: [
+                                                    { label: 'Default', value: '#1d6de0', color: '#1d6de0' },
+                                                    { label: 'Blue', value: '#3b82f6', color: '#3b82f6' },
+                                                    { label: 'Green', value: '#10b981', color: '#10b981' },
+                                                    { label: 'Yellow', value: '#f59e0b', color: '#f59e0b' },
+                                                    { label: 'Pink', value: '#ec4899', color: '#ec4899' },
+                                                    { label: 'Orange', value: '#f97316', color: '#f97316' },
+                                                ],
                                                 onChange: (val: string) => {
                                                     setCustomAccent(val);
                                                     localStorage.setItem('vivi-custom-accent', val);
@@ -913,7 +1016,7 @@ export function ChatbotInterface() {
                                             },
                                             {
                                                 label: t.language,
-                                                type: 'select',
+                                                type: 'combobox',
                                                 value: appLanguage,
                                                 options: [{ label: 'Auto-detect', value: 'auto' }, { label: 'Tiếng Việt', value: 'vi' }, { label: 'English', value: 'en' }],
                                                 onChange: (val: string) => {
@@ -929,45 +1032,15 @@ export function ChatbotInterface() {
                                                     {item.desc && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, maxWidth: 380, lineHeight: 1.5 }}>{item.desc}</div>}
                                                 </div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                                                    {item.type === 'select' ? (
-                                                        <div style={{ position: 'relative' }}>
-                                                            <select
-                                                                value={item.value}
-                                                                onChange={(e) => item.onChange && item.onChange(e.target.value)}
-                                                                style={{
-                                                                    appearance: 'none',
-                                                                    background: 'var(--bg-muted)',
-                                                                    border: '1px solid var(--border)',
-                                                                    borderRadius: 10,
-                                                                    padding: '8px 32px 8px 16px',
-                                                                    color: 'var(--text)',
-                                                                    fontSize: 14,
-                                                                    cursor: 'pointer',
-                                                                    outline: 'none',
-                                                                    minWidth: 140
-                                                                }}
-                                                            >
-                                                                {(item.options || []).map(opt => <option key={opt.value} value={opt.value} style={{ background: 'var(--bg-card)' }}>{opt.label}</option>)}
-                                                            </select>
-                                                            <ChevronRight size={14} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%) rotate(90deg)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
-                                                        </div>
-                                                    ) : item.type === 'color' ? (
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-muted)', padding: '4px 8px', borderRadius: 10, border: '1px solid var(--border)' }}>
-                                                            <div style={{ width: 20, height: 20, borderRadius: 6, background: item.value, border: '1px solid rgba(255,255,255,0.1)' }} />
-                                                            <input
-                                                                type="color"
-                                                                value={item.value}
-                                                                onChange={(e) => item.onChange && item.onChange(e.target.value)}
-                                                                style={{
-                                                                    width: 0, height: 0, opacity: 0, padding: 0, border: 'none', position: 'absolute'
-                                                                }}
-                                                                id="accent-color-picker"
-                                                            />
-                                                            <label htmlFor="accent-color-picker" style={{ fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 500 }}>{item.value.toUpperCase()}</label>
-                                                        </div>
+                                                    {item.type === 'combobox' ? (
+                                                        <CustomComboBox
+                                                            value={item.value}
+                                                            options={item.options || []}
+                                                            onChange={item.onChange!}
+                                                        />
                                                     ) : (
                                                         <div onClick={(item as any).onClick} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: (item as any).onClick ? 'pointer' : 'default', fontSize: 14, color: 'var(--text-secondary)' }}>
-                                                            {item.value}
+                                                            {item.value || (item as any).type === 'select' ? item.value : ''}
                                                         </div>
                                                     )}
                                                 </div>
