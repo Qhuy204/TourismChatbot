@@ -356,9 +356,10 @@ export function ChatbotInterface() {
             msg,
             attachments.length > 0 ? attachments.map(a => ({ url: a.url, type: a.mimeType, name: a.name })) : undefined,
             sessionManager.memoryShareEnabled,
-            (newTitle: string) => sessionManager.renameSession(sid, newTitle),
+            (newTitle: string) => sessionManager.renameSession(sid!, newTitle),
             undefined, // modelMode
-            langKey
+            langKey,
+            sid // Provide exactly this SID as an override to ensure no async wiping
         );
     };
 
@@ -412,11 +413,15 @@ export function ChatbotInterface() {
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
-    const handleSuggestion = (text: string) => {
-        const sid = sessionManager.activeSessionId;
-        if (!sid) return;
+    const handleSuggestion = async (text: string) => {
+        let sid = sessionManager.activeSessionId;
+        if (!sid) {
+            sid = await sessionManager.createSession(text.substring(0, 30) || 'Cuộc trò chuyện mới');
+            if (!sid) return;
+        }
+
         trackChatMessage('user', `(suggestion) ${text}`);
-        sendMessage(text, undefined, sessionManager.memoryShareEnabled, (t: string) => sessionManager.renameSession(sid, t), undefined, langKey);
+        sendMessage(text, undefined, sessionManager.memoryShareEnabled, (t: string) => sessionManager.renameSession(sid!, t), undefined, langKey, sid);
     };
 
     const handleSessionChange = (sid: string) => {

@@ -91,13 +91,21 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
 
     // Handle session switch and cleanup empty sessions
     useEffect(() => {
-        if (!initialSessionId || initialSessionId === sidRef.current) return;
+        if (initialSessionId === sidRef.current) return;
 
         // Cleanup old session if it was empty before switching
         if (messages.length === 0 && sidRef.current) {
             fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
                 method: 'DELETE'
             }).catch(e => console.warn('Failed to cleanup empty session:', e));
+        }
+
+        if (!initialSessionId) {
+            sidRef.current = crypto.randomUUID();
+            setMessages([]);
+            setSuggestions([]);
+            setError(null);
+            return;
         }
 
         sidRef.current = initialSessionId;
@@ -171,10 +179,15 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         memoryShareEnabled: boolean = false,
         onNewTitle?: (title: string) => void,
         overrideModelMode?: 'gemini' | 'qwen',
-        language?: string
+        language?: string,
+        overrideSessionId?: string,
     ) => {
         if (!content.trim() || !user?.id) return;
         setError(null);
+
+        if (overrideSessionId && overrideSessionId !== sidRef.current) {
+            sidRef.current = overrideSessionId;
+        }
 
         const currentSid = sidRef.current;
         const isFirstMessage = messages.filter(m => !m.isLoading).length === 0;
@@ -415,7 +428,6 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
             sessionMessagesCache[sidRef.current] = messages;
         }
         // Let the useEffect handle the actual loading, we just cache the current
-        setSuggestions([]);
     }, [messages]);
 
     return {
