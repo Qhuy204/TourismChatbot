@@ -211,46 +211,74 @@ class GeminiClient:
         
         return response.text or ""
     
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     async def generate_json(
         self,
         prompt: str,
         schema: Dict[str, Any],
         temperature: float = 0.3,
-        max_tokens: int = 1024  # Higher limit for JSON output
+        max_tokens: int = 4096  # Higher limit since gemini-3 generates <thought>
     ) -> Dict[str, Any]:
-        """Generate structured JSON output"""
-        json_prompt = f"""{prompt}
-
-Trả về JSON theo schema:
-{json.dumps(schema, ensure_ascii=False, indent=2)}
-
-CHỈ trả về JSON, không có text khác."""
+        """Generate structured JSON output natively using Gemini API"""
+        types = _get_types()
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+            response_mime_type="application/json",
+            response_schema=schema,
+        )
         
-        response = await self.generate(json_prompt, temperature=temperature, max_tokens=max_tokens)
+        import asyncio
+        response = await asyncio.to_thread(
+            self.client.models.generate_content,
+            model=self.model_name,
+            contents=prompt,
+            config=config
+        )
         
-        # Parse JSON with fallback
-        try:
-            # 1. Clean markdown code blocks
-            clean_response = response.strip()
-            if "```" in clean_response:
-                clean_response = re.sub(r"```(?:json)?\n?(.*?)```", r"\1", clean_response, flags=re.DOTALL).strip()
+        if not response.text:
+            return {}
             
-            # 2. Try parse cleaned response
-            return json.loads(clean_response)
-        except json.JSONDecodeError:
-            # 3. Try to extract JSON object/array via regex if direct parse fails
+        clean_text = response.text.strip()
+        
+        # 1. Remove <thought> blocks (gemini-3 specific quirk)
+        clean_text = re.sub(r"<thought>.*?</thought>\s*", "", clean_text, flags=re.DOTALL).strip()
+        
+        # 2. Clean markdown code blocks
+        if clean_text.startswith("```"):
+            clean_text = re.sub(r"^```(?:json)?\s*\n?", "", clean_text)
+            clean_text = re.sub(r"\n?```\s*$", "", clean_text)
+        clean_text = clean_text.strip()
+            
+        try:
+            return json.loads(clean_text)
+        except json.JSONDecodeError as dec_err:
             try:
-                match = re.search(r'(\{.*\}|\[.*\])', response, re.DOTALL)
-                if match:
-                    json_str = match.group(1)
+                # 3. Extract JSON object/array via indices if direct parse fails
+                first_curly = clean_text.find("{")
+                last_curly = clean_text.rfind("}")
+                first_square = clean_text.find("[")
+                last_square = clean_text.rfind("]")
+                
+                start_idx = -1
+                end_idx = -1
+                
+                if first_curly != -1 and last_curly != -1 and (first_square == -1 or first_curly < first_square):
+                    start_idx = first_curly
+                    end_idx = last_curly
+                elif first_square != -1 and last_square != -1:
+                    start_idx = first_square
+                    end_idx = last_square
+                    
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    json_str = clean_text[start_idx:end_idx+1]
                     # Simple fix for trailing commas before closing braces/brackets
                     json_str = re.sub(r",\s*([\]}])", r"\1", json_str)
                     return json.loads(json_str)
-            except:
+            except Exception:
                 pass
-            
-            # Log error but don't crash app flow
-            print(f"Failed to parse JSON: {response[:200]}...")
+                
+            print(f"Failed to parse JSON (err: {dec_err}): {response.text[:300]}...")
             return {}
     
     async def classify(

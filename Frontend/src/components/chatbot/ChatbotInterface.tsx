@@ -24,14 +24,14 @@ type ActiveMenu = { id: string; x: number; y: number } | null;
 // ── Emotion badge config ─────────────────────────────────────────────────────
 const EMOTION_DISPLAY: Record<Emotion, { emoji: string; label: string; color: string }> = {
     positive: { emoji: '😊', label: 'Tích cực', color: '#f97316' },
-    surprise: { emoji: '😮', label: 'Bất ngờ', color: '#8b5cf6' },
+    surprise: { emoji: '😮', label: 'Tò mò', color: '#8b5cf6' },
     negative: { emoji: '😤', label: 'Tiêu cực', color: '#64748b' },
     neutral: { emoji: '💬', label: '', color: '#1d6de0' },
 };
 
 const EMOTION_GREETINGS: Partial<Record<Emotion, string>> = {
     positive: '😊 Tuyệt vời! Bạn đang cảm thấy rất tích cực. Hôm nay mình đi đâu nhỉ?',
-    surprise: '😮 Có điều gì làm bạn bất ngờ sao? Hãy kể cho mình nghe nhé!',
+    surprise: '😮 Có điều gì làm bạn tò mò sao? Hãy kể cho mình nghe nhé!',
     negative: '😌 Đừng lo, mình ở đây để hỗ trợ bạn. Hãy cho mình biết vấn đề của bạn.',
 };
 

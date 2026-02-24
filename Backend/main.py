@@ -86,6 +86,7 @@ class DuplicateCleanupRequest(BaseModel):
 class RecommendationsRequest(BaseModel):
     user_id: str
     topics: Optional[List[str]] = None
+    recent_locations: Optional[List[str]] = None
     limit: int = 5
 
 
@@ -288,6 +289,7 @@ async def get_initial_suggestions(request: RecommendationsRequest):
     
     user_id = request.user_id
     topics = request.topics or []
+    recent_locations = request.recent_locations or []
     
     prefs = await get_user_preferences(user_id) if user_id else {}
     
@@ -302,7 +304,8 @@ async def get_initial_suggestions(request: RecommendationsRequest):
             {"text": "Địa điểm du lịch hot nhất 2026", "category": "trending"},
             {"text": "Gợi ý du lịch biển đẹp", "category": "discovery"},
             {"text": "Lịch trình Đà Nẵng 3 ngày", "category": "itinerary"},
-            {"text": "Ẩm thực đường phố Hà Nội", "category": "food"}
+            {"text": "Ẩm thực đường phố Hà Nội", "category": "food"},
+            {"text": "Cẩm nang du lịch trải nghiệm", "category": "tips"}
         ]
     }
     
@@ -313,10 +316,11 @@ async def get_initial_suggestions(request: RecommendationsRequest):
         # Build context string from interests
         interest_str = ", ".join(all_interests[:5])
         city_str = ", ".join(preferred_cities[:3]) if preferred_cities else ""
+        recent_loc_str = ", ".join(recent_locations[:3]) if recent_locations else ""
         
         prompt = f"""Bạn là trợ lý du lịch AI thông minh. 
-Người dùng quan tâm: {interest_str}
-{f"Địa điểm yêu thích: {city_str}" if city_str else ""}
+Người dùng đặc biệt quan tâm các chủ đề: {interest_str}
+{f"Các địa điểm tìm kiếm gần nhất: {recent_loc_str}" if recent_loc_str else f"Địa điểm yêu thích: {city_str}" if city_str else ""}
 
 Hãy tạo nội dung gợi ý NGẮN GỌN, HỮU ÍCH:
 
@@ -324,21 +328,24 @@ Hãy tạo nội dung gợi ý NGẮN GỌN, HỮU ÍCH:
    - Thân thiện, lịch sự, không quá suồng sã.
    - VD: "Chào bạn, hôm nay bạn muốn khám phá ở đâu?", "Mình có thể giúp bạn lên kế hoạch đi đâu?"
 
-2. 4 gợi ý TÌM KIẾM (như keyword):
+2. 5 gợi ý TÌM KIẾM (như keyword):
+   - Khoảng 60% (3 gợi ý) liên quan trực tiếp đến "Các địa điểm tìm kiếm gần nhất" (nếu có).
+   - Khoảng 40% (2 gợi ý) liên quan đến "chủ đề" người dùng quan tâm ở các địa điểm nổi tiếng khác.
    - Tập trung vào thông tin thực tế.
    - KHÔNG dùng emojis.
    - KHÔNG dùng "nhé", "nha", "thử xem".
    - KHÔNG dùng dấu "?".
    - VD: "Kinh nghiệm du lịch Phú Quốc", "Lịch trình Đà Lạt 3 ngày", "Đặc sản phở Hà Nội", "Vé cáp treo Bà Đen"
 
-Trả về JSON:
+Trả về JSON nguyên vẹn, đảm bảo điền nội dung cụ thể không viết tắt:
 {{
-    "welcome_message": "...",
+    "welcome_message": "<Câu chào ngắn gọn>",
     "suggestions": [
-        {{"text": "...", "category": "itinerary"}},
-        {{"text": "...", "category": "experience"}},
-        {{"text": "...", "category": "tips"}},
-        {{"text": "...", "category": "discovery"}}
+        {{"text": "<Giá trị gợi ý 1>", "category": "itinerary"}},
+        {{"text": "<Giá trị gợi ý 2>", "category": "experience"}},
+        {{"text": "<Giá trị gợi ý 3>", "category": "tips"}},
+        {{"text": "<Giá trị gợi ý 4>", "category": "discovery"}},
+        {{"text": "<Giá trị gợi ý 5>", "category": "food"}}
     ]
 }}"""
         
@@ -443,10 +450,10 @@ QUY TẮC JSON:
 
 VD tốt: "Thác nào đẹp nhất Tây Nguyên", "Buôn Đôn có gì chơi", "Cà phê ở đâu ngon nhất", "Nên đi mùa nào"
 
-Trả về JSON:
+Trả về JSON nguyên vẹn, đảm bảo điền nội dung cụ thể không viết tắt:
 {{
     "suggestions": [
-        {{"text": "...", "category": "experience|food|tips|schedule"}}
+        {{"text": "<Gợi ý 1>", "category": "experience|food|tips|schedule"}}
     ]
 }}"""
         
@@ -503,6 +510,14 @@ async def delete_session(session_id: str):
     from langgraph_agent.memory.store import delete_chat_session
     success = await delete_chat_session(session_id)
     return {"status": "ok" if success else "error"}
+
+
+@app.delete("/langgraph/sessions/cleanup/{session_id}")
+async def cleanup_empty_session(session_id: str):
+    """Delete a session ONLY if it has no messages"""
+    from langgraph_agent.memory.store import cleanup_empty_chat_session
+    success = await cleanup_empty_chat_session(session_id)
+    return {"status": "ok", "cleaned_up": success}
 
 
 @app.get("/langgraph/history/{session_id}")

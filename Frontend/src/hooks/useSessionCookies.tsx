@@ -207,9 +207,15 @@ export function useSessionCookies() {
                     .map(([name]) => name)
                     .slice(0, 15);
 
+                // IMPORTANT: Prune currentCounts to only keep the top 15 to prevent cookie size from exceeding 4KB
+                const prunedCounts: Record<string, number> = {};
+                sortedTopics.forEach(topic => {
+                    prunedCounts[topic] = currentCounts[topic];
+                });
+
                 const updated = {
                     ...prev.preferences,
-                    topicCounts: currentCounts,
+                    topicCounts: prunedCounts,
                     askedTopics: sortedTopics,
                     questionCount: (prev.preferences.questionCount || 0) + 1
                 };
@@ -228,9 +234,13 @@ export function useSessionCookies() {
         setSessionData(prev => {
             if (!prev) return null;
 
+            const current = prev.preferences.recentLocations || [];
+            const filtered = current.filter(loc => !locations.includes(loc));
+            const newRecent = [...locations, ...filtered].slice(0, 10);
+
             const updated = {
                 ...prev.preferences,
-                recentLocations: locations.slice(0, 5) // Keep max 5 recent locations
+                recentLocations: newRecent
             };
 
             Cookies.set(PREFS_COOKIE, JSON.stringify(updated), {
