@@ -1,26 +1,27 @@
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
+import { useAuth } from '@/hooks/useAuth';
 import {
     MessageSquare, Image, Mic, Zap, Search, Calendar,
     Star, TrendingUp, Clock, CheckCircle, ArrowRight,
-    Bot, BarChart3
+    Bot, BarChart3, Globe, Shield, Map
 } from 'lucide-react';
 
 const quickActions = [
-    { icon: Search, label: 'AI Search', desc: 'Find anything instantly', color: '#1d6de0' },
-    { icon: Calendar, label: 'Trip Planning', desc: 'Plan your itinerary', color: '#06b6d4' },
-    { icon: Image, label: 'AI Images', desc: 'Explore destinations', color: '#8b5cf6' },
-    { icon: Mic, label: 'Voice Guide', desc: 'Audio travel tips', color: '#10b981' },
+    { icon: Search, label: 'Smart RAG', desc: 'Real-time Vietnam data', color: '#1d6de0' },
+    { icon: Map, label: 'Itineraries', desc: 'AI-generated schedules', color: '#06b6d4' },
+    { icon: Image, label: 'Multi-Modal', desc: 'Analyze travel photos', color: '#8b5cf6' },
+    { icon: Mic, label: 'Voice Guide', desc: 'Smarter voice assistance', color: '#10b981' },
 ];
 
 const features = [
-    { icon: MessageSquare, label: 'Smart Chat', desc: 'Contextual conversations about Vietnam travel' },
-    { icon: Image, label: 'Visual Search', desc: 'Upload photos to identify locations' },
-    { icon: Mic, label: 'Voice Assist', desc: 'Hands-free travel assistance' },
-    { icon: Search, label: 'Web Access', desc: 'Real-time travel information' },
-    { icon: Bot, label: 'AI Bots', desc: 'Specialized travel agents' },
-    { icon: BarChart3, label: 'Analytics', desc: 'Track your travel preferences' },
+    { icon: MessageSquare, label: 'Contextual Chat', desc: 'Natural dialogue with deep memory of your preferences.' },
+    { icon: Zap, label: 'RAG Retrieval', desc: 'Instant access to up-to-date Vietnam tourism data and local secrets.' },
+    { icon: Image, label: 'Visual Analysis', desc: 'Identify landmarks, menus, and documents using advanced AI vision.' },
+    { icon: Globe, label: 'Multi-Lingual', desc: 'Seamlessly switch between Vietnamese, English, and other languages.' },
+    { icon: Shield, label: 'Secure & Private', desc: 'Enterprise-grade encryption for all your personal travel data.' },
+    { icon: BarChart3, label: 'Smart Insights', desc: 'Discover travel patterns and personalized recommendations.' },
 ];
 
 const stats = [
@@ -30,14 +31,15 @@ const stats = [
 ];
 
 const steps = [
-    { num: '01', title: 'Sign Up', desc: 'Create your free account in seconds' },
-    { num: '02', title: 'Personalise', desc: 'Tell us your travel preferences' },
-    { num: '03', title: 'Explore', desc: 'Get AI-powered recommendations' },
-    { num: '04', title: 'Go Travel', desc: 'Enjoy your perfect trip' },
+    { num: '01', title: 'Contextual Input', desc: 'Ask anything or upload your travel documents.' },
+    { num: '02', title: 'AI Processing', desc: 'Gemini & Qwen models analyze your request instantly.' },
+    { num: '03', title: 'Data Retrieval', desc: 'We fetch real-time data from our Vietnam Knowledge Base.' },
+    { num: '04', title: 'Instant Result', desc: 'Receive perfect plans, maps, and local insights.' },
 ];
 
 export default function LandingPage() {
     const navigate = useNavigate();
+    const { user } = useAuth();
 
     return (
         <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
@@ -84,16 +86,16 @@ export default function LandingPage() {
                         <button
                             className="btn-primary animate-glow"
                             style={{ padding: '14px 32px', fontSize: 16, borderRadius: 12 }}
-                            onClick={() => navigate('/app')}
+                            onClick={() => navigate(user ? '/app' : '/auth')}
                         >
-                            Get Started Free
+                            {user ? 'Go to Dashboard' : 'Get Started Free'}
                         </button>
                         <button
                             className="btn-outline"
                             style={{ padding: '14px 32px', fontSize: 16, borderRadius: 12 }}
                             onClick={() => navigate('/features')}
                         >
-                            Explore Features →
+                            See how it works
                         </button>
                     </div>
                 </div>
@@ -138,10 +140,10 @@ export default function LandingPage() {
                             {/* Main Chat */}
                             <div style={{ padding: 24, background: 'var(--bg-card)' }}>
                                 <h3 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
-                                    Hi there! 👋
+                                    Xin chào! 👋
                                 </h3>
                                 <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
-                                    How can I help you plan your trip today?
+                                    Tôi có thể giúp bạn lên kế hoạch du lịch hôm nay không?
                                 </p>
                                 <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
                                     {quickActions.map(({ icon: Icon, label, desc, color }) => (
@@ -168,7 +170,7 @@ export default function LandingPage() {
                                     border: '1px solid var(--border)',
                                     borderRadius: 10, padding: '10px 14px',
                                 }}>
-                                    <span style={{ flex: 1, fontSize: 13, color: 'var(--text-muted)' }}>Ask me anything about Vietnam travel...</span>
+                                    <span style={{ flex: 1, fontSize: 13, color: 'var(--text-muted)' }}>Bạn muốn đi đâu ở Việt Nam? Ví dụ: Lịch trình Đà Nẵng 3 ngày...</span>
                                     <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         <ArrowRight size={13} color="white" />
                                     </div>
@@ -185,8 +187,8 @@ export default function LandingPage() {
                     <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 28, letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600 }}>
                         Trusted by explorers worldwide
                     </p>
-                    <div style={{ display: 'flex', gap: 48, justifyContent: 'center', flexWrap: 'wrap', opacity: 0.5 }}>
-                        {['TravelX', 'VietTour', 'Hanoi.io', 'ExploreAI', 'NomadCo'].map(name => (
+                    <div style={{ display: 'flex', gap: 'clamp(24px, 5vw, 48px)', justifyContent: 'center', flexWrap: 'wrap', opacity: 0.5 }}>
+                        {['DeepMind', 'Gemini', 'Unsloth', 'LangGraph', 'Supabase'].map(name => (
                             <span key={name} style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-secondary)', letterSpacing: '-0.5px' }}>
                                 {name}
                             </span>
@@ -293,27 +295,27 @@ export default function LandingPage() {
                             Ready to Explore Vietnam?
                         </h2>
                         <p style={{ color: 'var(--text-muted)', fontSize: 16, maxWidth: 440, margin: '0 auto 36px' }}>
-                            Join thousands of travelers who use ViVi to discover hidden gems and plan perfect trips.
+                            Join thousands of travelers who use ViVi to discover hidden gems and plan perfect trips with the power of AI.
                         </p>
                         <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
                             <button
                                 className="btn-primary"
                                 style={{ padding: '14px 36px', fontSize: 16, borderRadius: 12 }}
-                                onClick={() => navigate('/app')}
+                                onClick={() => navigate(user ? '/app' : '/auth')}
                             >
-                                Start for Free <ArrowRight size={16} style={{ display: 'inline', marginLeft: 6 }} />
+                                {user ? 'Go to Dashboard' : 'Start for Free'} <ArrowRight size={16} style={{ display: 'inline', marginLeft: 6 }} />
                             </button>
                             <button
                                 className="btn-outline"
                                 style={{ padding: '14px 36px', fontSize: 16, borderRadius: 12 }}
                                 onClick={() => navigate('/pricing')}
                             >
-                                View Plans
+                                Compare Plans
                             </button>
                         </div>
                         <p style={{ marginTop: 20, fontSize: 13, color: 'var(--text-muted)' }}>
                             <CheckCircle size={13} style={{ display: 'inline', marginRight: 4 }} color="var(--primary)" />
-                            No credit card required · Free forever plan available
+                            Free plan available for all explorers
                         </p>
                     </div>
                 </div>

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useThemeMode } from '@/hooks/useThemeMode';
-import { Sun, Moon, Menu, X } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { Sun, Moon, Menu, X, LayoutDashboard } from 'lucide-react';
 
 const navLinks = [
     { label: 'Home', path: '/' },
@@ -13,6 +14,7 @@ const navLinks = [
 
 export function Navbar() {
     const { theme, toggleTheme } = useThemeMode();
+    const { user } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
     const navigate = useNavigate();
 
@@ -76,14 +78,26 @@ export function Navbar() {
                         {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
                     </button>
 
-                    {/* Login Button */}
-                    <button
-                        className="btn-primary"
-                        onClick={() => navigate('/auth')}
-                        style={{ padding: '8px 20px' }}
-                    >
-                        Login
-                    </button>
+                    {/* Auth Button */}
+                    {user ? (
+                        <button
+                            className="btn-primary"
+                            onClick={() => navigate('/app')}
+                            style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6 }}
+                        >
+                            <LayoutDashboard size={14} />
+                            <span className="desktop-only">Go to App</span>
+                            <span className="mobile-only">App</span>
+                        </button>
+                    ) : (
+                        <button
+                            className="btn-primary"
+                            onClick={() => navigate('/auth')}
+                            style={{ padding: '8px 20px' }}
+                        >
+                            Login
+                        </button>
+                    )}
 
                     {/* Mobile Hamburger */}
                     <button

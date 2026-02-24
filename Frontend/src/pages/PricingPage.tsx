@@ -1,60 +1,60 @@
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
+import { useAuth } from '@/hooks/useAuth';
 import { Check, Zap, Star, Building2, ArrowRight } from 'lucide-react';
 
 const plans = [
     {
-        name: 'Free',
-        price: '$0',
-        description: 'For organizations looking to get started with AI & automations.',
+        name: 'Basic',
+        price: 'Free',
+        description: 'Perfect for casual travelers exploring Vietnam.',
         icon: Star,
-        cta: 'Sign Up Now',
+        cta: 'Start for Free',
         ctaStyle: 'outline',
         features: [
-            '10+ AI Conversations/day',
-            '5 AI Image lookups',
-            'Basic destination search',
-            'Community support',
-            'Standard response speed',
+            'Smart AI Conversations (Gemini Flash)',
+            'Contextual Follow-up Suggestions',
+            'Basic Destination Discovery',
+            'Community Support',
+            'History Tracking (Last 7 days)',
         ],
         highlight: false,
     },
     {
-        name: 'Professional',
-        price: '$60',
+        name: 'Pro Explorer',
+        price: '$9.99',
         period: '/month',
-        description: 'For organizations looking to unlock the full power of AI & automations.',
+        description: 'The ultimate tool for serious travelers and digital nomads.',
         icon: Zap,
         cta: 'Get Started Now',
         ctaStyle: 'primary',
         features: [
-            'Unlimited AI conversations',
-            '100+ AI image searches',
-            '50+ voice assistant queries',
-            'Real-time web access',
-            'Priority support 24/7',
-            'Advanced trip planning',
-            'Multi-language support',
+            'Everything in Basic',
+            'Multi-Modal Uploads (PDF, Excel, Images)',
+            'Advanced Route & Itinerary Planning',
+            'AI Voice Assistance (Beta)',
+            'Real-Time Web Intelligence',
+            'Unlimited Conversation History',
+            'Priority Response Time',
         ],
         highlight: true,
     },
     {
-        name: 'Enterprise',
-        price: '$120',
-        period: '/month',
-        description: 'For large organizations requiring advanced AI-solutions.',
+        name: 'Business/Enterprise',
+        price: 'Custom',
+        description: 'For travel agencies and large scale tour operators.',
         icon: Building2,
-        cta: 'Get Started Now',
+        cta: 'Contact Sales',
         ctaStyle: 'outline',
         features: [
-            'Everything in Professional',
-            '500+ AI image searches',
-            'Custom AI bot training',
-            'API access',
-            'Dedicated account manager',
-            'SLA guarantee',
-            'Advanced analytics',
+            'Everything in Pro Explorer',
+            'Custom AI Model Training (SFT)',
+            'Enterprise API Access',
+            'Dedicated Account Manager',
+            'SLA & High Availability',
+            'Team Collaboration Workspace',
+            'Advanced Analytics Dashboard',
         ],
         highlight: false,
     },
@@ -62,6 +62,7 @@ const plans = [
 
 export default function PricingPage() {
     const navigate = useNavigate();
+    const { user } = useAuth();
 
     return (
         <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
@@ -122,18 +123,21 @@ export default function PricingPage() {
                                 </div>
 
                                 <div style={{ marginBottom: 8 }}>
-                                    <span style={{ fontSize: 52, fontWeight: 900, color: 'var(--text)', letterSpacing: '-2px' }}>{price}</span>
+                                    <span style={{ fontSize: price === 'Custom' ? 38 : 52, fontWeight: 900, color: 'var(--text)', letterSpacing: '-2px' }}>{price}</span>
                                     {period && <span style={{ fontSize: 16, color: 'var(--text-muted)' }}>{period}</span>}
                                 </div>
 
                                 <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 28, lineHeight: 1.6 }}>{description}</p>
 
                                 <button
-                                    onClick={() => navigate('/auth')}
+                                    onClick={() => {
+                                        if (price === 'Custom') navigate('/contact');
+                                        else navigate(user ? '/app' : '/auth');
+                                    }}
                                     className={ctaStyle === 'primary' ? 'btn-primary' : 'btn-outline'}
                                     style={{ width: '100%', padding: '11px 0', marginBottom: 28, fontSize: 14 }}
                                 >
-                                    {cta}
+                                    {price === 'Custom' ? cta : (user ? 'Go to Dashboard' : cta)}
                                 </button>
 
                                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: 24 }}>
