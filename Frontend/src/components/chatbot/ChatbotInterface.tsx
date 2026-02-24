@@ -847,26 +847,37 @@ export function ChatbotInterface() {
                         <div className="settings-sidebar-mobile" style={{ width: 230, background: 'var(--bg-card)', borderRight: '1px solid var(--border)', padding: '16px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <div className="desktop-only" style={{ padding: '0 10px 14px', fontSize: 16, fontWeight: 600, color: 'var(--text)' }}>Settings</div>
                             {[
-                                { id: 'general', icon: Settings, label: 'General' },
-                                { id: 'notifications', icon: Bell, label: 'Notifications' },
-                                { id: 'personalization', icon: Sliders, label: 'Personalization' },
-                                { id: 'account', icon: User, label: 'Account' }
+                                { id: 'general', icon: Settings, label: t.general || 'General' },
+                                { id: 'notifications', icon: Bell, label: t.notifications || 'Notifications' },
+                                { id: 'personalization', icon: Sliders, label: t.personalization || 'Personalization' },
+                                { id: 'account', icon: User, label: t.account || 'Account' }
                             ].map(tab => (
                                 <button
                                     key={tab.id}
-                                    onClick={() => setActiveSettingsTab(tab.id)}
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                                        background: tab.id === activeSettingsTab ? 'rgba(29, 109, 224, 0.12)' : 'transparent',
-                                        border: 'none', borderRadius: 10, color: tab.id === activeSettingsTab ? 'var(--primary)' : 'var(--text)',
-                                        fontSize: 14, cursor: 'pointer', transition: 'all 0.2s',
-                                        fontWeight: tab.id === activeSettingsTab ? 600 : 400
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        console.log('Switching to tab:', tab.id);
+                                        setActiveSettingsTab(tab.id);
                                     }}
-                                    onMouseOver={e => { if (tab.id !== activeSettingsTab) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
-                                    onMouseOut={e => { if (tab.id !== activeSettingsTab) e.currentTarget.style.background = 'transparent'; }}
+                                    className="settings-tab-btn"
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+                                        background: tab.id === activeSettingsTab ? 'rgba(29, 109, 224, 0.15)' : 'transparent',
+                                        border: 'none', borderRadius: 12,
+                                        color: tab.id === activeSettingsTab ? 'var(--primary)' : 'var(--text)',
+                                        fontSize: 14, cursor: 'pointer', transition: 'all 0.2s',
+                                        fontWeight: tab.id === activeSettingsTab ? 600 : 400,
+                                        textAlign: 'left', width: '100%', position: 'relative', zIndex: 10
+                                    }}
                                 >
-                                    <tab.icon size={16} color={tab.id === activeSettingsTab ? 'var(--primary)' : 'var(--text-muted)'} />
-                                    <span>{tab.label}</span>
+                                    <tab.icon
+                                        size={18}
+                                        style={{ pointerEvents: 'none' }}
+                                        color={tab.id === activeSettingsTab ? 'var(--primary)' : 'var(--text-muted)'}
+                                    />
+                                    <span style={{ pointerEvents: 'none' }}>{tab.label}</span>
                                 </button>
                             ))}
                         </div>

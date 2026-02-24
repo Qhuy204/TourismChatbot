@@ -460,3 +460,15 @@ textarea::placeholder {
 .grid-cols-4 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
+
+.settings-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+@media (max-width: 768px) {
+  .settings-tab-btn {
+    width: auto !important;
+    white-space: nowrap;
+    padding: 8px 12px !important;
+  }
+}
