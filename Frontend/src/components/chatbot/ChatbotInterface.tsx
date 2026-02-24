@@ -850,22 +850,30 @@ export function ChatbotInterface() {
                                 { id: 'general', icon: Settings, label: 'General' },
                                 { id: 'notifications', icon: Bell, label: 'Notifications' },
                                 { id: 'personalization', icon: Sliders, label: 'Personalization' },
-                                { id: 'apps', icon: AppWindow, label: 'Apps' },
-                                { id: 'data', icon: Database, label: 'Data controls' },
-                                { id: 'security', icon: Shield, label: 'Security' },
-                                { id: 'parental', icon: Users, label: 'Parental controls' },
                                 { id: 'account', icon: User, label: 'Account' }
                             ].map(tab => (
-                                <button key={tab.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', background: tab.id === 'general' ? 'var(--bg-muted)' : 'transparent', border: 'none', borderRadius: 8, color: 'var(--text)', fontSize: 14, cursor: 'pointer' }} onMouseOver={e => { if (tab.id !== 'general') e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }} onMouseOut={e => { if (tab.id !== 'general') e.currentTarget.style.background = 'transparent'; }}>
-                                    <tab.icon size={16} color={tab.id === 'general' ? 'var(--primary)' : 'var(--text-muted)'} />
-                                    <span style={{ fontWeight: tab.id === 'general' ? 500 : 400 }}>{tab.label}</span>
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveSettingsTab(tab.id)}
+                                    style={{
+                                        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                                        background: tab.id === activeSettingsTab ? 'rgba(29, 109, 224, 0.12)' : 'transparent',
+                                        border: 'none', borderRadius: 10, color: tab.id === activeSettingsTab ? 'var(--primary)' : 'var(--text)',
+                                        fontSize: 14, cursor: 'pointer', transition: 'all 0.2s',
+                                        fontWeight: tab.id === activeSettingsTab ? 600 : 400
+                                    }}
+                                    onMouseOver={e => { if (tab.id !== activeSettingsTab) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                                    onMouseOut={e => { if (tab.id !== activeSettingsTab) e.currentTarget.style.background = 'transparent'; }}
+                                >
+                                    <tab.icon size={16} color={tab.id === activeSettingsTab ? 'var(--primary)' : 'var(--text-muted)'} />
+                                    <span>{tab.label}</span>
                                 </button>
                             ))}
                         </div>
                         <div style={{ flex: 1, padding: '24px 32px', overflowY: 'auto' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
-                                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'var(--text)' }}>General</h2>
-                                <button onClick={() => setSettingsOpen(false)} style={{ background: 'var(--bg-muted)', border: '1px solid var(--border)', borderRadius: 50, width: 32, height: 32, cursor: 'pointer', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Close"><X size={16} /></button>
+                                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text)', textTransform: 'capitalize' }}>{activeSettingsTab}</h2>
+                                <button onClick={() => setSettingsOpen(false)} style={{ background: 'var(--bg-muted)', border: '1px solid var(--border)', borderRadius: 50, width: 32, height: 32, cursor: 'pointer', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }} onMouseOver={e => e.currentTarget.style.background = 'var(--border)'} onMouseOut={e => e.currentTarget.style.background = 'var(--bg-muted)'} title="Close"><X size={16} /></button>
                             </div>
 
                             {/* MFA Card */}
@@ -911,11 +919,41 @@ export function ChatbotInterface() {
                                                 </div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                                                     {item.type === 'select' ? (
-                                                        <select value={item.value} onChange={(e) => item.onChange && item.onChange(e.target.value)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', fontSize: 14, outline: 'none', cursor: 'pointer' }}>
-                                                            {(item.options || []).map(opt => <option key={opt.value} value={opt.value} style={{ background: 'var(--bg-card)' }}>{opt.label}</option>)}
-                                                        </select>
+                                                        <div style={{ position: 'relative' }}>
+                                                            <select
+                                                                value={item.value}
+                                                                onChange={(e) => item.onChange && item.onChange(e.target.value)}
+                                                                style={{
+                                                                    appearance: 'none',
+                                                                    background: 'var(--bg-muted)',
+                                                                    border: '1px solid var(--border)',
+                                                                    borderRadius: 10,
+                                                                    padding: '8px 32px 8px 16px',
+                                                                    color: 'var(--text)',
+                                                                    fontSize: 14,
+                                                                    cursor: 'pointer',
+                                                                    outline: 'none',
+                                                                    minWidth: 140
+                                                                }}
+                                                            >
+                                                                {(item.options || []).map(opt => <option key={opt.value} value={opt.value} style={{ background: 'var(--bg-card)' }}>{opt.label}</option>)}
+                                                            </select>
+                                                            <ChevronRight size={14} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%) rotate(90deg)', pointerEvents: 'none', color: 'var(--text-muted)' }} />
+                                                        </div>
                                                     ) : item.type === 'color' ? (
-                                                        <input type="color" value={item.value} onChange={(e) => item.onChange && item.onChange(e.target.value)} style={{ width: 30, height: 30, padding: 0, border: 'none', borderRadius: 4, background: 'transparent', cursor: 'pointer' }} />
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-muted)', padding: '4px 8px', borderRadius: 10, border: '1px solid var(--border)' }}>
+                                                            <div style={{ width: 20, height: 20, borderRadius: 6, background: item.value, border: '1px solid rgba(255,255,255,0.1)' }} />
+                                                            <input
+                                                                type="color"
+                                                                value={item.value}
+                                                                onChange={(e) => item.onChange && item.onChange(e.target.value)}
+                                                                style={{
+                                                                    width: 0, height: 0, opacity: 0, padding: 0, border: 'none', position: 'absolute'
+                                                                }}
+                                                                id="accent-color-picker"
+                                                            />
+                                                            <label htmlFor="accent-color-picker" style={{ fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 500 }}>{item.value.toUpperCase()}</label>
+                                                        </div>
                                                     ) : (
                                                         <div onClick={(item as any).onClick} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: (item as any).onClick ? 'pointer' : 'default', fontSize: 14, color: 'var(--text-secondary)' }}>
                                                             {item.value}
