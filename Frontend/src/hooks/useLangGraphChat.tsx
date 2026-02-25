@@ -91,33 +91,40 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
 
     // Handle session switch and cleanup empty sessions
     useEffect(() => {
+        console.log('[DEBUG] useLangGraphChat useEffect session switch. initialSessionId=', initialSessionId, 'sidRef.current=', sidRef.current);
         if (initialSessionId === sidRef.current) return;
 
         // Cleanup old session if it was empty before switching
         if (messages.length === 0 && sidRef.current) {
+            console.log('[DEBUG] Cleaning up old empty session:', sidRef.current);
             fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
                 method: 'DELETE'
             }).catch(e => console.warn('Failed to cleanup empty session:', e));
         }
 
         if (!initialSessionId) {
-            sidRef.current = crypto.randomUUID();
+            const newSid = crypto.randomUUID();
+            console.log('[DEBUG] Generating new empty session:', newSid);
+            sidRef.current = newSid;
             setMessages([]);
             setSuggestions([]);
             setError(null);
             return;
         }
 
+        console.log('[DEBUG] Switching to existing session:', initialSessionId);
         sidRef.current = initialSessionId;
         setSuggestions([]);
         setError(null);
 
         const cached = sessionMessagesCache[initialSessionId];
         if (cached) {
+            console.log('[DEBUG] Session hit cache! Messages length:', cached.length);
             setMessages(cached);
             return;
         }
 
+        console.log('[DEBUG] Session NOT in cache, fetching history for:', initialSessionId);
         setMessages([]); // Clear old messages immediately
         setIsLoading(true);
         fetch(`${LANGGRAPH_API_URL}/langgraph/history/${initialSessionId}`)
@@ -135,6 +142,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
                     intent: log.role === 'assistant' ? (log.context as Record<string, unknown>)?.intent as string : undefined,
                     attachments: log.role === 'user' ? (log.context as Record<string, unknown>)?.attachments as any[] : undefined,
                 }));
+                console.log('[DEBUG] Fetched history for', initialSessionId, 'length:', msgs.length);
                 setMessages(msgs);
                 sessionMessagesCache[initialSessionId] = msgs;
             })

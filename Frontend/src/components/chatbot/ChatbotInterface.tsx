@@ -259,7 +259,7 @@ export function ChatbotInterface() {
         messages, isLoading, sendMessage, clearMessages,
         updateFeedback, suggestions, refreshSuggestions, error,
         switchSession, fetchInitialSuggestions, initialData,
-        modelMode, setModelMode, preferences,
+        modelMode, setModelMode, preferences, sessionId
     } = useLangGraphChat(sessionManager.activeSessionId ?? undefined, langKey);
 
     const { trackPageView, trackChatMessage } = useEventTracking();
@@ -276,12 +276,13 @@ export function ChatbotInterface() {
     // Fetch suggestions on new session
     const fetchedRef = useRef<string | null>(null);
     useEffect(() => {
-        const sid = sessionManager.activeSessionId;
-        if (sid && messages.length === 0 && !isLoading && fetchedRef.current !== sid) {
-            fetchedRef.current = sid;
+        console.log('[DEBUG] ChatbotInterface Check: sessionId=', sessionId, 'messages.length=', messages.length, 'isLoading=', isLoading, 'fetchedRef=', fetchedRef.current);
+        if (sessionId && messages.length === 0 && !isLoading && fetchedRef.current !== sessionId) {
+            console.log('[DEBUG] ChatbotInterface FETCHING initial suggestions for', sessionId);
+            fetchedRef.current = sessionId;
             fetchInitialSuggestions(preferences?.askedTopics);
         }
-    }, [sessionManager.activeSessionId, messages.length, isLoading, fetchInitialSuggestions, preferences]);
+    }, [sessionId, messages.length, isLoading, fetchInitialSuggestions, preferences]);
 
     useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
