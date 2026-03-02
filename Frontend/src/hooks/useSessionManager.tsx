@@ -64,12 +64,16 @@ export function useSessionManager() {
                     preview: s.first_message || '',
                 }));
 
-                // We do not auto-restore the last session on mount anymore.
-                // This forces a "New Chat" view, like ChatGPT/Gemini, when navigating to /app.
+                // Restore last active session from localStorage (per-user scoped)
+                const savedActiveSession = localStorage.getItem(`active_session_${user.id}`);
+                const restoredSessionId = (savedActiveSession && sessions.some(s => s.id === savedActiveSession))
+                    ? savedActiveSession
+                    : null;
+
                 setState(prev => ({
                     ...prev,
                     sessions,
-                    activeSessionId: null,
+                    activeSessionId: restoredSessionId,
                 }));
             } catch (e) {
                 console.error('Failed to load sessions:', e);

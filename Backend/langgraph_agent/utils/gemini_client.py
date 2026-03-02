@@ -299,12 +299,32 @@ class GeminiClient:
                     if end_idx <= start_idx:
                         # Attempt to fix truncated JSON by closing brackets
                         json_str = clean_text[start_idx:]
-                        open_braces = json_str.count("{") - json_str.count("}")
-                        open_brackets = json_str.count("[") - json_str.count("]")
+                        
+                        # Fix unterminated strings: close any open quotes
+                        # Count unescaped quotes
+                        quote_count = len(re.findall(r'(?<!\\)"', json_str))
+                        if quote_count % 2 != 0:
+                            # Remove everything after the last complete key-value pair
+                            # Find last complete entry (ending with } or ,)
+                            last_good = max(
+                                json_str.rfind('"},'),
+                                json_str.rfind('"}'),
+                                json_str.rfind('" }'),
+                            )
+                            if last_good > 0:
+                                json_str = json_str[:last_good + 2]  # Include the }
+                            else:
+                                # Just close the dangling quote and trim
+                                json_str = json_str.rstrip()
+                                json_str += '"'
                         
                         # Clean trailing junk like commas or partial keys
                         json_str = re.sub(r",\s*$", "", json_str)
                         json_str = re.sub(r",\s*\"[^\"]*$", "", json_str)
+                        json_str = re.sub(r",\s*\{[^}]*$", "", json_str)
+                        
+                        open_braces = json_str.count("{") - json_str.count("}")
+                        open_brackets = json_str.count("[") - json_str.count("]")
                         
                         json_str += "]" * open_brackets
                         json_str += "}" * open_braces

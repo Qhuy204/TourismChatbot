@@ -49,7 +49,18 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
     const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
     const [recentLocations, setRecentLocations] = useState<string[]>([]);
     const [initialData, setInitialData] = useState<{ welcome_message?: string; suggestions: SuggestionItem[] } | null>(null);
-    const [modelMode, setModelMode] = useState<'gemini' | 'qwen'>('gemini');
+    const [modelMode, setModelModeInternal] = useState<'gemini' | 'qwen'>(() => {
+        const saved = localStorage.getItem(`model_mode_${user?.id}`);
+        return saved === 'qwen' ? 'qwen' : 'gemini';
+    });
+
+    // Wrap setModelMode to persist to localStorage per-user
+    const setModelMode = useCallback((mode: 'gemini' | 'qwen') => {
+        setModelModeInternal(mode);
+        if (user?.id) {
+            localStorage.setItem(`model_mode_${user.id}`, mode);
+        }
+    }, [user?.id]);
     const [error, setError] = useState<string | null>(null);
 
     const sidRef = useRef<string>(initialSessionId || savedSessionId || crypto.randomUUID());

@@ -9,6 +9,16 @@ import AboutPage from '@/pages/AboutPage';
 import ContactPage from '@/pages/ContactPage';
 import AuthPage from '@/pages/AuthPage';
 import ChatApp from '@/pages/ChatApp';
+import ProfilePage from '@/pages/ProfilePage';
+import AdminLayout from '@/layouts/AdminLayout';
+import AdminOverview from '@/pages/admin/AdminOverview';
+import AdminUsers from '@/pages/admin/AdminUsers';
+import AdminLimits from '@/pages/admin/AdminLimits';
+import AdminConversations from '@/pages/admin/AdminConversations';
+import AdminLogs from '@/pages/admin/AdminLogs';
+import AdminSystem from '@/pages/admin/AdminSystem';
+import AdminSettings from '@/pages/admin/AdminSettings';
+import AdminAnalytics from '@/pages/admin/AdminAnalytics';
 
 const queryClient = new QueryClient();
 
@@ -38,6 +48,21 @@ export default function App() {
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/app" element={<ChatApp />} />
+            <Route path="/profile" element={<ProfilePage />} />
+
+            {/* Admin Nested Routes */}
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<AdminOverview />} />
+              <Route path="users" element={<AdminUsers />} />
+              <Route path="limits" element={<AdminLimits />} />
+              <Route path="conversations" element={<AdminConversations />} />
+              <Route path="logs" element={<AdminLogs />} />
+              <Route path="system" element={<AdminSystem />} />
+              <Route path="settings" element={<AdminSettings />} />
+              <Route path="analytics" element={<AdminAnalytics />} />
+              <Route path="*" element={<NotFound />} />
+            </Route>
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

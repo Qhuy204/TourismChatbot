@@ -6,8 +6,9 @@ import os
 import json
 from contextlib import asynccontextmanager
 from typing import List, Dict, Optional
+import asyncio
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -16,6 +17,9 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# ============== Globals ==============
+from langgraph_agent.utils.system_state import get_app_state, set_app_state
+# APP_STATE is now managed via system_state.py (get_app_state/set_app_state)
 
 # ============== Request/Response Models ==============
 
@@ -99,6 +103,25 @@ class ContextualSuggestionsRequest(BaseModel):
     user_messages: Optional[List[str]] = []  # Recent user messages for style mimicry
     limit: int = 4
 
+# ============== Admin API Models (Merged) ==============
+
+from langgraph_agent.utils.security import Admin
+
+class QuotaOverrideRequest(BaseModel):
+    daily_requests: Optional[int] = None
+    daily_tokens: Optional[int] = None
+
+class BanRequest(BaseModel):
+    ban: bool
+    reason: Optional[str] = "Admin Decision"
+
+class RoleChangeRequest(BaseModel):
+    role: str
+
+class DuplicateCleanupRequest(BaseModel):
+    threshold: float = 0.85
+    dry_run: bool = True
+
 
 # ============== Lifespan ==============
 
@@ -171,6 +194,105 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ============== Security & Tracing Middleware ==============
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse as StarletteJSONResponse
+import signal
+import uuid
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+app.add_middleware(RequestIDMiddleware)
+
+class SecurityMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        from langgraph_agent.utils.security import check_ip_rate_limit, SECURITY_HEADERS
+        # 1. Check System State (Maintenance/Draining)
+        # We reject new chat requests if the system is not RUNNING
+        if request.url.path.startswith("/langgraph/chat"):
+            state = get_app_state()
+            if state in ("MAINTENANCE", "DRAINING"):
+                return StarletteJSONResponse(
+                    {"detail": f"System is currently in {state.lower()} mode. Please try again shortly."},
+                    status_code=503,
+                    headers={"Retry-After": "30"}
+                )
+
+        # 2. IP rate limiting on chat endpoints
+        client_ip = request.client.host if request.client else "unknown"
+        if request.url.path.startswith("/langgraph/chat"):
+            allowed, remaining = check_ip_rate_limit(client_ip)
+            if not allowed:
+                return StarletteJSONResponse(
+                    {"detail": "Too many requests. Please slow down."},
+                    status_code=429,
+                    headers={"Retry-After": "60"}
+                )
+
+        response = await call_next(request)
+
+        # 3. Add security headers
+        for key, value in SECURITY_HEADERS.items():
+            response.headers[key] = value
+        return response
+
+app.add_middleware(SecurityMiddleware)
+
+# ============== Graceful Shutdown ==============
+
+# Graceful shutdown is handled by the lifespan context manager below.
+
+async def wait_for_idle(timeout: int = 30):
+    """Wait for all active GPU requests to finish before shutdown"""
+    from langgraph_agent.utils.gpu_queue import get_gpu_queue
+    queue = get_gpu_queue()
+    start_time = time.time()
+    
+    while queue.active_requests > 0:
+        if time.time() - start_time > timeout:
+            print(f"⚠️ Shutdown timeout reached ({timeout}s). {queue.active_requests} requests still active. Forcing exit.")
+            break
+        print(f"⏳ Waiting for {queue.active_requests} active GPU requests to finish...")
+        await asyncio.sleep(1)
+    print("✅ All active GPU requests finished.")
+
+# Update lifespan to include the wait
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    print("🚀 Starting LangGraph Tourism Chatbot...")
+    set_app_state("RUNNING")
+    
+    # ... (INITIALIZATION LOGIC REMAINS)
+    from langgraph_agent.utils.gemini_client import test_connection
+    if await test_connection(): print("✅ Gemini API connected")
+    
+    try:
+        from langgraph_agent.retrieval.vqa_store import init_vqa_store
+        loop = asyncio.get_running_loop()
+        executor = ThreadPoolExecutor(max_workers=1)
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        vqa_path = os.path.join(project_root, "Data", "vqa_dataset.jsonl")
+        loop.run_in_executor(executor, init_vqa_store, vqa_path, None)
+        from langgraph_agent.utils.qwen_client import qwen_client
+        loop.run_in_executor(executor, qwen_client.warm_load)
+    except Exception as e: print(f"⚠️ Init failed: {e}")
+    
+    yield
+    
+    # Shutdown
+    print("👋 Shutdown initiated. Finalizing active requests...")
+    set_app_state("DRAINING")
+    await wait_for_idle(timeout=30)
+    print("👋 Goodbye!")
+
 
 # ============== Endpoints ==============
 
@@ -236,9 +358,17 @@ async def chat_stream(request: ChatRequest):
     """Streaming entry point for chatbot interactions"""
     if not request.user_id:
         raise HTTPException(status_code=400, detail="user_id is required")
-        
+
+    # Rate limiting check
+    from langgraph_agent.utils.rate_limiter import check_quota, increment_usage
+    allowed, reason, usage_info = check_quota(request.user_id)
+    if not allowed:
+        async def quota_exceeded():
+            yield f"data: {json.dumps({'type': 'error', 'message': reason, 'quota_exceeded': True, 'usage': usage_info}, ensure_ascii=False)}\n\n"
+        return StreamingResponse(quota_exceeded(), media_type="text/event-stream", status_code=200)
+
     from langgraph_agent.graph import run_graph_stream
-    
+
     async def event_generator():
         try:
             async for chunk in run_graph_stream(
@@ -251,11 +381,21 @@ async def chat_stream(request: ChatRequest):
                 language=request.language
             ):
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            # Increment usage after successful stream
+            increment_usage(request.user_id, requests=1)
         except Exception as e:
             print(f"Streaming error: {e}")
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.get("/langgraph/usage/{user_id}")
+async def get_usage(user_id: str):
+    """Get user's current usage and quota limits"""
+    from langgraph_agent.utils.rate_limiter import check_quota
+    _, _, usage_info = check_quota(user_id)
+    return usage_info
 
 
 @app.post("/langgraph/suggestions", response_model=SuggestionsResponse)
@@ -580,6 +720,42 @@ async def get_history(session_id: str):
     return {"history": history}
 
 
+@app.get("/langgraph/sessions/{session_id}/export")
+async def export_session(session_id: str):
+    """Export full session with metadata + messages as JSON"""
+    from langgraph_agent.memory.store import get_session_history, get_supabase
+    from fastapi.responses import JSONResponse
+    from datetime import datetime, timezone
+
+    sb = get_supabase()
+
+    # Get session metadata
+    session_resp = sb.table("chat_sessions").select("*").eq("id", session_id).execute()
+    session_data = session_resp.data[0] if session_resp.data else {}
+
+    # Get all messages
+    history = await get_session_history(session_id)
+
+    export = {
+        "session": {
+            "id": session_data.get("id", session_id),
+            "title": session_data.get("title", "Untitled"),
+            "created_at": session_data.get("created_at"),
+            "updated_at": session_data.get("updated_at"),
+            "message_count": len(history),
+        },
+        "messages": history,
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    return JSONResponse(
+        content=export,
+        headers={
+            "Content-Disposition": f'attachment; filename="session_{session_id[:8]}.json"'
+        }
+    )
+
+
 # ============== Location Deduplication Endpoints ==============
 
 @app.post("/langgraph/locations/insert")
@@ -630,18 +806,360 @@ async def cleanup_locations(request: DuplicateCleanupRequest):
     }
 
 
-@app.post("/langgraph/recommendations")
-async def get_question_recommendations(request: RecommendationsRequest):
-    from langgraph_agent.memory.store import get_recommendations
+# ============== Admin API Endpoints (Merged) ==============
+
+import time
+from fastapi import BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from langgraph_agent.utils.security import require_admin, check_admin_rate_limit, log_admin_action, Admin
+from langgraph_agent.utils.metrics import get_system_metrics
+
+# In-memory storage for async export results (replaces Redis temp keys)
+# Key: export_id, Value: {"status": str, "data": str, "expiry": float}
+_EXPORT_RESULTS: Dict[str, Dict] = {}
+
+def _cleanup_exports():
+    """Helper to remove expired exports from memory"""
+    now = time.time()
+    expired = [k for k, v in _EXPORT_RESULTS.items() if v.get("expiry", 0) < now]
+    for k in expired: del _EXPORT_RESULTS[k]
+
+@app.get("/admin/health/deep")
+async def deep_health_check(request: Request, admin: Admin = Depends(require_admin)):
+    """Comprehensive system diagnostics for administrators"""
+    check_admin_rate_limit(admin.id, tier="standard")
     
-    recommendations = await get_recommendations(
-        user_id=request.user_id,
-        topics=request.topics,
-        limit=request.limit
-    )
-    return {"recommendations": recommendations}
+    health = {
+        "status": "healthy",
+        "timestamp": time.time(),
+        "request_id": request.state.request_id,
+        "components": {}
+    }
+    
+    # 1. Database (Supabase)
+    try:
+        from langgraph_agent.memory.store import get_supabase
+        sb = get_supabase()
+        start = time.time()
+        sb.table("user_roles").select("count", count="exact").limit(1).execute()
+        latency = (time.time() - start) * 1000
+        health["components"]["database"] = {"status": "up", "latency_ms": round(latency, 2)}
+    except Exception as e:
+        health["components"]["database"] = {"status": "down", "error": str(e)}
+        health["status"] = "degraded"
+
+    # 2. GPU
+    from langgraph_agent.utils.metrics import get_system_metrics
+    metrics = get_system_metrics()
+    gpu = metrics.get("gpu", {})
+    health["components"]["gpu"] = {"status": "up" if "error" not in gpu else "error", "details": gpu}
+
+    # 3. Qwen (Local Model)
+    try:
+        from langgraph_agent.utils.qwen_client import qwen_client
+        health["components"]["qwen"] = {
+            "status": "up" if qwen_client._is_initialized else "warmup_required",
+            "is_initialized": qwen_client._is_initialized
+        }
+    except Exception as e:
+        health["components"]["qwen"] = {"status": "error", "error": str(e)}
+
+    # 4. Gemini (External API)
+    try:
+        from langgraph_agent.utils.gemini_client import test_connection
+        is_up = await test_connection()
+        health["components"]["gemini"] = {"status": "up" if is_up else "down"}
+    except Exception as e:
+        health["components"]["gemini"] = {"status": "error", "error": str(e)}
+
+    return health
+
+@app.get("/admin/limits")
+async def get_all_limits(request: Request, admin: Admin = Depends(require_admin)):
+    check_admin_rate_limit(admin.id, tier="standard")
+    from langgraph_agent.memory.store import get_supabase
+    sb = get_supabase()
+    limits_resp = sb.table("quota_limits").select("*").execute()
+    overrides_resp = sb.table("user_quota_overrides").select("*").execute()
+    return {"roles": limits_resp.data or [], "overrides": overrides_resp.data or []}
+
+@app.put("/admin/limits/user/{target_user_id}")
+async def set_user_override(target_user_id: str, payload: QuotaOverrideRequest, request: Request, admin: Admin = Depends(require_admin)):
+    check_admin_rate_limit(admin.id, tier="standard")
+    from langgraph_agent.memory.store import get_supabase
+    sb = get_supabase()
+    try:
+        if payload.daily_requests is None and payload.daily_tokens is None:
+            sb.table("user_quota_overrides").delete().eq("user_id", target_user_id).execute()
+            action = "remove_quota_override"
+        else:
+            data = {"user_id": target_user_id, "updated_by": admin.id}
+            if payload.daily_requests is not None: data["daily_requests"] = payload.daily_requests
+            if payload.daily_tokens is not None: data["daily_tokens"] = payload.daily_tokens
+            sb.table("user_quota_overrides").upsert(data, on_conflict="user_id").execute()
+            action = "set_quota_override"
+        log_admin_action(admin_user_id=admin.id, action=action, target_type="user", target_id=target_user_id, metadata=payload.model_dump(), ip_address=request.client.host if request.client else None, request_id=request.state.request_id)
+        return {"success": True}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/users")
+async def admin_list_users(request: Request, admin: Admin = Depends(require_admin)):
+    check_admin_rate_limit(admin.id, tier="standard")
+    from langgraph_agent.memory.store import get_supabase
+    sb = get_supabase()
+    roles_resp = sb.table("user_roles").select("user_id, role").execute()
+    roles_map = {r["user_id"]: r["role"] for r in (roles_resp.data or [])}
+    msg_resp = sb.table("chat_logs").select("user_id", count="exact").execute()
+    sessions_resp = sb.table("chat_sessions").select("user_id, created_at").order("created_at", desc=True).execute()
+    user_messages = {}; user_sessions = {}; user_last_active = {}
+    for log in (msg_resp.data or []):
+        uid = log.get("user_id")
+        if uid: user_messages[uid] = user_messages.get(uid, 0) + 1
+    for sess in (sessions_resp.data or []):
+        uid = sess.get("user_id")
+        if uid:
+            user_sessions[uid] = user_sessions.get(uid, 0) + 1
+            if uid not in user_last_active: user_last_active[uid] = sess.get("created_at")
+    try:
+        users_resp = sb.auth.admin.list_users()
+        auth_users = users_resp if isinstance(users_resp, list) else (users_resp.users if hasattr(users_resp, 'users') else [])
+    except Exception: auth_users = []
+    result = []
+    for au in auth_users:
+        uid = getattr(au, 'id', au.get('id', '')) if not isinstance(au, dict) else au.get('id', '')
+        email = getattr(au, 'email', au.get('email', '')) if not isinstance(au, dict) else au.get('email', '')
+        meta = getattr(au, 'user_metadata', au.get('user_metadata', {})) if not isinstance(au, dict) else au.get('user_metadata', {})
+        created = getattr(au, 'created_at', au.get('created_at', '')) if not isinstance(au, dict) else au.get('created_at', '')
+        banned = getattr(au, 'banned_until', au.get('banned_until', '')) if not isinstance(au, dict) else au.get('banned_until', '')
+        result.append({"id": uid, "email": email, "display_name": (meta or {}).get("display_name", ""), "role": roles_map.get(uid, "user"), "created_at": str(created), "is_banned": bool(banned), "message_count": user_messages.get(uid, 0), "session_count": user_sessions.get(uid, 0), "last_active": user_last_active.get(uid)})
+    return result
+
+@app.get("/admin/metrics")
+async def admin_metrics(request: Request, admin: Admin = Depends(require_admin)):
+    check_admin_rate_limit(admin.id, tier="heavy")
+    from langgraph_agent.memory.store import get_supabase
+    from datetime import date
+    sb = get_supabase(); today = date.today().isoformat()
+    users_resp = sb.table("user_roles").select("*", count="exact").execute()
+    msgs_resp = sb.table("chat_logs").select("*", count="exact").execute()
+    sessions_resp = sb.table("chat_sessions").select("*", count="exact").execute()
+    today_msgs = sb.table("chat_logs").select("*", count="exact").gte("created_at", f"{today}T00:00:00").execute()
+    today_active = sb.table("usage_tracking").select("user_id", count="exact").eq("date", today).execute()
+    return {"total_users": users_resp.count or 0, "total_messages": msgs_resp.count or 0, "total_sessions": sessions_resp.count or 0, "active_today": today_active.count or 0, "messages_today": today_msgs.count or 0, "system": get_system_metrics()}
+
+@app.websocket("/admin/live")
+async def admin_live_ws(websocket: WebSocket, token: str = None):
+    from fastapi.security import HTTPAuthorizationCredentials
+    from langgraph_agent.utils.security import require_admin
+    await websocket.accept()
+    if not token: await websocket.close(code=1008); return
+    try:
+        creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+        admin = await require_admin(creds)
+    except Exception: await websocket.close(code=1008); return
+    try:
+        while True:
+            from langgraph_agent.utils.gpu_queue import get_gpu_queue
+            await websocket.send_json({
+                "type": "metrics_update",
+                "system": get_system_metrics(),
+                "queue": get_gpu_queue().get_stats(),
+                "state": get_app_state(),
+                "timestamp": time.time()
+            })
+            await asyncio.sleep(2)
+    except WebSocketDisconnect: pass
+    except Exception as e:
+        print(f"WS Error: {e}")
+        try: await websocket.close(code=1011)
+        except: pass
+
+@app.post("/admin/users/{user_id}/ban")
+async def admin_ban_user(user_id: str, request_body: BanRequest, request: Request, admin: Admin = Depends(require_admin)):
+    check_admin_rate_limit(admin.id, tier="standard")
+    from langgraph_agent.memory.store import get_supabase
+    sb = get_supabase()
+    try:
+        if request_body.ban:
+            sb.auth.admin.update_user_by_id(user_id, {"ban_duration": "876000h"})
+            sb.table("user_bans").insert({"user_id": user_id, "banned_by": admin.id, "reason": request_body.reason}).execute()
+        else: sb.auth.admin.update_user_by_id(user_id, {"ban_duration": "none"})
+        log_admin_action(admin_user_id=admin.id, action="ban_user" if request_body.ban else "unban_user", target_type="user", target_id=user_id, justification=request_body.reason, ip_address=request.client.host if request.client else None, request_id=request.state.request_id)
+        return {"success": True}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/users/{user_id}/role")
+async def admin_change_role(user_id: str, request_body: RoleChangeRequest, request: Request, admin: Admin = Depends(require_admin)):
+    check_admin_rate_limit(admin.id, tier="standard")
+    from langgraph_agent.memory.store import get_supabase
+    sb = get_supabase(); role = request_body.role
+    if role not in ("user", "admin", "api_client"): raise HTTPException(status_code=400, detail="Invalid role")
+    try:
+        sb.table("user_roles").upsert({"user_id": user_id, "role": role}, on_conflict="user_id").execute()
+        log_admin_action(admin_user_id=admin.id, action="change_role", target_type="user", target_id=user_id, metadata={"new_role": role}, ip_address=request.client.host if request.client else None, request_id=request.state.request_id)
+        return {"success": True}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/queue/status")
+async def admin_queue_status(request: Request, admin: Admin = Depends(require_admin)):
+    check_admin_rate_limit(admin.id, tier="heavy")
+    from langgraph_agent.utils.gpu_queue import get_gpu_queue
+    return get_gpu_queue().get_stats()
+
+@app.get("/admin/conversations")
+async def admin_list_conversations(request: Request, admin: Admin = Depends(require_admin), page: int = 1, limit: int = 50, search: Optional[str] = None, include_deleted: bool = False):
+    check_admin_rate_limit(admin.id, tier="standard")
+    from langgraph_agent.memory.store import get_supabase
+    sb = get_supabase(); offset = (page - 1) * limit
+    query = sb.table("chat_sessions").select("*", count="exact")
+    if not include_deleted: query = query.is_("deleted_at", "null")
+    if search: query = query.ilike("title", f"%{search}%")
+    resp = query.order("updated_at", desc=True).range(offset, offset + limit - 1).execute()
+    return {"data": resp.data or [], "count": resp.count or 0, "page": page, "limit": limit}
+
+@app.delete("/admin/conversations/{session_id}")
+async def admin_delete_conversation(session_id: str, request: Request, admin: Admin = Depends(require_admin)):
+    check_admin_rate_limit(admin.id, tier="standard")
+    from langgraph_agent.memory.store import get_supabase
+    from datetime import datetime, timezone
+    sb = get_supabase()
+    try:
+        sb.table("chat_sessions").update({"deleted_at": datetime.now(timezone.utc).isoformat(), "deleted_by": admin.id}).eq("id", session_id).execute()
+        log_admin_action(admin_user_id=admin.id, action="soft_delete_conversation", target_type="chat_session", target_id=session_id, ip_address=request.client.host if request.client else None, request_id=request.state.request_id)
+        return {"success": True}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/models/reload")
+async def admin_reload_model(request: Request, admin: Admin = Depends(require_admin)):
+    check_admin_rate_limit(admin.id, tier="heavy")
+    from langgraph_agent.utils.gpu_queue import get_gpu_queue
+    from langgraph_agent.utils.qwen_client import QwenClient
+    queue = get_gpu_queue(); qwen = QwenClient()
+    set_app_state("MAINTENANCE")
+    wait_start = time.time()
+    while queue.active_requests > 0:
+        if time.time() - wait_start > 60: break
+        await asyncio.sleep(1)
+    try:
+        success = await qwen.reload_model()
+        if success:
+            set_app_state("RUNNING")
+            log_admin_action(admin_user_id=admin.id, action="reload_model", target_type="system", target_id="qwen3_vl", ip_address=request.client.host if request.client else None, request_id=request.state.request_id)
+            return {"success": True, "state": "RUNNING"}
+        else: raise Exception("Model reload returned False")
+    except Exception as e:
+        set_app_state("ERROR")
+        try:
+            await qwen.reload_model() 
+            set_app_state("RUNNING")
+            return {"success": False, "error": str(e), "state": "RECOVERED"}
+        except:
+            set_app_state("CRITICAL_ERROR")
+            raise HTTPException(status_code=500, detail=f"Model reload failed and recovery failed: {e}")
+
+@app.get("/admin/logs")
+async def admin_get_audit_logs(request: Request, admin: Admin = Depends(require_admin), page: int = 1, limit: int = 50, action: Optional[str] = None):
+    check_admin_rate_limit(admin.id, tier="standard")
+    from langgraph_agent.memory.store import get_supabase
+    sb = get_supabase(); offset = (page - 1) * limit
+    query = sb.table("admin_audit_logs").select("*", count="exact")
+    if action: query = query.eq("action", action)
+    resp = query.order("timestamp", desc=True).range(offset, offset + limit - 1).execute()
+    return {"data": resp.data or [], "count": resp.count or 0, "page": page, "limit": limit}
+
+@app.get("/admin/analytics")
+async def admin_analytics(request: Request, admin: Admin = Depends(require_admin), days: int = 14):
+    check_admin_rate_limit(admin.id, tier="heavy")
+    from langgraph_agent.memory.store import get_supabase
+    from datetime import date, timedelta
+    sb = get_supabase(); today = date.today(); start_date = today - timedelta(days=days)
+    logs_resp = sb.table("chat_logs").select("created_at").gte("created_at", start_date.isoformat()).execute()
+    usage_resp = sb.table("usage_tracking").select("date, user_id, request_count, token_count").gte("date", start_date.isoformat()).execute()
+    sessions_resp = sb.table("chat_sessions").select("created_at").gte("created_at", start_date.isoformat()).execute()
+    daily = {}
+    for i in range(days + 1):
+        d = (start_date + timedelta(days=i)).isoformat()
+        daily[d] = {"date": d, "messages": 0, "active_users": 0, "tokens": 0, "sessions": 0}
+    for log in (logs_resp.data or []):
+        d = log["created_at"][:10]
+        if d in daily: daily[d]["messages"] += 1
+    for sess in (sessions_resp.data or []):
+        d = sess["created_at"][:10]
+        if d in daily: daily[d]["sessions"] += 1
+    day_users = {}
+    for row in (usage_resp.data or []):
+        d = row["date"]
+        if d not in day_users: day_users[d] = set()
+        day_users[d].add(row["user_id"])
+        if d in daily: daily[d]["tokens"] += row.get("token_count", 0)
+    for d, users in day_users.items():
+        if d in daily: daily[d]["active_users"] = len(users)
+    return {"days": days, "data": sorted(daily.values(), key=lambda x: x["date"])}
+
+# ============== Background Task Helpers (Merged) ==============
+
+async def _export_data_worker(dataset: str, format: str, export_id: str):
+    """Replacement for Celery task using BackgroundTasks"""
+    try:
+        from langgraph_agent.memory.store import get_supabase
+        import json, csv, io
+        sb = get_supabase()
+        T_MAP = {"users": "user_roles", "sessions": "chat_sessions", "audit_logs": "admin_audit_logs", "usage": "usage_tracking"}
+        table = T_MAP.get(dataset)
+        if not table: return
+        resp = sb.table(table).select("*").limit(10000).execute()
+        rows = resp.data or []
+        if format == "json": result = json.dumps(rows, default=str)
+        else:
+            output = io.StringIO()
+            if rows:
+                writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+                writer.writeheader()
+                for r in rows: writer.writerow(r)
+            result = output.getvalue()
+        _EXPORT_RESULTS[export_id] = {"status": "completed", "data": result, "expiry": time.time() + 3600}
+    except Exception as e:
+        _EXPORT_RESULTS[export_id] = {"status": "error", "error": str(e), "expiry": time.time() + 3600}
+
+@app.post("/admin/export/{dataset}/async")
+async def admin_export_async(dataset: str, bg_tasks: BackgroundTasks, request: Request, admin: Admin = Depends(require_admin), format: str = "csv"):
+    check_admin_rate_limit(admin.id, tier="heavy")
+    _cleanup_exports()
+    export_id = f"exp_{dataset}_{int(time.time())}"
+    _EXPORT_RESULTS[export_id] = {"status": "pending", "expiry": time.time() + 600}
+    bg_tasks.add_task(_export_data_worker, dataset, format, export_id)
+    log_admin_action(admin_user_id=admin.id, action=f"export_{dataset}_async", target_type="system", target_id=dataset, metadata={"task_id": export_id}, ip_address=request.client.host if request.client else None, request_id=request.state.request_id)
+    return {"task_id": export_id, "status": "pending"}
+
+@app.get("/admin/export/tasks/{task_id}")
+async def get_task_status(task_id: str, admin: Admin = Depends(require_admin)):
+    res = _EXPORT_RESULTS.get(task_id)
+    if not res: return {"task_id": task_id, "status": "NOT_FOUND"}
+    return {"task_id": task_id, "status": res.get("status"), "result": {"export_id": task_id} if res.get("status") == "completed" else None}
+
+@app.get("/admin/export/download/{export_id}")
+async def download_export(export_id: str, admin: Admin = Depends(require_admin)):
+    res = _EXPORT_RESULTS.get(export_id)
+    if not res or res.get("status") != "completed": raise HTTPException(status_code=404, detail="Export not found")
+    media = "application/json" if "json" in export_id else "text/csv"
+    ext = "json" if "json" in export_id else "csv"
+    return Response(content=res["data"], media_type=media, headers={"Content-Disposition": f"attachment; filename={export_id}.{ext}"})
 
 
+@app.post("/admin/maintenance/cleanup")
+async def admin_cleanup_logs(request: Request, admin: Admin = Depends(require_admin), days: int = 90):
+    """Manually trigger cleanup of old audit logs"""
+    check_admin_rate_limit(admin.id, tier="heavy")
+    from langgraph_agent.memory.store import get_supabase
+    from datetime import datetime, timedelta, timezone
+    sb = get_supabase()
+    threshold = datetime.now(timezone.utc) - timedelta(days=days)
+    try:
+        resp = sb.table("admin_audit_logs").delete().lt("timestamp", threshold.isoformat()).execute()
+        count = len(resp.data) if resp.data else 0
+        log_admin_action(admin_user_id=admin.id, action="cleanup_logs", target_type="system", target_id="audit_logs", metadata={"days": days, "cleaned_count": count}, ip_address=request.client.host if request.client else None, request_id=request.state.request_id)
+        return {"success": True, "cleaned_count": count}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

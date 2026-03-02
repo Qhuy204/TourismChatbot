@@ -7,7 +7,7 @@ import { useSessionManager } from '@/hooks/useSessionManager';
 import { useEventTracking } from '@/hooks/useEventTracking';
 import { useAuth } from '@/hooks/useAuth';
 import { useThemeMode } from '@/hooks/useThemeMode';
-import { useEmotionTheme, type Emotion } from '@/hooks/useEmotionTheme';
+import { useEmotionTheme, EMOTION_PALETTES, type Emotion } from '@/hooks/useEmotionTheme';
 import { useLanguage } from '@/hooks/useLanguage';
 import {
     MessageSquare, Image, Mic, Search, BookOpen,
@@ -18,6 +18,7 @@ import {
     Settings, Sparkles, Sliders, HelpCircle, Shield, Bell, AppWindow, Database, Users, Lock
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
 import { translations, type AppLanguage } from '../../locales';
 
 // Types
@@ -233,7 +234,29 @@ export function ChatbotInterface() {
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [activeSettingsTab, setActiveSettingsTab] = useState('general');
+    const [isAdmin, setIsAdmin] = useState(false);
     const userMenuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!user) {
+            setIsAdmin(false);
+            return;
+        }
+        (async () => {
+            try {
+                const { data } = await supabase
+                    .from('user_roles')
+                    .select('role')
+                    .eq('user_id', user.id)
+                    .single();
+                if (data?.role === 'admin') {
+                    setIsAdmin(true);
+                }
+            } catch (e) {
+                console.error('Error fetching role:', e);
+            }
+        })();
+    }, [user]);
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -286,7 +309,7 @@ export function ChatbotInterface() {
 
     useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-    // Sync emotion from backend (with backward compatibility)
+    // Sync emotion from backend (with backward compatibility) + trigger theme switch
     useEffect(() => {
         const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.emotion);
         if (lastAssistant?.emotion) {
@@ -299,8 +322,15 @@ export function ChatbotInterface() {
 
             emotionTheme.setEmotionFromBackend(emotionValue);
             setCurrentEmotion(emotionValue as Emotion);
+
+            // Fix 3: Switch dark/light theme based on backend emotion
+            const palette = EMOTION_PALETTES[emotionValue as Emotion];
+            if (palette) {
+                if (palette.mode === 'dark' && theme === 'light') toggleTheme();
+                else if (palette.mode === 'light' && theme === 'dark') toggleTheme();
+            }
         }
-    }, [messages, emotionTheme]);
+    }, [messages]);
 
     // Close context menu on outside click
     useEffect(() => {
@@ -666,6 +696,14 @@ export function ChatbotInterface() {
                                     </div>
                                 </div>
                                 <div style={{ padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
+                                    <button onClick={() => { setUserMenuOpen(false); window.location.href = '/profile'; }} style={{ width: '100%', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 13 }} onMouseOver={e => e.currentTarget.style.background = 'var(--bg-muted)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                                        <User size={15} /> Hồ sơ cá nhân
+                                    </button>
+                                    {isAdmin && (
+                                        <button onClick={() => { setUserMenuOpen(false); window.location.href = '/admin'; }} style={{ width: '100%', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 13 }} onMouseOver={e => e.currentTarget.style.background = 'var(--bg-muted)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                                            <Shield size={15} /> Admin Dashboard
+                                        </button>
+                                    )}
                                     <button style={{ width: '100%', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 13 }} onMouseOver={e => e.currentTarget.style.background = 'var(--bg-muted)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
                                         <Sparkles size={15} /> Upgrade plan
                                     </button>
@@ -814,12 +852,34 @@ export function ChatbotInterface() {
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
                                         {suggestions.slice(0, 5).map((s, i) => {
                                             const text = typeof s === 'string' ? s : (s as { text: string }).text;
+                                            // Fix 2: Count how many times user asked about locations in this suggestion
+                                            const topicCounts = preferences?.topicCounts || {};
+                                            let matchCount = 0;
+                                            const lowerText = text.toLowerCase();
+                                            Object.entries(topicCounts).forEach(([topic, count]) => {
+                                                if (lowerText.includes(topic.toLowerCase()) || topic.toLowerCase().includes(lowerText.split(' ').slice(-1)[0])) {
+                                                    matchCount += count as number;
+                                                }
+                                            });
                                             return (
-                                                <button key={i} onClick={() => handleSuggestion(text)} style={{ padding: '7px 16px', borderRadius: 100, border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'inherit', transition: 'all 0.2s' }}
+                                                <button key={i} onClick={() => handleSuggestion(text)} style={{ position: 'relative', padding: '7px 16px', borderRadius: 100, border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'inherit', transition: 'all 0.2s' }}
                                                     onMouseOver={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.color = 'var(--primary)'; }}
                                                     onMouseOut={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
                                                 >
                                                     {text}
+                                                    {matchCount > 0 && (
+                                                        <span style={{
+                                                            position: 'absolute', top: -6, right: -6,
+                                                            minWidth: 18, height: 18, borderRadius: '50%',
+                                                            background: '#ef4444', color: 'white',
+                                                            fontSize: 10, fontWeight: 700,
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            padding: '0 4px', lineHeight: 1,
+                                                            boxShadow: '0 2px 6px rgba(239,68,68,0.4)',
+                                                        }}>
+                                                            {matchCount}
+                                                        </span>
+                                                    )}
                                                 </button>
                                             );
                                         })}
