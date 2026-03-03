@@ -1,8 +1,3 @@
-"""
-Rate Limiting Middleware
-Checks user quota before processing requests.
-Increments usage after successful responses.
-"""
 from typing import Optional, Dict
 from langgraph_agent.memory.store import get_supabase
 

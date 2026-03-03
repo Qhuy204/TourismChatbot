@@ -1,7 +1,3 @@
-"""
-Memory Extractor
-Extracts long-term facts from user messages (preferences, personal info, constraints)
-"""
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 from enum import Enum

@@ -1,10 +1,3 @@
-"""
-Security Middleware
-- IP-based rate limiting (DDoS/abuse prevention)
-- Request logging for audit trail
-- Admin action audit logging
-- JWT Authorization for Admin endpoints
-"""
 import time
 from collections import defaultdict
 from typing import Optional, Dict
@@ -13,7 +6,6 @@ from fastapi import Request, HTTPException, Security, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from langgraph_agent.memory.store import get_supabase
 
-# ============== Admin Auth & Rate Limits ==============
 
 security = HTTPBearer()
 
@@ -30,7 +22,6 @@ ADMIN_RATE_LIMITS = {
     "standard": 60  # users
 }
 
-# ============== Admin Auth & Rate Limits ==============
 
 from collections import deque
 
@@ -120,7 +111,6 @@ async def require_admin(credentials: HTTPAuthorizationCredentials = Security(sec
         raise HTTPException(status_code=401, detail=str(e))
 
 
-# ============== IP Rate Limiting ==============
 
 _IP_WINDOW_SECONDS = 60
 _IP_MAX_REQUESTS = 30
@@ -133,7 +123,6 @@ def check_ip_rate_limit(ip: str) -> tuple[bool, int]:
     return True, remaining
 
 
-# ============== Audit Logging ==============
 
 def log_admin_action(
     admin_user_id: str,
@@ -168,7 +157,6 @@ def log_admin_action(
         print(f"⚠️ Audit log failed: {e}")
 
 
-# ============== Security Headers ==============
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",

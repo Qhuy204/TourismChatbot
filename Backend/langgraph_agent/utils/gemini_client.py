@@ -1,9 +1,3 @@
-"""
-Gemini API Client Wrapper
-Centralized client for all LLM calls - ONLY Gemini, no OpenAI
-
-Using google-genai package (new SDK)
-"""
 import os
 import re
 import json

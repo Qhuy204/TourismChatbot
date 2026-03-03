@@ -1,7 +1,3 @@
-"""
-Query Rewriter Node
-Rewrites short/ambiguous queries using context
-"""
 from typing import List, Dict
 import re
 

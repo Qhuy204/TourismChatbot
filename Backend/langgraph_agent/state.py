@@ -65,7 +65,7 @@ class MessageProcessingState:
     """
     # Input
     message: str
-    history: List[Dict] = field(default_factory=list)
+    history: List[Dict] = field(default_fact    ory=list)
     
     # Context management (ChatGPT-like)
     conversation_summary: str = ""

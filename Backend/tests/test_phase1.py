@@ -1,7 +1,3 @@
-"""
-Tests for Phase 1: Core Foundation
-Run with: pytest tests/ -v
-"""
 import pytest
 import asyncio
 import sys
@@ -14,7 +10,6 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env'))
 
 
-# ============== Test State Objects ==============
 
 class TestStateObjects:
     """Test state.py dataclasses"""
@@ -92,7 +87,6 @@ class TestStateObjects:
         assert state.output.response == ""
 
 
-# ============== Test Gemini Client ==============
 
 class TestGeminiClient:
     """Test gemini_client.py"""
@@ -160,7 +154,6 @@ class TestGeminiClient:
         print(f"JSON result: {result}")
 
 
-# ============== Run Tests ==============
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])

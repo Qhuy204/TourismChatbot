@@ -1,7 +1,3 @@
-"""
-VQA Vector Store using ChromaDB
-Local vector storage for VQA knowledge retrieval
-"""
 import os
 import json
 import time

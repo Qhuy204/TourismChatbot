@@ -1,7 +1,3 @@
-"""
-Retriever Node
-Fetches relevant context from VQA vector store
-"""
 from typing import List, Dict
 
 from ..state import MessageProcessingState

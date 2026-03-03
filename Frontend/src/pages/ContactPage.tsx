@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
-import { Mail, CheckCircle, Send, Phone, MapPin } from 'lucide-react';
+import { Card, Row, Col, Form, Input, Button, Result, Typography } from 'antd';
+import { MailOutlined, CheckCircleOutlined, SendOutlined, PhoneOutlined, EnvironmentOutlined } from '@ant-design/icons';
+
+const { Title, Paragraph, Text } = Typography;
+const { TextArea } = Input;
 
 export default function ContactPage() {
-    const [form, setForm] = useState({ firstName: '', lastName: '', email: '', message: '' });
     const [submitted, setSubmitted] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = () => {
         setSubmitted(true);
     };
 
@@ -16,30 +18,27 @@ export default function ContactPage() {
         <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
             <Navbar />
 
-            {/* Hero */}
             <section className="bg-network py-mobile-12" style={{ padding: '80px 0 60px' }}>
                 <div className="container" style={{ maxWidth: 640 }}>
-                    <h1 style={{ fontSize: 'clamp(2.2rem, 4.5vw, 3rem)', fontWeight: 800, color: 'var(--text)', marginBottom: 16, lineHeight: 1.1 }}>
+                    <Title style={{ fontSize: 'clamp(2.2rem, 4.5vw, 3rem)', marginBottom: 16, lineHeight: 1.1 }}>
                         We'd Love to <span className="text-gradient">Hear From You</span>
-                    </h1>
-                    <p style={{ fontSize: 16, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                    </Title>
+                    <Paragraph type="secondary" style={{ fontSize: 16, lineHeight: 1.7 }}>
                         Have a question about AIBOT? Want a demo or enterprise plan? Reach out and we'll get back to you within 24 hours.
-                    </p>
+                    </Paragraph>
                 </div>
             </section>
 
-            {/* Contact Body */}
             <section className="py-mobile-12" style={{ padding: '80px 0' }}>
                 <div className="container">
-                    <div className="flex-col-mobile" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: 'clamp(32px, 5vw, 52px)', alignItems: 'start' }}>
-                        {/* Left: Contact Info */}
-                        <div>
-                            <h2 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>
+                    <Row gutter={[48, 32]} align="top">
+                        <Col xs={24} md={10}>
+                            <Title level={3} style={{ marginBottom: 12 }}>
                                 Contact Sales
-                            </h2>
-                            <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 28, lineHeight: 1.7 }}>
+                            </Title>
+                            <Paragraph type="secondary" style={{ fontSize: 14, marginBottom: 28, lineHeight: 1.7 }}>
                                 Connect with us for custom solutions or product insights.
-                            </p>
+                            </Paragraph>
 
                             {[
                                 'Request a demo',
@@ -47,119 +46,80 @@ export default function ContactPage() {
                                 'Onboarding assistance',
                             ].map(item => (
                                 <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                                    <CheckCircle size={16} color="var(--primary)" style={{ flexShrink: 0 }} />
-                                    <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{item}</span>
+                                    <CheckCircleOutlined style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                                    <Text type="secondary" style={{ fontSize: 14 }}>{item}</Text>
                                 </div>
                             ))}
 
                             <div style={{ marginTop: 40 }}>
-                                <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>Support</h3>
-                                <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20 }}>
+                                <Title level={4} style={{ marginBottom: 16 }}>Support</Title>
+                                <Paragraph type="secondary" style={{ fontSize: 14, marginBottom: 20 }}>
                                     Need help with technical issues or products?
-                                </p>
+                                </Paragraph>
                                 {[
-                                    { icon: Mail, text: 'truongquochuy234@gmail.com' },
-                                    { icon: Phone, text: '+84 (0) 856 012 976' },
-                                    { icon: MapPin, text: 'Hanoi, Vietnam' },
-                                ].map(({ icon: Icon, text }) => (
+                                    { icon: <MailOutlined />, text: 'truongquochuy234@gmail.com' },
+                                    { icon: <PhoneOutlined />, text: '+84 (0) 856 012 976' },
+                                    { icon: <EnvironmentOutlined />, text: 'Hanoi, Vietnam' },
+                                ].map(({ icon, text }) => (
                                     <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
                                         <div style={{
                                             width: 36, height: 36, borderRadius: 9,
                                             background: 'rgba(29,109,224,0.1)',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                                            color: 'var(--primary)', fontSize: 15,
                                         }}>
-                                            <Icon size={15} color="var(--primary)" />
+                                            {icon}
                                         </div>
-                                        <span style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 500 }}>{text}</span>
+                                        <Text type="secondary" style={{ fontSize: 14, fontWeight: 500 }}>{text}</Text>
                                     </div>
                                 ))}
                             </div>
-                        </div>
+                        </Col>
 
-                        {/* Right: Form */}
-                        <div className="card" style={{ padding: 40 }}>
-                            {submitted ? (
-                                <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                                    <div style={{
-                                        width: 64, height: 64, borderRadius: 16,
-                                        background: 'rgba(16,185,129,0.12)',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        margin: '0 auto 20px',
-                                    }}>
-                                        <CheckCircle size={32} color="#10b981" />
-                                    </div>
-                                    <h3 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>
-                                        Message Sent!
-                                    </h3>
-                                    <p style={{ color: 'var(--text-muted)' }}>
-                                        We'll get back to you within 24 hours.
-                                    </p>
-                                </div>
-                            ) : (
-                                <>
-                                    <h3 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>
-                                        Let's Begin The Discussion
-                                    </h3>
-                                    <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 32 }}>
-                                        Fill out the form and our team will reach out to you promptly.
-                                    </p>
-                                    <form onSubmit={handleSubmit}>
-                                        <div className="grid-cols-mobile-1" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                                            <div>
-                                                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>First Name</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="James"
-                                                    required
-                                                    value={form.firstName}
-                                                    onChange={e => setForm({ ...form, firstName: e.target.value })}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Last Name</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Smith"
-                                                    required
-                                                    value={form.lastName}
-                                                    onChange={e => setForm({ ...form, lastName: e.target.value })}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div style={{ marginBottom: 16 }}>
-                                            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Email Address</label>
-                                            <input
-                                                type="email"
-                                                placeholder="james@example.com"
-                                                required
-                                                value={form.email}
-                                                onChange={e => setForm({ ...form, email: e.target.value })}
-                                            />
-                                        </div>
-                                        <div style={{ marginBottom: 24 }}>
-                                            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Message</label>
-                                            <textarea
-                                                rows={5}
-                                                placeholder="Tell us about your needs..."
-                                                required
-                                                value={form.message}
-                                                onChange={e => setForm({ ...form, message: e.target.value })}
-                                                style={{ resize: 'vertical' }}
-                                            />
-                                        </div>
-                                        <button
-                                            type="submit"
-                                            className="btn-primary"
-                                            style={{ width: '100%', padding: '13px 0', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-                                        >
-                                            <Send size={16} />
-                                            Submit Request
-                                        </button>
-                                    </form>
-                                </>
-                            )}
-                        </div>
-                    </div>
+                        <Col xs={24} md={14}>
+                            <Card>
+                                {submitted ? (
+                                    <Result
+                                        status="success"
+                                        title="Message Sent!"
+                                        subTitle="We'll get back to you within 24 hours."
+                                    />
+                                ) : (
+                                    <>
+                                        <Title level={4} style={{ marginBottom: 8 }}>
+                                            Let's Begin The Discussion
+                                        </Title>
+                                        <Paragraph type="secondary" style={{ fontSize: 14, marginBottom: 32 }}>
+                                            Fill out the form and our team will reach out to you promptly.
+                                        </Paragraph>
+                                        <Form layout="vertical" onFinish={handleSubmit}>
+                                            <Row gutter={16}>
+                                                <Col xs={24} sm={12}>
+                                                    <Form.Item label="First Name" name="firstName" rules={[{ required: true, message: 'Required' }]}>
+                                                        <Input placeholder="James" size="large" />
+                                                    </Form.Item>
+                                                </Col>
+                                                <Col xs={24} sm={12}>
+                                                    <Form.Item label="Last Name" name="lastName" rules={[{ required: true, message: 'Required' }]}>
+                                                        <Input placeholder="Smith" size="large" />
+                                                    </Form.Item>
+                                                </Col>
+                                            </Row>
+                                            <Form.Item label="Email Address" name="email" rules={[{ required: true, type: 'email', message: 'Valid email required' }]}>
+                                                <Input placeholder="james@example.com" size="large" />
+                                            </Form.Item>
+                                            <Form.Item label="Message" name="message" rules={[{ required: true, message: 'Required' }]}>
+                                                <TextArea rows={5} placeholder="Tell us about your needs..." size="large" />
+                                            </Form.Item>
+                                            <Button type="primary" htmlType="submit" icon={<SendOutlined />} block size="large" style={{ borderRadius: 10, fontWeight: 600 }}>
+                                                Submit Request
+                                            </Button>
+                                        </Form>
+                                    </>
+                                )}
+                            </Card>
+                        </Col>
+                    </Row>
                 </div>
             </section>
 

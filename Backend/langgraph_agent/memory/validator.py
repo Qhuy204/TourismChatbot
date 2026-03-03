@@ -1,7 +1,3 @@
-"""
-Memory Validator
-Validates extracted facts before storing
-"""
 from typing import List
 from .extractor import ExtractedFact, ALLOWED_KEYS
 

@@ -1,6 +1,15 @@
 import { Link } from 'react-router-dom';
-import { Github, Twitter, Linkedin } from 'lucide-react';
 import { useLanguage } from '@/hooks/useLanguage';
+import { Row, Col, Space, Button, Typography } from 'antd';
+import { GithubOutlined, TwitterOutlined, LinkedinOutlined, ArrowRightOutlined } from '@ant-design/icons';
+
+const { Text } = Typography;
+
+const socialIcons = [
+    { icon: <GithubOutlined />, href: '#' },
+    { icon: <TwitterOutlined />, href: '#' },
+    { icon: <LinkedinOutlined />, href: '#' },
+];
 
 export function Footer() {
     const year = new Date().getFullYear();
@@ -13,52 +22,30 @@ export function Footer() {
             padding: '60px 0 32px',
         }}>
             <div className="container">
-                <div className="grid-cols-mobile-2" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 40, marginBottom: 48 }}>
-                    {/* Brand */}
-                    <div>
+                <Row gutter={[40, 32]} style={{ marginBottom: 48 }}>
+                    <Col xs={24} sm={24} md={8}>
                         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', marginBottom: 16 }}>
                             <img src="/Logo.png" alt="ViVi" style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'cover' }} />
                             <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)' }}>
                                 Vi<span style={{ color: 'var(--primary)' }}>Vi</span>
                             </span>
                         </Link>
-                        <p style={{ fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.7, maxWidth: 280 }}>
+                        <Text type="secondary" style={{ display: 'block', fontSize: 14, lineHeight: 1.7, maxWidth: 280, marginBottom: 20 }}>
                             {t.heroDesc}
-                        </p>
-                        <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-                            {[Github, Twitter, Linkedin].map((Icon, i) => (
-                                <a
-                                    key={i}
-                                    href="#"
-                                    style={{
-                                        width: 34, height: 34, borderRadius: 8,
-                                        background: 'var(--bg-muted)',
-                                        border: '1px solid var(--border)',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        color: 'var(--text-muted)',
-                                        textDecoration: 'none',
-                                        transition: 'all 0.2s ease',
-                                    }}
-                                    onMouseOver={e => {
-                                        e.currentTarget.style.color = 'var(--primary)';
-                                        e.currentTarget.style.borderColor = 'var(--primary)';
-                                    }}
-                                    onMouseOut={e => {
-                                        e.currentTarget.style.color = 'var(--text-muted)';
-                                        e.currentTarget.style.borderColor = 'var(--border)';
-                                    }}
-                                >
-                                    <Icon size={15} />
-                                </a>
+                        </Text>
+                        <Space size={8}>
+                            {socialIcons.map((s, i) => (
+                                <Button key={i} type="text" icon={s.icon} href={s.href} shape="default"
+                                    style={{ border: '1px solid var(--border)', borderRadius: 8, width: 34, height: 34 }}
+                                />
                             ))}
-                        </div>
-                    </div>
+                        </Space>
+                    </Col>
 
-                    {/* Product */}
-                    <div>
-                        <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16 }}>
+                    <Col xs={12} sm={8} md={5}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16 }}>
                             {t.features}
-                        </h4>
+                        </div>
                         {[t.features, t.pricing, t.about, 'Blog'].map(item => (
                             <Link
                                 key={item}
@@ -70,13 +57,12 @@ export function Footer() {
                                 {item}
                             </Link>
                         ))}
-                    </div>
+                    </Col>
 
-                    {/* Support */}
-                    <div>
-                        <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16 }}>
+                    <Col xs={12} sm={8} md={5}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16 }}>
                             {t.help}
-                        </h4>
+                        </div>
                         {[t.contact, t.help, 'Privacy', 'Terms'].map(item => (
                             <a
                                 key={item}
@@ -88,35 +74,18 @@ export function Footer() {
                                 {item}
                             </a>
                         ))}
-                    </div>
+                    </Col>
 
-                    {/* Explore */}
-                    <div>
-                        <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16 }}>
+                    <Col xs={24} sm={8} md={6}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16 }}>
                             Explore
-                        </h4>
-                        <Link
-                            to="/app"
-                            style={{
-                                display: 'inline-block',
-                                padding: '10px 20px',
-                                background: 'var(--primary)',
-                                color: 'white',
-                                borderRadius: 8,
-                                fontSize: 14,
-                                fontWeight: 600,
-                                textDecoration: 'none',
-                                transition: 'all 0.2s ease',
-                            }}
-                            onMouseOver={e => (e.currentTarget.style.background = 'var(--primary-hover)')}
-                            onMouseOut={e => (e.currentTarget.style.background = 'var(--primary)')}
-                        >
-                            {t.getStarted} →
-                        </Link>
-                    </div>
-                </div>
+                        </div>
+                        <Button type="primary" icon={<ArrowRightOutlined />} onClick={() => window.location.href = '/app'}>
+                            {t.getStarted}
+                        </Button>
+                    </Col>
+                </Row>
 
-                {/* Bottom bar */}
                 <div style={{
                     borderTop: '1px solid var(--border)',
                     paddingTop: 24,
@@ -126,15 +95,14 @@ export function Footer() {
                     flexWrap: 'wrap',
                     gap: 12,
                 }}>
-                    <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                    <Text type="secondary" style={{ fontSize: 13 }}>
                         © {year} ViVi — Việt Nam Virtual Assistant. All rights reserved.
-                    </p>
-                    <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                        {t.about} — Built with ❤️ for travelers in Vietnam
-                    </p>
+                    </Text>
+                    <Text type="secondary" style={{ fontSize: 13 }}>
+                        Built with ❤️ for travelers in Vietnam
+                    </Text>
                 </div>
             </div>
-
         </footer>
     );
 }

@@ -1,8 +1,3 @@
-"""
-Shared system state for single-server deployment.
-Replaces Redis system:state.
-"""
-
 # Possible states: RUNNING, MAINTENANCE, ERROR, DRAINING
 _APP_STATE = "RUNNING"
 

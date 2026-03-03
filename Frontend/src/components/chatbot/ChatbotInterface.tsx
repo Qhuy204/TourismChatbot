@@ -504,10 +504,8 @@ export function ChatbotInterface() {
 
     return (
         <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)', position: 'relative' }}>
-            {/* Mobile Overlay */}
             {mobileSidebarOpen && <div className="mobile-overlay" onClick={() => setMobileSidebarOpen(false)} />}
 
-            {/* ── Left Sidebar ── */}
             <div
                 className={mobileSidebarOpen ? "sidebar-mobile-visible" : "sidebar-mobile-hidden"}
                 style={{
@@ -522,7 +520,6 @@ export function ChatbotInterface() {
                 }}
             >
 
-                {/* Logo row */}
                 <div style={{ padding: leftCollapsed ? '14px 0' : '14px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: leftCollapsed ? 'center' : 'flex-start', gap: 8 }}>
                     <img src="/Logo.png" alt="ViVi" style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
                     {!leftCollapsed && (
@@ -540,12 +537,10 @@ export function ChatbotInterface() {
                     )}
                 </div>
 
-                {/* Collapse toggle */}
                 <button onClick={() => setLeftCollapsed(!leftCollapsed)} style={{ position: 'absolute', right: -11, top: 18, width: 22, height: 22, borderRadius: '50%', background: 'var(--bg-card)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)', zIndex: 20 }}>
                     {leftCollapsed ? <ChevronRight size={11} /> : <ChevronLeft size={11} />}
                 </button>
 
-                {/* Session list (scrollable, lazy) */}
                 <div ref={sidebarScrollRef} style={{ flex: 1, overflowY: 'auto', padding: leftCollapsed ? '10px 8px' : '8px 0' }} onScroll={handleSidebarScroll}>
                     {leftCollapsed ? (
                         /* Collapsed: just icons */
@@ -629,7 +624,6 @@ export function ChatbotInterface() {
                         )
                     )}
 
-                    {/* Load more indicator */}
                     {!leftCollapsed && visibleCount < sessionManager.sessions.length && (
                         <div style={{ textAlign: 'center', padding: '8px', fontSize: 12, color: 'var(--text-muted)' }}>
                             <Loader2 size={14} className="animate-spin" style={{ margin: '0 auto' }} />
@@ -637,7 +631,6 @@ export function ChatbotInterface() {
                     )}
                 </div>
 
-                {/* Bottom: nav items + user */}
                 <div style={{ borderTop: '1px solid var(--border)', flexShrink: 0, position: 'relative' }}>
                     <div style={{ padding: leftCollapsed ? '6px 4px 0' : '6px 6px 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                         {navItems.map(({ id, label, icon: Icon }) => (
@@ -685,7 +678,6 @@ export function ChatbotInterface() {
                             )}
                         </div>
 
-                        {/* User Menu Popup */}
                         {userMenuOpen && (
                             <div ref={userMenuRef} style={{ position: 'absolute', bottom: 50, left: leftCollapsed ? 64 : 10, width: 250, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '6px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', zIndex: 1000 }}>
                                 <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}>
@@ -741,7 +733,6 @@ export function ChatbotInterface() {
                 </div>
             </div>
 
-            {/*   Context Menu (portal-style fixed)   */}
             {contextMenu && (
                 <div
                     onClick={e => e.stopPropagation()}
@@ -763,10 +754,8 @@ export function ChatbotInterface() {
                 </div>
             )}
 
-            {/*   Main Chat   */}
             <div className="chat-main-area main-content-mobile" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
 
-                {/* Header — shows chat title */}
                 <div className="chat-header-mobile" style={{ padding: '10px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-card)', flexShrink: 0, minHeight: 52 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, overflowX: 'hidden' }}>
                         <button
@@ -803,7 +792,6 @@ export function ChatbotInterface() {
                     </div>
                 )}
 
-                {/* Messages area */}
                 <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }} onScroll={e => {
                     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
                     setShowScrollBtn(scrollHeight - scrollTop - clientHeight > 120);
@@ -903,7 +891,6 @@ export function ChatbotInterface() {
                     </button>
                 )}
 
-                {/* Mid-conversation suggestion bar */}
                 {suggestions.length > 0 && messages.length > 0 && (
                     <div style={{ padding: '10px 0px 5px 20px', borderTop: '1px solid var(--border)', background: 'var(--bg-card)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
                         <Sparkles size={14} color="var(--primary)" />
@@ -924,11 +911,9 @@ export function ChatbotInterface() {
                     </div>
                 )}
 
-                {/* Input Area */}
                 <div style={{ padding: '5px 20px 5px', background: 'var(--bg-card)', flexShrink: 0 }}>
                     <form onSubmit={handleSubmit} style={{ position: 'relative', display: 'flex', flexDirection: 'column', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: 16, padding: '8px 12px 8px 16px', outline: 'none' }}>
 
-                        {/* Selected File Bubbles */}
                         {attachments.length > 0 && (
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                                 {attachments.map((att, idx) => (
@@ -978,7 +963,6 @@ export function ChatbotInterface() {
                 </div>
             </div>
 
-            {/*   Right Panel   */}
             {rightOpen && (
                 <div className="right-panel-mobile" style={{ width: 260, flexShrink: 0, background: 'var(--bg-card)', borderLeft: '1px solid var(--border)', padding: 16, overflowY: 'auto' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -1018,7 +1002,6 @@ export function ChatbotInterface() {
                 </div>
             )}
 
-            {/*   Settings Modal Mock   */}
             {settingsOpen && (
                 <div
                     onClick={() => setSettingsOpen(false)}
@@ -1079,7 +1062,6 @@ export function ChatbotInterface() {
                                 </button>
                             </div>
 
-                            {/* MFA Card */}
                             <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 28, position: 'relative' }}>
                                 <Lock size={20} style={{ color: 'var(--text)', marginBottom: 12 }} />
                                 <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Secure your account</div>
@@ -1249,7 +1231,6 @@ function MessageBubble({ message, onFeedback }: { message: ChatMessage; onFeedba
 
     return (
         <div style={{ display: 'flex', gap: 10, flexDirection: isUser ? 'row-reverse' : 'row' }}>
-            {/* Avatar */}
             <div style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', border: `1px solid ${isUser ? 'transparent' : 'var(--border)'}` }}>
                 {isUser ? (
                     <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, var(--primary), #06b6d4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

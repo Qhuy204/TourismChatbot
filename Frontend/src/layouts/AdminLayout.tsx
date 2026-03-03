@@ -1,14 +1,33 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Outlet, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import { toast } from 'sonner';
+import { ConfigProvider, Layout, Menu, Spin, theme as antdTheme, Button, Typography } from 'antd';
+import type { MenuProps } from 'antd';
 import {
-    LayoutDashboard, Users, Activity, Settings,
-    Database, ArrowLeft, Loader2, Moon, Sun,
-    MessageSquare, ShieldAlert, BarChart3
-} from 'lucide-react';
+    DashboardOutlined, UserOutlined, SafetyCertificateOutlined,
+    MessageOutlined, AuditOutlined, CloudServerOutlined,
+    BarChartOutlined, SettingOutlined, ArrowLeftOutlined,
+    SunOutlined, MoonOutlined, LoadingOutlined,
+} from '@ant-design/icons';
+
+const { Sider, Header, Content } = Layout;
+const { Text } = Typography;
+
+type MenuItem = Required<MenuProps>['items'][number];
+
+const navItems: MenuItem[] = [
+    { key: '/admin', icon: <DashboardOutlined />, label: 'Overview' },
+    { key: '/admin/users', icon: <UserOutlined />, label: 'Users Management' },
+    { key: '/admin/limits', icon: <SafetyCertificateOutlined />, label: 'Limits & Quotas' },
+    { key: '/admin/conversations', icon: <MessageOutlined />, label: 'Conversations' },
+    { key: '/admin/logs', icon: <AuditOutlined />, label: 'Audit Logs' },
+    { key: '/admin/system', icon: <CloudServerOutlined />, label: 'System Check' },
+    { key: '/admin/analytics', icon: <BarChartOutlined />, label: 'Analytics & Exports' },
+    { key: '/admin/settings', icon: <SettingOutlined />, label: 'Settings' },
+];
 
 export default function AdminLayout() {
     const navigate = useNavigate();
@@ -16,6 +35,7 @@ export default function AdminLayout() {
     const { user, loading: authLoading } = useAuth();
     const { theme, toggleTheme } = useThemeMode();
     const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+    const [collapsed, setCollapsed] = useState(false);
 
     useEffect(() => {
         if (!authLoading && !user) {
@@ -40,79 +60,149 @@ export default function AdminLayout() {
         })();
     }, [user, navigate]);
 
+    const isDark = theme === 'dark';
+
+    const antdThemeConfig = useMemo(() => ({
+        algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+        token: {
+            colorPrimary: '#1d6de0',
+            borderRadius: 10,
+            fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+            colorSuccess: '#10b981',
+            colorWarning: '#f59e0b',
+            colorError: '#ef4444',
+            colorInfo: '#3b82f6',
+            ...(isDark ? {
+                colorBgContainer: '#0e1320',
+                colorBgElevated: '#131c2f',
+                colorBgLayout: '#05070a',
+                colorBorder: 'rgba(99, 130, 200, 0.18)',
+                colorText: '#e8edf5',
+                colorTextSecondary: '#8b9db8',
+            } : {
+                colorBgContainer: '#ffffff',
+                colorBgElevated: '#f8faff',
+                colorBgLayout: '#f0f4ff',
+                colorBorder: '#dbe5f1',
+                colorText: '#0f172a',
+                colorTextSecondary: '#64748b',
+            }),
+        },
+        components: {
+            Menu: {
+                itemBorderRadius: 10,
+                itemMarginInline: 8,
+                iconSize: 16,
+            },
+            Layout: {
+                siderBg: isDark ? '#0e1320' : '#ffffff',
+                headerBg: isDark ? '#0e1320' : '#ffffff',
+            },
+        },
+    }), [isDark]);
+
     if (authLoading || isAdmin === null) {
         return (
             <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-                <Loader2 size={32} className="animate-spin" color="var(--primary)" />
+                <Spin indicator={<LoadingOutlined style={{ fontSize: 32 }} spin />} />
             </div>
         );
     }
 
-    const navItems = [
-        { path: '/admin', icon: LayoutDashboard, label: 'Overview' },
-        { path: '/admin/users', icon: Users, label: 'Users Management' },
-        { path: '/admin/limits', icon: Activity, label: 'Limits & Quotas' },
-        { path: '/admin/conversations', icon: MessageSquare, label: 'Conversations' },
-        { path: '/admin/logs', icon: ShieldAlert, label: 'Audit Logs' },
-        { path: '/admin/system', icon: Database, label: 'System Check' },
-        { path: '/admin/analytics', icon: BarChart3, label: 'Analytics & Exports' },
-        { path: '/admin/settings', icon: Settings, label: 'Settings' }
-    ];
+    const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
+        navigate(key);
+    };
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
-            {/* Sidebar */}
-            <aside style={{ width: 260, borderRight: '1px solid var(--border)', background: 'var(--bg-card)', padding: '24px 16px', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ marginBottom: 32, padding: '0 8px' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--primary)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>Qwen3-VL-8B</div>
-                    <div style={{ fontSize: 20, fontWeight: 800 }}>Admin Center</div>
-                </div>
-
-                <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {navItems.map((item) => {
-                        const isActive = location.pathname === item.path;
-                        const Icon = item.icon;
-                        return (
-                            <Link
-                                key={item.path}
-                                to={item.path}
-                                style={{
-                                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                                    borderRadius: 10, textDecoration: 'none',
-                                    background: isActive ? 'var(--primary-10)' : 'transparent',
-                                    color: isActive ? 'var(--primary)' : 'var(--text-muted)',
-                                    fontWeight: isActive ? 600 : 500,
-                                    fontSize: 14, transition: 'all 0.2s'
-                                }}
-                            >
-                                <Icon size={18} />
-                                {item.label}
-                            </Link>
-                        );
-                    })}
-                </nav>
-
-                <div style={{ marginTop: 'auto', paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-                    <Link to="/app" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, textDecoration: 'none', color: 'var(--text-muted)', fontSize: 14, fontWeight: 500 }}>
-                        <ArrowLeft size={18} /> Exit Admin
-                    </Link>
-                </div>
-            </aside>
-
-            {/* Main Content */}
-            <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-                <header style={{ height: 60, borderBottom: '1px solid var(--border)', background: 'var(--bg-card)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 24px' }}>
-                    <button onClick={toggleTheme} style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                        {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-                    </button>
-                </header>
-
-                <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
-                    <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-                        <Outlet />
+        <ConfigProvider theme={antdThemeConfig}>
+            <Layout style={{ minHeight: '100vh' }}>
+                <Sider
+                    collapsible
+                    collapsed={collapsed}
+                    onCollapse={setCollapsed}
+                    width={260}
+                    collapsedWidth={72}
+                    breakpoint="lg"
+                    style={{
+                        borderRight: `1px solid ${isDark ? 'rgba(99, 130, 200, 0.18)' : '#dbe5f1'}`,
+                        position: 'sticky',
+                        top: 0,
+                        height: '100vh',
+                        overflow: 'auto',
+                    }}
+                >
+                    <div style={{
+                        padding: collapsed ? '20px 8px' : '20px 20px',
+                        transition: 'padding 0.2s',
+                    }}>
+                        {!collapsed && (
+                            <>
+                                <Text type="secondary" style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>
+                                    Qwen3-VL-8B
+                                </Text>
+                                <Text style={{ fontSize: 20, fontWeight: 800, display: 'block' }}>
+                                    Admin Center
+                                </Text>
+                            </>
+                        )}
+                        {collapsed && (
+                            <Text style={{ fontSize: 16, fontWeight: 800, textAlign: 'center', display: 'block' }}>
+                                AC
+                            </Text>
+                        )}
                     </div>
-                </div>
-            </main>
-        </div>
+
+                    <Menu
+                        mode="inline"
+                        selectedKeys={[location.pathname]}
+                        items={navItems}
+                        onClick={handleMenuClick}
+                        style={{ border: 'none', flex: 1 }}
+                    />
+
+                    <div style={{
+                        padding: collapsed ? '12px 8px' : '12px 16px',
+                        borderTop: `1px solid ${isDark ? 'rgba(99, 130, 200, 0.18)' : '#dbe5f1'}`,
+                    }}>
+                        <Link
+                            to="/app"
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 10,
+                                padding: '8px 12px', borderRadius: 10,
+                                textDecoration: 'none',
+                                color: isDark ? '#8b9db8' : '#64748b',
+                                fontSize: 14, fontWeight: 500,
+                                justifyContent: collapsed ? 'center' : 'flex-start',
+                            }}
+                        >
+                            <ArrowLeftOutlined />
+                            {!collapsed && 'Exit Admin'}
+                        </Link>
+                    </div>
+                </Sider>
+
+                <Layout>
+                    <Header style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                        padding: '0 24px',
+                        borderBottom: `1px solid ${isDark ? 'rgba(99, 130, 200, 0.18)' : '#dbe5f1'}`,
+                        height: 56,
+                    }}>
+                        <Button
+                            type="text"
+                            icon={isDark ? <SunOutlined /> : <MoonOutlined />}
+                            onClick={toggleTheme}
+                            size="middle"
+                        />
+                    </Header>
+
+                    <Content style={{ padding: '28px 36px', overflow: 'auto' }}>
+                        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+                            <Outlet />
+                        </div>
+                    </Content>
+                </Layout>
+            </Layout>
+        </ConfigProvider>
     );
 }

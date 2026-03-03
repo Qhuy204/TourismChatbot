@@ -1,7 +1,3 @@
-"""
-User Profiler Node
-Loads and caches user profile from database
-"""
 import time
 from typing import Optional, Dict, List
 

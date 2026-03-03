@@ -1,8 +1,13 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { MessageSquare, Trash2, Search, Loader2 } from 'lucide-react';
+import { Card, Table, Input, Button, Popconfirm, Typography, Tag } from 'antd';
+import { MessageOutlined, DeleteOutlined } from '@ant-design/icons';
 import { toast } from 'sonner';
+import type { ColumnsType } from 'antd/es/table';
+import { getAdminApiBaseUrl } from '@/lib/api-config';
+
+const { Title } = Typography;
 
 interface ChatSession {
     id: string;
@@ -17,7 +22,7 @@ export default function AdminConversations() {
     const [page, setPage] = useState(1);
     const [searchTerm, setSearchTerm] = useState('');
     const queryClient = useQueryClient();
-    const apiUrl = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8001';
+    const apiUrl = getAdminApiBaseUrl();
 
     const getAuthHeaders = async () => {
         const { data } = await supabase.auth.getSession();
@@ -35,7 +40,6 @@ export default function AdminConversations() {
             url.searchParams.append('page', page.toString());
             url.searchParams.append('limit', '50');
             if (searchTerm) url.searchParams.append('search', searchTerm);
-
             const res = await fetch(url.toString(), { headers });
             if (!res.ok) throw new Error('Failed to load conversations');
             return res.json();
@@ -62,73 +66,94 @@ export default function AdminConversations() {
         }
     });
 
+    const columns: ColumnsType<ChatSession> = [
+        {
+            title: 'ID',
+            dataIndex: 'id',
+            key: 'id',
+            width: 110,
+            render: (id: string) => (
+                <code style={{ fontSize: 12, opacity: 0.6 }}>{id.substring(0, 8)}...</code>
+            ),
+        },
+        {
+            title: 'Title',
+            dataIndex: 'title',
+            key: 'title',
+            render: (title: string) => title || <Tag>Untitled</Tag>,
+        },
+        {
+            title: 'User ID',
+            dataIndex: 'user_id',
+            key: 'user_id',
+            width: 120,
+            render: (uid: string) => (
+                <code style={{ fontSize: 12 }}>{uid.substring(0, 8)}...</code>
+            ),
+        },
+        {
+            title: 'Updated At',
+            dataIndex: 'updated_at',
+            key: 'updated_at',
+            width: 170,
+            render: (val: string) => new Date(val).toLocaleString(),
+        },
+        {
+            title: 'Actions',
+            key: 'actions',
+            width: 80,
+            render: (_: unknown, record: ChatSession) => (
+                <Popconfirm
+                    title="Xóa cuộc hội thoại này?"
+                    onConfirm={() => deleteMutation.mutate(record.id)}
+                    okText="Xóa"
+                    cancelText="Hủy"
+                    okButtonProps={{ danger: true }}
+                >
+                    <Button
+                        danger
+                        icon={<DeleteOutlined />}
+                        size="small"
+                        type="text"
+                        loading={deleteMutation.isPending}
+                    />
+                </Popconfirm>
+            ),
+        },
+    ];
+
     return (
         <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <MessageSquare color="var(--primary)" /> Conversations
-                </h1>
-
-                <div style={{ position: 'relative' }}>
-                    <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
-                    <input
-                        type="text"
-                        placeholder="Search title..."
-                        value={searchTerm}
-                        onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
-                        style={{
-                            padding: '8px 16px 8px 36px', borderRadius: 8, border: '1px solid var(--border)',
-                            background: 'var(--bg-card)', color: 'var(--text)', outline: 'none', width: 250
-                        }}
-                    />
-                </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <Title level={3} style={{ margin: 0 }}>
+                    <MessageOutlined style={{ marginRight: 10 }} /> Conversations
+                </Title>
+                <Input.Search
+                    placeholder="Search title..."
+                    value={searchTerm}
+                    onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
+                    allowClear
+                    style={{ width: 280 }}
+                />
             </div>
 
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                    <thead>
-                        <tr style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
-                            <th style={{ padding: '16px', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>ID</th>
-                            <th style={{ padding: '16px', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Title</th>
-                            <th style={{ padding: '16px', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>User ID</th>
-                            <th style={{ padding: '16px', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Updated At</th>
-                            <th style={{ padding: '16px', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {isLoading ? (
-                            <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}><Loader2 className="animate-spin" size={24} style={{ margin: '0 auto' }} /></td></tr>
-                        ) : data?.data.length === 0 ? (
-                            <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>No conversations found.</td></tr>
-                        ) : data?.data.map(conv => (
-                            <tr key={conv.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                                <td style={{ padding: 16, fontFamily: 'monospace', fontSize: 12, color: 'var(--text-muted)' }}>{conv.id.substring(0, 8)}...</td>
-                                <td style={{ padding: 16, fontWeight: 500 }}>{conv.title || 'Untitled'}</td>
-                                <td style={{ padding: 16, fontFamily: 'monospace', fontSize: 12 }}>{conv.user_id.substring(0, 8)}...</td>
-                                <td style={{ padding: 16, fontSize: 14, color: 'var(--text-muted)' }}>{new Date(conv.updated_at).toLocaleString()}</td>
-                                <td style={{ padding: 16 }}>
-                                    <button
-                                        onClick={() => { if (confirm("Are you sure?")) deleteMutation.mutate(conv.id) }}
-                                        disabled={deleteMutation.isPending}
-                                        style={{ padding: 6, borderRadius: 6, border: '1px solid #ef444450', background: '#ef444410', color: '#ef4444', cursor: 'pointer' }}
-                                        title="Soft Delete"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-
-                {data && data.count > 50 && (
-                    <div style={{ padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)' }}>
-                        <button disabled={page === 1} onClick={() => setPage(p => p - 1)} style={{ padding: '6px 12px', borderRadius: 6, background: 'var(--bg)', border: '1px solid var(--border)' }}>Previous</button>
-                        <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>Page {page}</span>
-                        <button disabled={data.data.length < 50} onClick={() => setPage(p => p + 1)} style={{ padding: '6px 12px', borderRadius: 6, background: 'var(--bg)', border: '1px solid var(--border)' }}>Next</button>
-                    </div>
-                )}
-            </div>
+            <Card styles={{ body: { padding: 0 } }}>
+                <Table
+                    columns={columns}
+                    dataSource={data?.data || []}
+                    rowKey="id"
+                    loading={isLoading}
+                    size="middle"
+                    scroll={{ x: 700 }}
+                    pagination={{
+                        current: page,
+                        total: data?.count || 0,
+                        pageSize: 50,
+                        onChange: (p) => setPage(p),
+                        showTotal: (total) => `${total} conversations`,
+                    }}
+                />
+            </Card>
         </div>
     );
 }

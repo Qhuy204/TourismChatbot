@@ -1,8 +1,3 @@
-"""
-GPU Request Queue
-Priority-based request queue for GPU inference with circuit breaker and fallback.
-Designed for self-hosted Qwen model on RTX 3060.
-"""
 import asyncio
 import time
 from dataclasses import dataclass, field

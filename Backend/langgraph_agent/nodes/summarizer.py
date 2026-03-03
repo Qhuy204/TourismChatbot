@@ -1,7 +1,3 @@
-"""
-Conversation Summarizer Node
-Manages short-term context by summarizing older conversation turns
-"""
 from typing import List, Dict
 
 from ..state import MessageProcessingState

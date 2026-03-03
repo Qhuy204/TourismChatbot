@@ -17,11 +17,9 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# ============== Globals ==============
 from langgraph_agent.utils.system_state import get_app_state, set_app_state
 # APP_STATE is now managed via system_state.py (get_app_state/set_app_state)
 
-# ============== Request/Response Models ==============
 
 class ChatRequest(BaseModel):
     user_id: str
@@ -103,7 +101,6 @@ class ContextualSuggestionsRequest(BaseModel):
     user_messages: Optional[List[str]] = []  # Recent user messages for style mimicry
     limit: int = 4
 
-# ============== Admin API Models (Merged) ==============
 
 from langgraph_agent.utils.security import Admin
 
@@ -123,7 +120,6 @@ class DuplicateCleanupRequest(BaseModel):
     dry_run: bool = True
 
 
-# ============== Lifespan ==============
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -176,7 +172,6 @@ async def lifespan(app: FastAPI):
     print("👋 Shutting down...")
 
 
-# ============== FastAPI App ==============
 
 app = FastAPI(
     title="Tourism Chatbot API",
@@ -194,7 +189,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ============== Security & Tracing Middleware ==============
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse as StarletteJSONResponse
@@ -245,7 +239,6 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityMiddleware)
 
-# ============== Graceful Shutdown ==============
 
 # Graceful shutdown is handled by the lifespan context manager below.
 
@@ -294,7 +287,6 @@ async def lifespan(app: FastAPI):
     print("👋 Goodbye!")
 
 
-# ============== Endpoints ==============
 
 @app.get("/health")
 async def health_check():
@@ -673,7 +665,6 @@ Trả về JSON mẫu:
         }
 
 
-# ============== Session Management Endpoints ==============
 
 @app.get("/langgraph/sessions/{user_id}")
 async def list_sessions(user_id: str):
@@ -756,7 +747,6 @@ async def export_session(session_id: str):
     )
 
 
-# ============== Location Deduplication Endpoints ==============
 
 @app.post("/langgraph/locations/insert")
 async def insert_location(request: LocationInsertRequest):
@@ -806,7 +796,6 @@ async def cleanup_locations(request: DuplicateCleanupRequest):
     }
 
 
-# ============== Admin API Endpoints (Merged) ==============
 
 import time
 from fastapi import BackgroundTasks, WebSocket, WebSocketDisconnect
@@ -1096,7 +1085,6 @@ async def admin_analytics(request: Request, admin: Admin = Depends(require_admin
         if d in daily: daily[d]["active_users"] = len(users)
     return {"days": days, "data": sorted(daily.values(), key=lambda x: x["date"])}
 
-# ============== Background Task Helpers (Merged) ==============
 
 async def _export_data_worker(dataset: str, format: str, export_id: str):
     """Replacement for Celery task using BackgroundTasks"""

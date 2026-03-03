@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from '@/hooks/useAuth';
 import { Toaster } from 'sonner';
+import { ConfigProvider, theme as antdTheme } from 'antd';
 import LandingPage from '@/pages/LandingPage';
 import FeaturesPage from '@/pages/FeaturesPage';
 import PricingPage from '@/pages/PricingPage';
@@ -21,6 +22,8 @@ import AdminSettings from '@/pages/admin/AdminSettings';
 import AdminAnalytics from '@/pages/admin/AdminAnalytics';
 
 const queryClient = new QueryClient();
+
+const isDark = () => document.documentElement.getAttribute('data-theme') !== 'light';
 
 function NotFound() {
   return (
@@ -50,7 +53,6 @@ export default function App() {
             <Route path="/app" element={<ChatApp />} />
             <Route path="/profile" element={<ProfilePage />} />
 
-            {/* Admin Nested Routes */}
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminOverview />} />
               <Route path="users" element={<AdminUsers />} />

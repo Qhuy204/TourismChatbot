@@ -1,7 +1,3 @@
-"""
-Memory Store
-Persists validated facts to database and invalidates cache
-"""
 import os
 from typing import List, Dict, Optional
 from datetime import datetime, timezone
@@ -240,7 +236,6 @@ async def clear_user_memory(user_id: str) -> bool:
     return success
 
 
-# ============== Chat Session Management ==============
 
 async def get_chat_sessions(user_id: str) -> List[Dict]:
     """Fetch all chat sessions for a user from Supabase"""
@@ -370,7 +365,6 @@ async def get_session_history(session_id: str) -> List[Dict]:
         return []
 
 
-# ============== Location Deduplication Functions ==============
 
 async def check_location_duplicate(
     name: str, 

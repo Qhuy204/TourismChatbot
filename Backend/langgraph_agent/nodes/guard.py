@@ -1,7 +1,3 @@
-"""
-Relevance Guard Node
-Filters off-topic queries before RAG retrieval
-"""
 from ..state import MessageProcessingState, IntentType
 from ..utils.gemini_client import gemini_fast
 

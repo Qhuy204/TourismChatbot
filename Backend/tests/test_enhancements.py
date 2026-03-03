@@ -1,7 +1,3 @@
-"""
-Tests for Location Extractor and Evaluator modules
-Run with: pytest tests/test_enhancements.py -v
-"""
 import pytest
 import asyncio
 import sys
@@ -14,7 +10,6 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env'))
 
 
-# ============== Test Evaluator ==============
 
 class TestEvaluator:
     """Test evaluator.py functions"""
@@ -55,7 +50,6 @@ class TestEvaluator:
         print(f"Hallucination score (mismatched): {score}")
 
 
-# ============== Test Location Extractor ==============
 
 class TestLocationExtractor:
     """Test location_extractor.py functions"""
@@ -111,7 +105,6 @@ class TestLocationExtractor:
         assert len(locations) == 0
 
 
-# ============== Test EvaluationMetrics Dataclass ==============
 
 class TestEvaluationMetrics:
     """Test EvaluationMetrics dataclass"""
@@ -137,7 +130,6 @@ class TestEvaluationMetrics:
         assert metrics.response_length == 150
 
 
-# ============== Test ExtractedLocation Dataclass ==============
 
 class TestExtractedLocation:
     """Test ExtractedLocation dataclass"""
@@ -161,7 +153,6 @@ class TestExtractedLocation:
         assert loc.description == "Phố cổ nổi tiếng"
 
 
-# ============== Run Tests ==============
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
