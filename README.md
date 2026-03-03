@@ -189,7 +189,9 @@ graph LR
 
 ### Prerequisites
 - **Node.js 18+** & npm
-- **Python 3.10+** (Conda recommended)
+- **Python 3.12+** (for manual backend setup)
+- **Docker & Docker Compose** (for containerized setup)
+- **NVIDIA Container Toolkit** (for GPU support in Docker)
 - **Supabase** Account & Project
 - **Google Gemini API Key**
 
@@ -225,7 +227,25 @@ Start the API server:
 uvicorn main:app --reload --port 8001
 ```
 
-### 4. (Optional) Cloudflare Tunnel
+### 4. 🐳 Docker Deployment (Backend)
+This is the recommended way for production-like local development with GPU support.
+
+**Prerequisite:** Install [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+
+```bash
+cd Backend
+# Build and start in background
+docker-compose up -d --build
+
+# View logs
+docker-compose logs -f backend
+
+# Verify GPU access inside container
+docker exec -it vivi-backend nvidia-smi
+```
+The Docker setup automatically mounts your local `model/` and `data/` folders to stay lightweight while keeping data persistent.
+
+### 5. (Optional) Cloudflare Tunnel
 ```bash
 ./run_tunnel.sh
 ```
@@ -300,6 +320,7 @@ TourismChatbot/
 - **Cloudflare Deployment:** Secure tunnel-based deployment for public access.
 - **Qwen3-VL 8B Fine-tuning:** Model fine-tuned on Vietnam tourism VQA dataset via Unsloth QLoRA on A100 GPU.
 - **Emotion-Adaptive UI:** Chat interface dynamically shifts color palette based on detected user emotion.
+- **Dockerization (Backend):** Added `Dockerfile` and `docker-compose.yml` with NVIDIA GPU support and volume mounts for efficient inference.
 - **Smart Auto-Titling:** Backend generates concise 3-6 word session titles using Gemini Fast.
 
 ---
