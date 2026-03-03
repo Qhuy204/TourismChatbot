@@ -1,0 +1,33 @@
+# ViVi Backend — Docker Compose (GPU + Volume Mounts)
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vivi-backend
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    volumes:
+      # Mount local models (Qwen3-VL, Emotion, Intent detection)
+      - ./model:/app/model:ro
+      # Mount ChromaDB vector store + data files
+      - ./data:/app/data
+      # Mount config files
+      - ./langgraph_agent/configs:/app/langgraph_agent/configs:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

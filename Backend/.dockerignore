@@ -1,0 +1,28 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.env
+*.egg-info/
+dist/
+build/
+
+# Large model files (mounted as volumes)
+model/
+data/
+
+# Dev/test files
+check_db.py
+check_db_sync.py
+check_user_ids.py
+test_admin_apis.py
+reindex_vqa.py
+requirements copy.txt
+
+# Compiled caches
+unsloth_compiled_cache/
+llama.cpp/
+
+# IDE
+.vscode/
+.idea/
