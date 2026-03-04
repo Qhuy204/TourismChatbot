@@ -103,7 +103,14 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
     // Handle session switch and cleanup empty sessions
     useEffect(() => {
         console.log('[DEBUG] useLangGraphChat useEffect session switch. initialSessionId=', initialSessionId, 'sidRef.current=', sidRef.current);
+
+        // If the prop matches our current internal ID, nothing to do.
         if (initialSessionId === sidRef.current) return;
+
+        // If we are switching TO "New Chat" (undefined) AND we are ALREADY empty, skip to avoid infinite loops.
+        if (!initialSessionId && messages.length === 0) {
+            return;
+        }
 
         // Cleanup old session if it was empty before switching
         if (messages.length === 0 && sidRef.current) {

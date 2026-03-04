@@ -98,8 +98,12 @@ export function useSessionManager() {
 
     // Persist active session to localStorage
     useEffect(() => {
-        if (!user?.id || !state.activeSessionId) return;
-        localStorage.setItem(`active_session_${user.id}`, state.activeSessionId);
+        if (!user?.id) return;
+        if (state.activeSessionId) {
+            localStorage.setItem(`active_session_${user.id}`, state.activeSessionId);
+        } else {
+            localStorage.removeItem(`active_session_${user.id}`);
+        }
     }, [state.activeSessionId, user?.id]);
 
     // Create new session via Backend

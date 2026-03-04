@@ -915,12 +915,24 @@ async def admin_list_users(request: Request, admin: Admin = Depends(require_admi
     except Exception: auth_users = []
     result = []
     for au in auth_users:
-        uid = getattr(au, 'id', au.get('id', '')) if not isinstance(au, dict) else au.get('id', '')
-        email = getattr(au, 'email', au.get('email', '')) if not isinstance(au, dict) else au.get('email', '')
-        meta = getattr(au, 'user_metadata', au.get('user_metadata', {})) if not isinstance(au, dict) else au.get('user_metadata', {})
-        created = getattr(au, 'created_at', au.get('created_at', '')) if not isinstance(au, dict) else au.get('created_at', '')
-        banned = getattr(au, 'banned_until', au.get('banned_until', '')) if not isinstance(au, dict) else au.get('banned_until', '')
-        result.append({"id": uid, "email": email, "display_name": (meta or {}).get("display_name", ""), "role": roles_map.get(uid, "user"), "created_at": str(created), "is_banned": bool(banned), "message_count": user_messages.get(uid, 0), "session_count": user_sessions.get(uid, 0), "last_active": user_last_active.get(uid)})
+        is_dict = isinstance(au, dict)
+        uid = au.get('id', '') if is_dict else getattr(au, 'id', '')
+        email = au.get('email', '') if is_dict else getattr(au, 'email', '')
+        meta = au.get('user_metadata', {}) if is_dict else getattr(au, 'user_metadata', {})
+        created = au.get('created_at', '') if is_dict else getattr(au, 'created_at', '')
+        banned = au.get('banned_until', '') if is_dict else getattr(au, 'banned_until', '')
+        
+        result.append({
+            "id": uid, 
+            "email": email, 
+            "display_name": (meta or {}).get("display_name", ""), 
+            "role": roles_map.get(uid, "user"), 
+            "created_at": str(created), 
+            "is_banned": bool(banned), 
+            "message_count": user_messages.get(uid, 0), 
+            "session_count": user_sessions.get(uid, 0), 
+            "last_active": user_last_active.get(uid)
+        })
     return result
 
 @app.get("/admin/metrics")

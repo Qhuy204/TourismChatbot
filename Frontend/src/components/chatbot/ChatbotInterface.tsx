@@ -56,9 +56,19 @@ const quickActions = [
 // Markdown components  
 const mdComponents: Components = {
     img: ({ src, alt }) => (
-        <div style={{ margin: '8px 0' }}>
-            <img loading="lazy" src={src} alt={alt ?? 'image'} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, objectFit: 'cover' }} />
-        </div>
+        <img
+            loading="lazy"
+            src={src}
+            alt={alt ?? 'image'}
+            style={{
+                display: 'block',
+                margin: '8px 0',
+                maxWidth: '100%',
+                maxHeight: 300,
+                borderRadius: 8,
+                objectFit: 'cover'
+            }}
+        />
     ),
     a: ({ href, children }) => (
         <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
@@ -776,7 +786,7 @@ export function ChatbotInterface() {
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                         {messages.length > 0 && (
-                            <button onClick={clearMessages} style={{ padding: '5px 12px', background: 'var(--bg-muted)', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <button onClick={() => sessionManager.setActiveSession(null)} style={{ padding: '5px 12px', background: 'var(--bg-muted)', border: '1px solid var(--border)', borderRadius: 7, cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5 }}>
                                 <RefreshCw size={11} /> Mới
                             </button>
                         )}
