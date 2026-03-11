@@ -1,5 +1,6 @@
 import os
 from typing import List, Dict, Optional
+from collections import Counter
 from datetime import datetime, timezone
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -117,6 +118,7 @@ async def log_chat(
     response: str,
     emotion: str = "neutral",
     intent: str = "travel_query",
+    location: Optional[str] = None,
     debug: Optional[Dict] = None,
     attachments: Optional[List[Dict]] = None
 ) -> bool:
@@ -146,6 +148,8 @@ async def log_chat(
         context = debug or {}
         context["emotion"] = emotion
         context["intent"] = intent
+        if location:
+            context["location"] = location
         
         client.table("chat_logs").insert({
             "user_id": user_id,
@@ -509,4 +513,113 @@ async def get_recommendations(
         return result.data or []
     except Exception as e:
         print(f"❌ get_recommendations error: {e}")
+        return []
+
+
+async def get_location_analytics(limit: int = 10) -> List[Dict]:
+    """
+    Get statistics on most asked-about locations from chat logs context.
+    Returns: List of {location: str, count: int, percentage: float}
+    """
+    client = get_supabase()
+    if not client:
+        return []
+    
+    try:
+        response = client.table("chat_logs") \
+            .select("context->>detected_location, context->>location, context->locations") \
+            .not_.is_("context", "null") \
+            .limit(2000) \
+            .execute()
+        
+        counts = {}
+        total_valid = 0
+        for row in response.data:
+            # When selecting keys directly, Supabase flattens them
+            loc = row.get("location") or row.get("detected_location")
+            
+            # Fallback to locations list
+            if not loc:
+                locs = row.get("locations")
+                if locs and isinstance(locs, list) and len(locs) > 0:
+                    loc = locs[0]
+            
+            if loc and loc != "None":
+                counts[loc] = counts.get(loc, 0) + 1
+                total_valid += 1
+        
+        results = []
+        sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:limit]
+        for loc, count in sorted_counts:
+            results.append({
+                "location": loc,
+                "count": count,
+                "percentage": round((count / total_valid * 100), 1) if total_valid > 0 else 0
+            })
+        
+        return results
+    except Exception as e:
+        print(f"❌ get_location_analytics error: {e}")
+        return []
+
+
+async def get_topic_analytics(limit: int = 10) -> List[Dict]:
+    """
+    Get statistics on most common intents/topics from chat logs.
+    Returns: List of {topic: str, count: int, label: str}
+    """
+    client = get_supabase()
+    if not client:
+        return []
+    
+    # User-friendly labels and mapping
+    TOPIC_LABELS = {
+        "place_exploration": "Địa điểm tham quan",
+        "history_culture": "Lịch sử / Thông tin",
+        "budget_info": "Giá vé & Chi phí",
+        "opening_hours": "Giờ mở cửa",
+        "food_drink": "Ẩm thực",
+        "transportation": "Di chuyển",
+        "itinerary_planning": "Lịch trình",
+        "accommodation": "Khách sạn",
+        "chit_chat": "Tán gẫu",
+        "negative_feedback": "Góp ý",
+        "preference_update": "Sở thích",
+        "unrelated": "Khác"
+    }
+    
+    # Old to new mapping for backward compatibility
+    INTENT_MAP = {
+        "travel_query": "place_exploration",
+        "budget_query": "budget_info",
+        "food_recommendation": "food_drink",
+        "itinerary_request": "itinerary_planning"
+    }
+
+    try:
+        response = client.table("chat_logs") \
+            .select("context->>intent") \
+            .not_.is_("context->intent", "null") \
+            .limit(2000) \
+            .execute()
+        
+        counts = Counter()
+        for row in response.data:
+            intent = row.get("intent")
+            if intent:
+                # Map old to new
+                mapped = INTENT_MAP.get(intent, intent)
+                counts[mapped] += 1
+        
+        results = []
+        for intent, count in counts.most_common(limit):
+            results.append({
+                "topic": intent,
+                "label": TOPIC_LABELS.get(intent, intent),
+                "count": count
+            })
+            
+        return results
+    except Exception as e:
+        print(f"❌ get_topic_analytics error: {e}")
         return []

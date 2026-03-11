@@ -5,7 +5,6 @@ from enum import Enum
 
 from ..state import MessageProcessingState, UserContextState, OutputState
 from ..utils.gemini_client import gemini_fast
-from ..utils.qwen_client import qwen_client
 
 
 class SuggestionCategory(str, Enum):
@@ -106,7 +105,7 @@ Trả về JSON array mẫu:
                 }
             },
             temperature=0.7,
-            max_tokens=600
+            max_tokens=1024
         )
         
         # result might be a list directly if the schema is array

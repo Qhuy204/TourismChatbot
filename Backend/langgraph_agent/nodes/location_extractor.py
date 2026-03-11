@@ -56,14 +56,14 @@ class VNAdministrativeManager:
                 raw_data = json.load(f).get('data', [])
                 for p in raw_data:
                     p_name = p['name']
-                    self._provinces[self._clean(p_name)] = {
+                    self._provinces[self.clean_name(p_name)] = {
                         "id": p['level1_id'],
                         "name": p_name,
                         "type": p['type']
                     }
                     for d in p.get('level2s', []):
                         d_name = d['name']
-                        key = f"{self._clean(d_name)}|{self._clean(p_name)}"
+                        key = f"{self.clean_name(d_name)}|{self.clean_name(p_name)}"
                         self._districts[key] = {
                             "id": d['level2_id'],
                             "name": d_name,
@@ -86,10 +86,10 @@ class VNAdministrativeManager:
         except Exception as e:
             print(f"❌ Error parsing administrative data: {e}")
 
-    def _clean(self, text: str) -> str:
+    def clean_name(self, text: str) -> str:
         if not text: return ""
         # Remove common prefixes for matching
-        prefixes = ["Thành phố ", "Tỉnh ", "Quận ", "Huyện ", "Thị xã "]
+        prefixes = ["Thành phố ", "Tỉnh ", "Quận ", "Huyện ", "Thị xã ", "Phường ", "Xã "]
         cleaned = text
         for p in prefixes:
             if cleaned.startswith(p):
@@ -97,12 +97,12 @@ class VNAdministrativeManager:
         return normalize_name(cleaned)
 
     def find_province(self, name: str) -> Optional[Dict]:
-        return self._provinces.get(self._clean(name))
+        return self._provinces.get(self.clean_name(name))
 
     def find_district(self, name: str, province_name: Optional[str] = None) -> Optional[Dict]:
-        c_name = self._clean(name)
+        c_name = self.clean_name(name)
         if province_name:
-            key = f"{c_name}|{self._clean(province_name)}"
+            key = f"{c_name}|{self.clean_name(province_name)}"
             return self._districts.get(key)
         
         # If no province provided, search all (risky for disambiguation)
@@ -118,16 +118,32 @@ class VNAdministrativeManager:
         text = text.lower()
         text_norm = normalize_name(text)
         
-        # Check provinces (high priority)
-        # Sort by length desc to match "Ho Chi Minh" before "Minh" (if any)
-        sorted_provinces = sorted(self._provinces.items(), key=lambda x: len(x[0]), reverse=True)
+        # Check districts first (more specific)
+        unique_districts = {} # d_norm -> d_name
+        for key, data in self._districts.items():
+            d_norm = key.split("|")[0]
+            if d_norm not in unique_districts or len(data["name"]) > len(unique_districts[d_norm]):
+                unique_districts[d_norm] = data["name"]
         
-        for p_norm, p_data in sorted_provinces:
-            # Basic word boundary check equivalent
-            if p_norm in text_norm:
-                 results.append({"name": p_data["name"], "type": "province"})
+        sorted_districts = sorted(unique_districts.items(), key=lambda x: len(x[0]), reverse=True)
+        for d_norm, d_name in sorted_districts:
+            d_norm_no_space = d_norm.replace(" ", "")
+            if d_norm in text_norm or (len(d_norm) > 3 and d_norm_no_space in text_norm.replace(" ", "")):
+                if not any(r["name"] == d_name for r in results):
+                    results.append({"name": d_name, "type": "district"})
+            if len(results) >= 3: break
+
+        # Check provinces (fallback)
+        if len(results) < 5:
+            sorted_provinces = sorted(self._provinces.items(), key=lambda x: len(x[0]), reverse=True)
+            for p_norm, p_data in sorted_provinces:
+                p_norm_no_space = p_norm.replace(" ", "")
+                if p_norm in text_norm or (len(p_norm) > 3 and p_norm_no_space in text_norm.replace(" ", "")):
+                    if not any(r["name"] == p_data["name"] for r in results):
+                        results.append({"name": p_data["name"], "type": "province"})
+                if len(results) >= 5: break
                  
-        return results[:3] # Limit to top 3
+        return results[:5] 
 
 def fast_extract_locations(text: str) -> List[Dict]:
     """

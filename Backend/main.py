@@ -1,8 +1,14 @@
-try:
-    import unsloth
-except ImportError:
-    pass
 import os
+
+# Detect llama mode from environment variable (set by `python main.py --llama` or `USE_LLAMA=1 uvicorn main:app`)
+_LLAMA_MODE = os.environ.get("USE_LLAMA", "0") == "1"
+
+if not _LLAMA_MODE:
+    try:
+        import unsloth
+    except ImportError:
+        pass
+
 import json
 from contextlib import asynccontextmanager
 from typing import List, Dict, Optional
@@ -17,8 +23,12 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-from langgraph_agent.utils.system_state import get_app_state, set_app_state
+from langgraph_agent.utils.system_state import get_app_state, set_app_state, set_use_llama
 # APP_STATE is now managed via system_state.py (get_app_state/set_app_state)
+
+# Apply llama mode globally
+if _LLAMA_MODE:
+    set_use_llama(True)
 
 
 class ChatRequest(BaseModel):
@@ -126,6 +136,7 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
     # Startup
     print("🚀 Starting LangGraph Tourism Chatbot...")
+    set_app_state("RUNNING")
     
     # Test Gemini connection
     from langgraph_agent.utils.gemini_client import test_connection
@@ -134,32 +145,33 @@ async def lifespan(app: FastAPI):
     else:
         print("⚠️ Gemini API connection failed - check GEMINI_API_KEY")
     
-    # Initialize VQA store in background
+    # Initialize VQA store + LLM backend in background
     try:
         from langgraph_agent.retrieval.vqa_store import init_vqa_store
-        import os
-        import asyncio
         from concurrent.futures import ThreadPoolExecutor
         
-        # Use absolute path from project root
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        vqa_path = os.path.join(project_root, "Data", "vqa_dataset.jsonl")
-        
-        # Run indexing in a separate thread to not block the event loop
         loop = asyncio.get_running_loop()
         executor = ThreadPoolExecutor(max_workers=1)
         
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        vqa_path = os.path.join(project_root, "Data", "vqa_dataset.jsonl")
+        
         print("⏳ Starting VQA indexing in background...")
-        # We don't 'await' this so lifespan can continue
         loop.run_in_executor(executor, init_vqa_store, vqa_path, None)
         
-        # Warm-load Qwen model
-        print("⏳ Warm-loading Qwen model in background...")
-        from langgraph_agent.utils.qwen_client import qwen_client
-        loop.run_in_executor(executor, qwen_client.warm_load)
+        if _LLAMA_MODE:
+            # Start llama-server subprocess (light VRAM)
+            from langgraph_agent.utils.llama_client import start_llama_server
+            print("🦙 --llama mode: Starting llama-server (GGUF Q4_K_M)...")
+            loop.run_in_executor(executor, start_llama_server)
+        else:
+            # Warm-load Qwen via Unsloth (heavy VRAM)
+            print("⏳ Warm-loading Qwen model in background...")
+            from langgraph_agent.utils.qwen_client import qwen_client
+            loop.run_in_executor(executor, qwen_client.warm_load)
         
     except Exception as e:
-        print(f"⚠️ VQA store background init failed: {e}")
+        print(f"⚠️ Background init failed: {e}")
     
     # Initialize graph
     from langgraph_agent.graph import get_graph
@@ -169,7 +181,15 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown
-    print("👋 Shutting down...")
+    print("👋 Shutdown initiated. Finalizing active requests...")
+    set_app_state("DRAINING")
+    
+    # Stop llama-server if running
+    if _LLAMA_MODE:
+        from langgraph_agent.utils.llama_client import stop_llama_server
+        stop_llama_server()
+    
+    print("👋 Goodbye!")
 
 
 
@@ -255,36 +275,6 @@ async def wait_for_idle(timeout: int = 30):
         print(f"⏳ Waiting for {queue.active_requests} active GPU requests to finish...")
         await asyncio.sleep(1)
     print("✅ All active GPU requests finished.")
-
-# Update lifespan to include the wait
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    print("🚀 Starting LangGraph Tourism Chatbot...")
-    set_app_state("RUNNING")
-    
-    # ... (INITIALIZATION LOGIC REMAINS)
-    from langgraph_agent.utils.gemini_client import test_connection
-    if await test_connection(): print("✅ Gemini API connected")
-    
-    try:
-        from langgraph_agent.retrieval.vqa_store import init_vqa_store
-        loop = asyncio.get_running_loop()
-        executor = ThreadPoolExecutor(max_workers=1)
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        vqa_path = os.path.join(project_root, "Data", "vqa_dataset.jsonl")
-        loop.run_in_executor(executor, init_vqa_store, vqa_path, None)
-        from langgraph_agent.utils.qwen_client import qwen_client
-        loop.run_in_executor(executor, qwen_client.warm_load)
-    except Exception as e: print(f"⚠️ Init failed: {e}")
-    
-    yield
-    
-    # Shutdown
-    print("👋 Shutdown initiated. Finalizing active requests...")
-    set_app_state("DRAINING")
-    await wait_for_idle(timeout=30)
-    print("👋 Goodbye!")
 
 
 
@@ -1162,11 +1152,33 @@ async def admin_cleanup_logs(request: Request, admin: Admin = Depends(require_ad
     except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
+    import sys
     import uvicorn
+
+    # Parse --llama flag and persist via env var (survives uvicorn reload)
+    if "--llama" in sys.argv:
+        sys.argv.remove("--llama")
+        os.environ["USE_LLAMA"] = "1"
+        print("🦙 --llama flag detected → using llama.cpp backend")
+
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
-        reload_excludes=["unsloth_compiled_cache", "**/__pycache__/*"]
+        reload_excludes=["**/unsloth_compiled_cache/**", "**/__pycache__/**", "**/llama.cpp/**"]
     )
+@app.get("/langgraph/admin/analytics/locations")
+async def get_loc_analytics(limit: int = 10, admin: Admin = Depends(require_admin)):
+    """Admin-only: Get statistics on most asked-about locations"""
+    from langgraph_agent.memory.store import get_location_analytics
+    stats = await get_location_analytics(limit=limit)
+    return {"stats": stats}
+
+
+@app.get("/langgraph/admin/analytics/topics")
+async def get_top_analytics(limit: int = 10, admin: Admin = Depends(require_admin)):
+    """Admin-only: Get statistics on most common intents/topics"""
+    from langgraph_agent.memory.store import get_topic_analytics
+    stats = await get_topic_analytics(limit=limit)
+    return {"stats": stats}

@@ -2,7 +2,6 @@ from typing import List, Dict
 
 from ..state import MessageProcessingState
 from ..utils.gemini_client import gemini_fast
-from ..utils.qwen_client import qwen_client
 
 
 # Configuration
@@ -34,12 +33,23 @@ async def summarize_conversation(history: List[Dict], model_mode: str = "gemini"
     
     try:
         if model_mode == "qwen":
-            summary = await qwen_client.generate(
-                prompt=prompt,
-                system_instruction="Bạn là chuyên gia tóm tắt hội thoại.",
-                temperature=0.3,
-                max_tokens=1000
-            )
+            from ..utils.system_state import get_use_llama
+            if get_use_llama():
+                from ..utils.llama_client import llama_client
+                summary = await llama_client.generate(
+                    prompt=prompt,
+                    system_instruction="Bạn là chuyên gia tóm tắt hội thoại.",
+                    temperature=0.3,
+                    max_tokens=1000
+                )
+            else:
+                from ..utils.qwen_client import qwen_client
+                summary = await qwen_client.generate(
+                    prompt=prompt,
+                    system_instruction="Bạn là chuyên gia tóm tắt hội thoại.",
+                    temperature=0.3,
+                    max_tokens=1000
+                )
         else:
             summary = await gemini_fast.generate(
                 prompt=prompt,

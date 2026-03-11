@@ -10,7 +10,7 @@ from transformers import AutoTokenizer
 
 from ..state import MessageProcessingState, IntentType
 from ..utils.gemini_client import gemini_fast
-from ..utils.qwen_client import qwen_client
+from .location_extractor import VNAdministrativeManager
 
 
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "configs" / "intent.yaml"
@@ -28,19 +28,19 @@ _MODEL_DIR = Path(__file__).resolve().parents[2] / _model_cfg.get(
 )
 _MAX_LENGTH: int = _model_cfg.get("max_length", 128)
 _CONFIDENCE_THRESHOLD: float = _model_cfg.get("confidence_threshold", 0.6)
-_DEFAULT_INTENT: str = _model_cfg.get("default_intent", "travel_query")
+_DEFAULT_INTENT: str = _model_cfg.get("default_intent", "place_exploration")
 
 # Map model output id → Intent string (must match Enum names)
 # Model labels: 0: accommodation, 1: budget_query, 2: chit_chat, 3: food_recommendation, 4: itinerary_request, 5: negative_feedback, 6: preference_update, 7: travel_query
 _ID2LABEL = {
     0: "accommodation",
-    1: "budget_query",
+    1: "budget_info",
     2: "chit_chat",
-    3: "food_recommendation",
-    4: "itinerary_request",
+    3: "food_drink",
+    4: "itinerary_planning",
     5: "negative_feedback",
     6: "preference_update",
-    7: "travel_query"
+    7: "place_exploration"
 }
 
 
@@ -101,78 +101,141 @@ class IntentDetector:
         )
 
 
-async def classify_by_llm(message: str, history: List[dict] = None, model_mode: str = "gemini") -> IntentType:
-    """LLM-based classification for ambiguous cases"""
+async def analyze_intent_with_llm(
+    message: str, 
+    history: List[dict] = None, 
+    model_mode: str = "gemini"
+) -> Tuple[IntentType, Optional[str]]:
+    """
+    Stricter LLM-based classification and location extraction.
+    Returns (IntentType, location_name).
+    """
     categories = [intent.value for intent in IntentType]
     
+    # Build history context
     context = ""
     if history and len(history) > 0:
-        last_turn = history[-1].get("content", "")[:100]
-        context = f"\nContext (tin nhắn trước): {last_turn}"
+        turns = []
+        for h in history[-3:]: # Last 3 turns for context
+            role = "User" if h.get("role") == "user" else "Bot"
+            turns.append(f"{role}: {h.get('content', '')}")
+        context = "\nLịch sử hội thoại:\n" + "\n".join(turns)
     
-    system_instruction = "Bạn là hệ thống phân loại intent cho chatbot du lịch Việt Nam."
-    
-    if model_mode == "qwen":
-        result = await qwen_client.classify(
-            text=f"{message}{context}",
-            categories=categories,
-            system_instruction=system_instruction
-        )
-    else:
-        result = await gemini_fast.classify(
-            text=f"{message}{context}",
-            categories=categories,
-            system_instruction=system_instruction
-        )
-    
-    # Map string back to enum
-    for intent in IntentType:
-        if intent.value == result:
-            return intent
-    
-    return IntentType.TRAVEL_QUERY
+    prompt = f"""Phân loại tin nhắn của người dùng cho chatbot du lịch Việt Nam vào MỘT trong các category sau:
+- place_exploration: Hỏi về thông tin địa điểm tham quan, danh lam thắng cảnh, cảnh đẹp.
+- history_culture: Hỏi về lịch sử, nguồn gốc, thông tin văn hóa của địa danh.
+- budget_info: Hỏi về giá vé, chi phí dịch vụ, tiền bạc.
+- opening_hours: Hỏi về giờ mở cửa, thời gian hoạt động.
+- food_drink: Hỏi về đặc sản, quán ăn, ẩm thực, ăn uống.
+- transportation: Hỏi về cách di chuyển, phương tiện (máy bay, tàu, xe), đường đi.
+- itinerary_planning: Yêu cầu lên lịch trình, đề xuất thứ tự đi các điểm.
+- accommodation: Hỏi về khách sạn, resort, chỗ ở.
+- chit_chat: Chào hỏi, cảm ơn, tán gẫu không có nội dung du lịch cụ thể.
+- negative_feedback: Phàn nàn, chê bai, không hài lòng.
+- preference_update: Cập nhật sở thích (vd: "Tôi thích đi biển").
+- unrelated: Không liên quan đến du lịch Việt Nam (hỏi code, toán, chính trị, nước khác).
+
+QUY TẮC:
+1. Nếu là tourism query, hãy trích xuất tên ĐỊA ĐIỂM cụ thể nhất được nhắc đến (vd: "Hà Nội", "Hội An", "Bà Nà Hills"). Nếu không có địa điểm cụ thể, để null.
+2. Trả về JSON chính xác.
+
+Trích xuất JSON:
+{{
+  "intent": "tên_category",
+  "location": "tên_địa_điểm_nếu_có_hoặc_null",
+  "reason": "giải thích ngắn gọn"
+}}
+
+Tin nhắn: "{message}"
+{context}"""
+
+    try:
+        if model_mode == "qwen":
+            from ..utils.system_state import get_use_llama
+            client = None
+            if get_use_llama():
+                from ..utils.llama_client import llama_client
+                client = llama_client
+            else:
+                from ..utils.qwen_client import qwen_client
+                client = qwen_client
+            
+            # Using a simple prompt for now as classify helper might not support JSON schema easily
+            # But let's assume we want a robust result.
+            response_text = await client.generate(prompt, temperature=0.1)
+            # Simple parse if not JSON
+            import json
+            try:
+                data = json.loads(response_text)
+            except:
+                # Fallback simple parsing
+                data = {"intent": "place_exploration", "location": None}
+                for cat in categories:
+                    if cat in response_text.lower():
+                        data["intent"] = cat
+                        break
+        else:
+            data = await gemini_fast.generate_json(prompt, schema={
+                "type": "object",
+                "properties": {
+                    "intent": {"type": "string"},
+                    "location": {"type": "string", "nullable": True},
+                    "reason": {"type": "string"}
+                },
+                "required": ["intent"]
+            })
+        
+        intent_str = data.get("intent", "place_exploration")
+        location = data.get("location")
+        
+        # Map string back to enum
+        final_intent = IntentType.PLACE_EXPLORATION
+        for i in IntentType:
+            if i.value == intent_str:
+                final_intent = i
+                break
+        
+        return final_intent, location
+        
+    except Exception as e:
+        print(f"⚠️ Intent LLM error: {e}")
+        return IntentType.PLACE_EXPLORATION, None
 
 
 async def classify_intent(state: MessageProcessingState) -> MessageProcessingState:
     """
-    LangGraph node: Classify user intent using PhoBERT ONNX model.
-    Falls back to LLM if confidence is low.
+    LangGraph node: Classify user intent and extract location.
     """
-    try:
-        detector = IntentDetector.get()
-        result = detector.predict(state.message)
-        
-        confidence = result.confidence
-        
-        if confidence >= _CONFIDENCE_THRESHOLD:
-            try:
-                intent = IntentType(result.label)
-            except ValueError:
-                intent = IntentType.TRAVEL_QUERY
-        else:
-            # Fallback to LLM for low confidence or ambiguous cases
-            intent = await classify_by_llm(
-                message=state.message,
-                history=state.history,
-                model_mode=state.model_mode
-            )
-            confidence = 0.8  # LLM default confidence
-            
-    except Exception as e:
-        print(f"⚠️ Intent detection error: {e}")
-        # Crash-safe fallback to LLM
+    # Force use LLM for now as per user request for "stronger" and location extraction
+    # The ONNX model might be too simple for complex blocking + location extraction
+    intent, location = await analyze_intent_with_llm(
+        message=state.message,
+        history=state.history,
+        model_mode=state.model_mode
+    )
+    
+    # NORMALIZE: Use administrative manager to get official name (e.g., "TP. Đà Nẵng")
+    if location:
         try:
-            intent = await classify_by_llm(
-                message=state.message,
-                history=state.history,
-                model_mode=state.model_mode
-            )
-            confidence = 0.7
-        except:
-            intent = IntentType.TRAVEL_QUERY
-            confidence = 0.5
+            admin_manager = VNAdministrativeManager()
+            
+            # Check if it's a province
+            prov = admin_manager.find_province(location)
+            if prov:
+                normalized = prov["name"]
+                print(f"📍 Normalized Province: {location} -> {normalized}")
+                location = normalized
+            else:
+                # Keep the landmark name as is for exact matching in search
+                print(f"📍 Detected Landmark: {location}")
+                # We don't discard it anymore!
+        except Exception as e:
+            print(f"⚠️ Metadata normalization error: {e}")
 
     state.intent = intent
-    state.intent_confidence = confidence
+    state.detected_location = location
+    state.intent_confidence = 0.9
+    
+    print(f"🎯 Intent: {intent.value} | Location: {location}")
     
     return state

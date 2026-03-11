@@ -11,7 +11,7 @@ import {
     LoadingOutlined,
 } from '@ant-design/icons';
 import {
-    LineChart, Line, BarChart, Bar, AreaChart, Area,
+    LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { getAdminApiBaseUrl } from '@/lib/api-config';
@@ -28,6 +28,7 @@ interface DailyData {
 
 export default function AdminAnalytics() {
     const [days, setDays] = useState<number>(14);
+    const [topLimit, setTopLimit] = useState<number>(10);
     const [exporting, setExporting] = useState<string | null>(null);
     const apiUrl = getAdminApiBaseUrl();
 
@@ -49,6 +50,30 @@ export default function AdminAnalytics() {
         },
         staleTime: 120000,
     });
+
+    const { data: locStats, isLoading: isLocLoading } = useQuery<{ stats: { location: string, count: number, percentage: number }[] }>({
+        queryKey: ['admin-loc-analytics', topLimit],
+        queryFn: async () => {
+            const headers = await getAuthHeaders();
+            const res = await fetch(`${apiUrl}/langgraph/admin/analytics/locations?limit=${topLimit}`, { headers });
+            if (!res.ok) throw new Error('Failed to load location stats');
+            return res.json();
+        },
+        staleTime: 60000,
+    });
+
+    const { data: topicStats, isLoading: isTopicLoading } = useQuery<{ stats: { topic: string, count: number, label: string }[] }>({
+        queryKey: ['admin-top-analytics', topLimit],
+        queryFn: async () => {
+            const headers = await getAuthHeaders();
+            const res = await fetch(`${apiUrl}/langgraph/admin/analytics/topics?limit=${topLimit}`, { headers });
+            if (!res.ok) throw new Error('Failed to load topic stats');
+            return res.json();
+        },
+        staleTime: 60000,
+    });
+
+    const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#f97316'];
 
     const chartData = analytics?.data || [];
     const totals = chartData.reduce((acc, d) => ({
@@ -170,35 +195,62 @@ export default function AdminAnalytics() {
                         </ResponsiveContainer>
                     </Card>
 
-                    <Card title="👥 Active Users theo ngày" style={{ marginBottom: 24 }}>
-                        <ResponsiveContainer width="100%" height={250}>
-                            <BarChart data={formattedData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                                <Tooltip />
-                                <Bar dataKey="active_users" fill="#8b5cf6" radius={[6, 6, 0, 0]} name="Users" />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </Card>
-
-                    <Card title="🔥 Token Usage Trend" style={{ marginBottom: 24 }}>
-                        <ResponsiveContainer width="100%" height={250}>
-                            <AreaChart data={formattedData}>
-                                <defs>
-                                    <linearGradient id="tokenGradient" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                                <YAxis tick={{ fontSize: 11 }} />
-                                <Tooltip formatter={(value: number | undefined) => [(value ?? 0).toLocaleString(), 'Tokens']} />
-                                <Area type="monotone" dataKey="tokens" stroke="#f59e0b" strokeWidth={2.5} fill="url(#tokenGradient)" name="Tokens" />
-                            </AreaChart>
-                        </ResponsiveContainer>
-                    </Card>
+                    <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
+                        <Col xs={24} lg={12}>
+                            <Card
+                                title="📍 Top Locations"
+                                extra={
+                                    <Segmented
+                                        size="small"
+                                        options={[5, 10, 15, 20]}
+                                        value={topLimit}
+                                        onChange={(v) => setTopLimit(v as number)}
+                                    />
+                                }
+                            >
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={locStats?.stats || []} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis type="number" />
+                                        <YAxis dataKey="location" type="category" width={100} tick={{ fontSize: 11 }} />
+                                        <Tooltip
+                                            formatter={(value: any, name: any, props: any) => {
+                                                if (value === undefined || value === null) return ['0', 'Số câu hỏi'];
+                                                return [
+                                                    `${value} (${props?.payload?.percentage ?? 0}%)`,
+                                                    'Số câu hỏi'
+                                                ];
+                                            }}
+                                        />
+                                        <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Lượt hỏi" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </Card>
+                        </Col>
+                        <Col xs={24} lg={12}>
+                            <Card title="🧩 Intent Distribution">
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <PieChart>
+                                        <Pie
+                                            data={topicStats?.stats || []}
+                                            dataKey="count"
+                                            nameKey="label"
+                                            cx="50%"
+                                            cy="50%"
+                                            outerRadius={80}
+                                            label={({ payload, percent }: any) => `${payload.label} ${(percent * 100).toFixed(0)}%`}
+                                        >
+                                            {(topicStats?.stats || []).map((_, index) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip />
+                                        <Legend />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </Card>
+                        </Col>
+                    </Row>
 
                     <Card title="📦 Export & Import Data">
                         <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>

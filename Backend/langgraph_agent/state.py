@@ -8,16 +8,19 @@ from enum import Enum
 
 
 class IntentType(str, Enum):
-    """Intent categories for routing"""
-    TRAVEL_QUERY = "travel_query"
-    CHIT_CHAT = "chit_chat"
-    PREFERENCE_UPDATE = "preference_update"
-    NEGATIVE_FEEDBACK = "negative_feedback"
-    ACCOMMODATION = "accommodation"
-    BUDGET_QUERY = "budget_query"
-    FOOD_RECOMMENDATION = "food_recommendation"
-    ITINERARY_REQUEST = "itinerary_request"
-    META_INSTRUCTION = "meta_instruction"
+    """Intent categories for routing and analytics"""
+    PLACE_EXPLORATION = "place_exploration"    # Địa điểm tham quan
+    HISTORY_CULTURE = "history_culture"        # Lịch sử / thông tin địa danh
+    BUDGET_INFO = "budget_info"                # Giá vé
+    OPENING_HOURS = "opening_hours"            # Giờ mở cửa
+    FOOD_DRINK = "food_drink"                  # Ẩm thực
+    TRANSPORTATION = "transportation"          # Phương tiện di chuyển
+    ITINERARY_PLANNING = "itinerary_planning"  # Lịch trình
+    ACCOMMODATION = "accommodation"            # Khách sạn
+    CHIT_CHAT = "chit_chat"                    # Chào hỏi, tán gẫu
+    NEGATIVE_FEEDBACK = "negative_feedback"    # Phản hồi tiêu cực
+    PREFERENCE_UPDATE = "preference_update"    # Cập nhật sở thích
+    UNRELATED = "unrelated"                    # Không liên quan du lịch VN
 
 
 class EmotionType(str, Enum):
@@ -72,7 +75,7 @@ class MessageProcessingState:
     recent_turns: List[Dict] = field(default_factory=list)
     
     # Processing results
-    intent: IntentType = IntentType.TRAVEL_QUERY
+    intent: IntentType = IntentType.PLACE_EXPLORATION
     intent_confidence: float = 0.0
     
     emotion: EmotionType = EmotionType.NEUTRAL
@@ -83,6 +86,8 @@ class MessageProcessingState:
     
     is_relevant: bool = True
     relevance_reason: str = ""
+    
+    detected_location: Optional[str] = None
     
     model_mode: Literal["gemini", "qwen"] = "gemini"
     

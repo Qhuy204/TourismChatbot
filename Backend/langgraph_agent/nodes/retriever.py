@@ -1,18 +1,50 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
+import asyncio
+import aiohttp
 
 from ..state import MessageProcessingState
 from ..retrieval.vqa_store import get_vqa_store
+from .location_extractor import admin_manager, normalize_name
 
 
 # Configuration
-DEFAULT_K = 3
-MIN_SCORE = 0.45
+SEARCH_K = 10
+FINAL_K = 3
+MIN_SCORE = 0.5
+LOCATION_BOOST = 0.15
+
+
+def extract_location(text: str) -> Optional[str]:
+    """
+    Extract location from text using VNAdministrativeManager.
+    Prioritizes districts then provinces.
+    """
+    matches = admin_manager.scan_text(text)
+    if matches:
+        return admin_manager.clean_name(matches[0]["name"])
+    return None
+
+
+def boost_by_location(results: List[Dict], location: Optional[str]) -> List[Dict]:
+    """Boost score for documents that match the extracted location"""
+    if not location:
+        return results
+        
+    for item in results:
+        # Check if location name is in question or answer
+        text = (item.get("question", "") + " " + item.get("answer", "")).lower()
+        text_norm = normalize_name(text)
+        
+        if location in text_norm:
+            item["score"] += LOCATION_BOOST
+            item["boosted"] = True # Mark for debugging
+            
+    return results
 
 
 async def retrieve_context(state: MessageProcessingState) -> MessageProcessingState:
     """
-    LangGraph node: Retrieve relevant VQA context.
-    Uses local ChromaDB vector store.
+    LangGraph node: Retrieve relevant VQA context with location awareness.
     """
     # Skip if query is not relevant
     if not state.is_relevant:
@@ -23,30 +55,45 @@ async def retrieve_context(state: MessageProcessingState) -> MessageProcessingSt
     query = state.rewritten_query or state.message
     
     try:
-        # Get VQA store
-        store = get_vqa_store()
-        
-        # Search
-        results = store.search(
+        # 1. Use detected location from intent node
+        location = state.detected_location
+        if location:
+            print(f"📍 Retrieval Hard Filter: {location}")
+            
+        # 3. Search with location filter and intent-based routing
+        from ..state import IntentType
+        intent = state.intent
+        pref = "places"
+        if intent == IntentType.ACCOMMODATION:
+            pref = "hotels"
+        elif intent == IntentType.FOOD_RECOMMENDATION:
+            pref = "food"
+        elif intent == IntentType.ITINERARY_REQUEST:
+            pref = "itinerary"
+            
+        print(f"🔍 Searching ('{pref}'): '{query}' with filter: '{location or 'None'}'")
+        final_results = store.search(
             query=query,
-            k=DEFAULT_K,
-            min_score=MIN_SCORE
+            k=FINAL_K,
+            min_score=MIN_SCORE,
+            location_filter=location,
+            preferred_collection=pref
         )
         
-        # Remove HTTP verification from critical path for speed
-        # Only keep the results
-        state.retrieved_context = results
+        matches_count = sum(1 for r in final_results if r.get("location_match"))
+        if matches_count > 0:
+            print(f"✨ Found {matches_count} matches for '{location}'")
+            
+        state.retrieved_context = final_results
+        
     except Exception as e:
-        print(f"Retrieval error: {e}")
+        print(f"❌ Retrieval error: {e}")
         state.retrieved_context = []
     
     return state
 
 
 # Helper: Check image links
-import aiohttp
-import asyncio
-
 async def verify_image_urls(context: List[Dict]):
     """Quickly verify image URLs in parallel"""
     if not context: return
@@ -70,26 +117,30 @@ async def verify_image_urls(context: List[Dict]):
         await asyncio.gather(*(check(item) for item in context))
 
 
-def format_context_for_prompt(context: List[Dict]) -> str:
-    """Format retrieved context for LLM prompt"""
+def format_context_for_prompt(context):
+    """Format retrieved context for LLM prompt (optimized for Qwen VL)"""
     if not context:
         return ""
-    
-    lines = ["Thông tin tham khảo (bạn có thể dùng các URL ảnh này để hiển thị ảnh cho người dùng bằng Markdown):"]
+
+    lines = [
+        "=== THÔNG TIN THAM KHẢO ===",
+        "Bạn có thể sử dụng các ảnh dưới đây nếu phù hợp.",
+        "Nếu dùng ảnh, hiển thị bằng Markdown: ![Mô tả](URL)"
+    ]
+
     for i, item in enumerate(context[:3], 1):
-        q = item.get("question", "")
-        a = item.get("answer", "")
-        # Truncate answer to save context tokens and reduce TTFT
-        if len(a) > 300:
-            a = a[:297] + "..."
-            
+
+        answer = item.get("answer", "")
         img = item.get("image_url", "")
         score = item.get("score", 0)
-        
-        lines.append(f"\n[{i}] (relevance: {score:.2f})")
-        lines.append(f"Q: {q}")
-        lines.append(f"A: {a}")
+
+        if len(answer) > 250:
+            answer = answer[:247] + "..."
+
+        lines.append(f"\n--- Tài liệu {i} (relevance {score:.2f}) ---")
+        lines.append(answer)
+
         if img:
-            lines.append(f"Image URL: {img}")
-    
+            lines.append(f"Ảnh minh họa: {img}")
+
     return "\n".join(lines)

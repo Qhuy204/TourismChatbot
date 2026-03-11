@@ -3,7 +3,6 @@ import re
 
 from ..state import MessageProcessingState
 from ..utils.gemini_client import gemini_fast
-from ..utils.qwen_client import qwen_client
 
 
 import os
@@ -101,12 +100,23 @@ Viết lại câu hỏi rõ ràng hơn (1 câu, giữ ý chính):"""
     
     try:
         if model_mode == "qwen":
-            rewritten = await qwen_client.generate(
-                prompt=prompt,
-                system_instruction="Bạn là chuyên gia tối ưu câu lệnh tìm kiếm cho chatbot du lịch.",
-                temperature=0.3,
-                max_tokens=500
-            )
+            from ..utils.system_state import get_use_llama
+            if get_use_llama():
+                from ..utils.llama_client import llama_client
+                rewritten = await llama_client.generate(
+                    prompt=prompt,
+                    system_instruction="Bạn là chuyên gia tối ưu câu lệnh tìm kiếm cho chatbot du lịch.",
+                    temperature=0.3,
+                    max_tokens=500
+                )
+            else:
+                from ..utils.qwen_client import qwen_client
+                rewritten = await qwen_client.generate(
+                    prompt=prompt,
+                    system_instruction="Bạn là chuyên gia tối ưu câu lệnh tìm kiếm cho chatbot du lịch.",
+                    temperature=0.3,
+                    max_tokens=500
+                )
         else:
             rewritten = await gemini_fast.generate(
                 prompt=prompt,
