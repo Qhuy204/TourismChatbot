@@ -32,10 +32,22 @@ const MEMORY_KEY = 'chatbot_memory_share';
 
 export function useSessionManager() {
     const { user } = useAuth();
-    const [state, setState] = useState<SessionManagerState>({
-        sessions: [],
-        activeSessionId: null,
-        memoryShareEnabled: false,
+    const [state, setState] = useState<SessionManagerState>(() => {
+        // Synchronous restoration from localStorage if possible
+        const userStr = localStorage.getItem('supabase.auth.token'); // Fallback check to get simple user info or just use a generic key if we can't get ID yet
+        // However, useAuth might not be ready yet. Let's try to get the last known user ID from localStorage keys.
+        let lastActiveSession = null;
+        const keys = Object.keys(localStorage);
+        const activeSessionKey = keys.find(k => k.startsWith('active_session_'));
+        if (activeSessionKey) {
+            lastActiveSession = localStorage.getItem(activeSessionKey);
+        }
+
+        return {
+            sessions: [],
+            activeSessionId: lastActiveSession,
+            memoryShareEnabled: false,
+        };
     });
     const [isLoading, setIsLoading] = useState(true);
 

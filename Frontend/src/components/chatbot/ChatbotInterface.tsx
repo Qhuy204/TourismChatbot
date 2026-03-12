@@ -513,8 +513,21 @@ export function ChatbotInterface() {
     const emotionGreeting = EMOTION_GREETINGS[currentEmotion] || '';
     const groupedSessions = groupSessionsByTime(sessionManager.sessions.slice(0, visibleCount), sessionManager.activeSessionId);
 
+    // If sessions are loading and we don't have an active session in state yet, 
+    // show a full-screen loader to prevent "New Chat" flicker.
+    if (sessionManager.isLoading && !sessionManager.activeSessionId) {
+        return (
+            <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+                <div style={{ textAlign: 'center' }}>
+                    <Loader2 size={40} className="animate-spin" style={{ color: 'var(--primary)', marginBottom: 16 }} />
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Đang tải cuộc trò chuyện...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)', position: 'relative' }}>
+        <div style={{ display: 'flex', height: '100vh', background: 'var(--bg)', color: 'var(--text)', overflow: 'hidden', position: 'fixed', inset: 0 }}>
             {mobileSidebarOpen && <div className="mobile-overlay" onClick={() => setMobileSidebarOpen(false)} />}
 
             <div

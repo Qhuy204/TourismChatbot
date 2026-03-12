@@ -63,7 +63,12 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
     }, [user?.id]);
     const [error, setError] = useState<string | null>(null);
 
-    const sidRef = useRef<string>(initialSessionId || savedSessionId || crypto.randomUUID());
+    const sidRef = useRef<string>(initialSessionId || savedSessionId || '');
+
+    // Generate UUID lazily only when we are sure we need a NEW session
+    if (!sidRef.current && !initialSessionId && !savedSessionId && cookiesLoaded) {
+        sidRef.current = crypto.randomUUID();
+    }
 
     // Load chat history when session + auth ready
     useEffect(() => {
