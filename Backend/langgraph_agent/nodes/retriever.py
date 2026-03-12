@@ -62,17 +62,21 @@ async def retrieve_context(state: MessageProcessingState) -> MessageProcessingSt
             
         # 3. Search with location filter and intent-based routing
         from ..state import IntentType
+        from ..retrieval.vqa_store import get_vqa_store
+        
+        vqa_store = get_vqa_store()
         intent = state.intent
         pref = "places"
         if intent == IntentType.ACCOMMODATION:
             pref = "hotels"
-        elif intent == IntentType.FOOD_RECOMMENDATION:
+        elif intent == IntentType.FOOD_DRINK:
             pref = "food"
-        elif intent == IntentType.ITINERARY_REQUEST:
+        elif intent == IntentType.ITINERARY_PLANNING:
             pref = "itinerary"
             
         print(f"🔍 Searching ('{pref}'): '{query}' with filter: '{location or 'None'}'")
-        final_results = store.search(
+        final_results = await asyncio.to_thread(
+            vqa_store.search,
             query=query,
             k=FINAL_K,
             min_score=MIN_SCORE,

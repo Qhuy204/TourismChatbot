@@ -193,19 +193,25 @@ class LlamaClient:
         }
 
         http = self._get_http()
+        print(f"🚀 LLAMA STREAMING: Starting request to /v1/chat/completions")
         async with http.stream("POST", "/v1/chat/completions", json=payload) as resp:
             resp.raise_for_status()
+            chunk_count = 0
             async for line in resp.aiter_lines():
                 if not line.startswith("data: "):
                     continue
                 data_str = line[6:]
                 if data_str.strip() == "[DONE]":
+                    print(f"✅ LLAMA STREAMING: Done ({chunk_count} chunks)")
                     break
                 try:
                     chunk = json.loads(data_str)
                     delta = chunk["choices"][0].get("delta", {})
                     content = delta.get("content", "")
                     if content:
+                        chunk_count += 1
+                        if chunk_count == 1:
+                            print(f"⚡ LLAMA STREAMING: First chunk received")
                         yield content
                 except (json.JSONDecodeError, KeyError, IndexError):
                     continue

@@ -138,7 +138,11 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting LangGraph Tourism Chatbot...")
     set_app_state("RUNNING")
     
-    # Test Gemini connection
+    # 0. Start Background Worker
+    from langgraph_agent.nodes.background_worker import periodic_location_extraction_loop
+    asyncio.create_task(periodic_location_extraction_loop(interval_seconds=60))
+    
+    # 1. Test Gemini connection
     from langgraph_agent.utils.gemini_client import test_connection
     if await test_connection():
         print("✅ Gemini API connected")
@@ -522,6 +526,10 @@ Trả về JSON nguyên vẹn, đảm bảo điền nội dung cụ thể không
             }
         })
         
+        if not response or "suggestions" not in response or not response["suggestions"]:
+            print("⚠️ Gemini returned empty suggestions, using defaults")
+            return default_data
+            
         return response
     except Exception as e:
         print(f"⚠️ Error generating personalized suggestions: {e}")

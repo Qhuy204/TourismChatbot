@@ -208,7 +208,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         language?: string,
         overrideSessionId?: string,
     ) => {
-        if (!content.trim() || !user?.id) return;
+        if (!content.trim() || !user?.id || isLoading) return;
         setError(null);
 
         if (overrideSessionId && overrideSessionId !== sidRef.current) {

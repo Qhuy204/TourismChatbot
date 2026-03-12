@@ -4,13 +4,17 @@ import json
 from typing import Optional, Dict, Any, List
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+import asyncio
+import google.genai.errors as genai_errors
+from google.genai import types
+
 # Lazy import to avoid loading at module level
 _genai = None
 _client = None
 
 # Model names
-TEXT_MODEL = "gemini-3-flash-preview"  
-PRO_MODEL = "gemini-3-flash-preview"   
+TEXT_MODEL = "gemini-3.1-flash-lite-preview"  
+PRO_MODEL = "gemini-3.1-flash-lite-preview"   
 
 
 def _get_client():
@@ -199,21 +203,27 @@ class GeminiClient:
         max_tokens: int = 20480
     ) -> str:
         """Synchronous version for simpler use cases"""
-        types = _get_types()
-        config = types.GenerateContentConfig(
-            temperature=temperature,
-            max_output_tokens=max_tokens,
-        )
-        
-        if system_instruction:
-            config.system_instruction = system_instruction
-        response = self.client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config=config
-        )
-        
-        return response.text or ""
+        response = None
+        try:
+            types = _get_types()
+            config = types.GenerateContentConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+            )
+            
+            if system_instruction:
+                config.system_instruction = system_instruction
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=config
+            )
+            return response.text or ""
+        except Exception as e:
+            print(f"⚠️ Gemini generate_sync error: {e}")
+            if response and hasattr(response, 'text') and response.text:
+                return response.text
+            raise e
     
     @traceable(run_type="llm")
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
@@ -222,117 +232,107 @@ class GeminiClient:
         prompt: str,
         schema: Optional[Dict[str, Any]] = None,
         temperature: float = 0.3,
-        max_tokens: int = 4096  # Higher limit since gemini-3 generates <thought>
+        max_tokens: int = 4096 
     ) -> Dict[str, Any]:
         """Generate structured JSON output natively using Gemini API"""
         types = _get_types()
-        
-        # Build config
         config_kwargs = {
             "temperature": temperature,
             "max_output_tokens": max_tokens,
             "response_mime_type": "application/json",
         }
-        
-        # ONLY add response_schema if it's a valid Schema object or a complex dict
-        # Simplified dicts like {"key": "type"} cause ValidationErrors in the new SDK
         if schema and isinstance(schema, dict) and "type" in schema:
             config_kwargs["response_schema"] = schema
             
         config = types.GenerateContentConfig(**config_kwargs)
         
-        import asyncio
-        response = await asyncio.to_thread(
-            self.client.models.generate_content,
-            model=self.model_name,
-            contents=prompt,
-            config=config
-        )
+        last_error = None
         
-        if not response.text:
+        # ATTEMPT 1: With Schema (if provided)
+        try:
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
+                model=self.model_name,
+                contents=prompt,
+                config=config
+            )
+            if response and response.text:
+                return self._parse_json_response(response.text)
+        except Exception as e:
+            last_error = e
+            print(f"⚠️ Gemini Attempt 1 failed for {self.model_name}: {e}")
+            
+        # ATTEMPT 2: Fallback without schema (if schema was used)
+        if last_error and "response_schema" in config_kwargs:
+            print("🔄 Attempt 2: Retrying without response_schema...")
+            config_kwargs.pop("response_schema", None)
+            config = types.GenerateContentConfig(**config_kwargs)
+            try:
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model=self.model_name,
+                    contents=prompt,
+                    config=config
+                )
+                if response and response.text:
+                    return self._parse_json_response(response.text)
+            except Exception as e:
+                last_error = e
+                print(f"⚠️ Gemini Attempt 2 failed: {e}")
+        
+        # ATTEMPT 3: Local Llama Fallback
+        if last_error and ("429" in str(last_error) or "quota" in str(last_error).lower()):
+            print("🦙 Attempt 3: Local Llama fallback...")
+            try:
+                from .llama_client import llama_client
+                llama_response = await llama_client.generate(
+                    prompt=prompt,
+                    temperature=0.2,
+                    max_tokens=2048
+                )
+                if llama_response:
+                    return self._parse_json_response(llama_response)
+            except Exception as le:
+                print(f"⚠️ Llama fallback failed: {le}")
+        
+        # If we get here, all failed
+        if last_error:
+            raise last_error
+        return {}
+
+    def _parse_json_response(self, text: str) -> Dict[str, Any]:
+        """Helper to clean and parse JSON from LLM response"""
+        if not text:
             return {}
             
-        clean_text = response.text.strip()
+        # 1. Remove <thought> blocks
+        clean_text = re.sub(r"<thought>.*?</thought>", "", text, flags=re.DOTALL).strip()
         
-        # 1. Remove <thought> blocks (gemini-3 specific quirk)
-        # Use a more aggressive regex for nested or multiple thought blocks
-        clean_text = re.sub(r"<thought>.*?</thought>", "", clean_text, flags=re.DOTALL).strip()
-        
-        # 2. Clean markdown code blocks
+        # 2. Extract from markdown code blocks if present
         if "```" in clean_text:
-            # Extract content between ```json and ``` or just ``` and ```
             match = re.search(r"```(?:json)?\s*(.*?)\s*```", clean_text, re.DOTALL)
             if match:
                 clean_text = match.group(1).strip()
             else:
+                # If only one ``` or malformed, attempt simple strip
                 clean_text = re.sub(r"```(?:json)?\s*", "", clean_text)
                 clean_text = re.sub(r"\s*```", "", clean_text).strip()
         
+        # 3. Try to clean up and parse
         try:
             return json.loads(clean_text)
-        except json.JSONDecodeError as dec_err:
-            try:
-                # 3. Extract JSON object/array via indices if direct parse fails
-                first_curly = clean_text.find("{")
-                last_curly = clean_text.rfind("}")
-                first_square = clean_text.find("[")
-                last_square = clean_text.rfind("]")
-                
-                start_idx = -1
-                end_idx = -1
-                
-                if first_curly != -1 and (first_square == -1 or first_curly < first_square):
-                    start_idx = first_curly
-                    end_idx = last_curly
-                elif first_square != -1:
-                    start_idx = first_square
-                    end_idx = last_square
-                
-                if start_idx != -1:
-                    # If end_idx is -1 or before start_idx, the JSON is likely truncated
-                    if end_idx <= start_idx:
-                        # Attempt to fix truncated JSON by closing brackets
-                        json_str = clean_text[start_idx:]
-                        
-                        # Fix unterminated strings: close any open quotes
-                        # Count unescaped quotes
-                        quote_count = len(re.findall(r'(?<!\\)"', json_str))
-                        if quote_count % 2 != 0:
-                            # Remove everything after the last complete key-value pair
-                            # Find last complete entry (ending with } or ,)
-                            last_good = max(
-                                json_str.rfind('"},'),
-                                json_str.rfind('"}'),
-                                json_str.rfind('" }'),
-                            )
-                            if last_good > 0:
-                                json_str = json_str[:last_good + 2]  # Include the }
-                            else:
-                                # Just close the dangling quote and trim
-                                json_str = json_str.rstrip()
-                                json_str += '"'
-                        
-                        # Clean trailing junk like commas or partial keys
-                        json_str = re.sub(r",\s*$", "", json_str)
-                        json_str = re.sub(r",\s*\"[^\"]*$", "", json_str)
-                        json_str = re.sub(r",\s*\{[^}]*$", "", json_str)
-                        
-                        open_braces = json_str.count("{") - json_str.count("}")
-                        open_brackets = json_str.count("[") - json_str.count("]")
-                        
-                        json_str += "]" * open_brackets
-                        json_str += "}" * open_braces
-                        return json.loads(json_str)
-                    else:
-                        json_str = clean_text[start_idx:end_idx+1]
-                        # Simple fix for trailing commas before closing braces/brackets
-                        json_str = re.sub(r",\s*([\]}])", r"\1", json_str)
-                        return json.loads(json_str)
-            except Exception as e:
-                print(f"⚠️ Last-ditch JSON fix failed: {e}")
-                pass
-                
-            print(f"❌ Failed to parse JSON (err: {dec_err}). Raw output: {response.text[:200]}...")
+        except json.JSONDecodeError:
+            # Look for something that looks like a JSON object strictly
+            match = re.search(r"(\{.*\})", clean_text, re.DOTALL)
+            if match:
+                try:
+                    # Basic fix for trailing commas before closing braces
+                    fixed_json = re.sub(r",\s*([\]}])", r"\1", match.group(1))
+                    return json.loads(fixed_json)
+                except:
+                    pass
+            # Re-raise or return empty if everything fails
+            print(f"❌ Could not parse JSON from: {clean_text[:100]}...")
             return {}
     
     async def classify(

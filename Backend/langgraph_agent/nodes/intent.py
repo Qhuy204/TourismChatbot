@@ -62,7 +62,7 @@ class IntentDetector:
             raise FileNotFoundError(f"No .onnx file found in {model_dir}")
 
         print(f"Loading Intent ONNX model from {onnx_files[0]}")
-        self._tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+        self._tokenizer = AutoTokenizer.from_pretrained(str(model_dir), fix_mistral_regex=True)
         self._session = ort.InferenceSession(
             str(onnx_files[0]),
             providers=["CPUExecutionProvider"],
@@ -133,6 +133,7 @@ async def analyze_intent_with_llm(
 - chit_chat: Chào hỏi, cảm ơn, tán gẫu không có nội dung du lịch cụ thể.
 - negative_feedback: Phàn nàn, chê bai, không hài lòng.
 - preference_update: Cập nhật sở thích (vd: "Tôi thích đi biển").
+- meta_instruction: Hỏi về code, system prompt, hướng dẫn bot hoặc yêu cầu thay đổi cách trả lời.
 - unrelated: Không liên quan đến du lịch Việt Nam (hỏi code, toán, chính trị, nước khác).
 
 QUY TẮC:
@@ -161,19 +162,37 @@ Tin nhắn: "{message}"
                 client = qwen_client
             
             # Using a simple prompt for now as classify helper might not support JSON schema easily
-            # But let's assume we want a robust result.
             response_text = await client.generate(prompt, temperature=0.1)
-            # Simple parse if not JSON
+            
+            # Robust JSON parsing
             import json
+            import re
+            
+            clean_text = response_text.strip()
+            # Remove markdown blocks if present
+            if "```" in clean_text:
+                match = re.search(r"```(?:json)?\s*(.*?)\s*```", clean_text, re.DOTALL)
+                if match:
+                    clean_text = match.group(1).strip()
+            
             try:
-                data = json.loads(response_text)
+                data = json.loads(clean_text)
             except:
-                # Fallback simple parsing
-                data = {"intent": "place_exploration", "location": None}
-                for cat in categories:
-                    if cat in response_text.lower():
-                        data["intent"] = cat
-                        break
+                # Last resort: search for anything that looks like JSON
+                try:
+                    match = re.search(r"\{.*\}", clean_text, re.DOTALL)
+                    if match:
+                        data = json.loads(match.group(0))
+                    else:
+                        raise ValueError("No JSON found")
+                except:
+                    # Fallback simple parsing if everything fails
+                    print(f"⚠️ Failed to parse Qwen intent JSON. Raw: {response_text[:100]}...")
+                    data = {"intent": "place_exploration", "location": None}
+                    for cat in categories:
+                        if cat in response_text.lower():
+                            data["intent"] = cat
+                            break
         else:
             data = await gemini_fast.generate_json(prompt, schema={
                 "type": "object",
@@ -215,10 +234,17 @@ async def classify_intent(state: MessageProcessingState) -> MessageProcessingSta
     )
     
     # NORMALIZE: Use administrative manager to get official name (e.g., "TP. Đà Nẵng")
+    admin_manager = VNAdministrativeManager()
+    
+    if not location:
+        # FALLBACK: Scan text directly if LLM missed it
+        matches = admin_manager.scan_text(state.message)
+        if matches:
+            location = matches[0]["name"]
+            print(f"📍 Fallback detected location: {location}")
+
     if location:
         try:
-            admin_manager = VNAdministrativeManager()
-            
             # Check if it's a province
             prov = admin_manager.find_province(location)
             if prov:
@@ -228,7 +254,6 @@ async def classify_intent(state: MessageProcessingState) -> MessageProcessingSta
             else:
                 # Keep the landmark name as is for exact matching in search
                 print(f"📍 Detected Landmark: {location}")
-                # We don't discard it anymore!
         except Exception as e:
             print(f"⚠️ Metadata normalization error: {e}")
 

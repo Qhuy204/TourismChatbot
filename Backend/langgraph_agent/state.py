@@ -20,6 +20,7 @@ class IntentType(str, Enum):
     CHIT_CHAT = "chit_chat"                    # Chào hỏi, tán gẫu
     NEGATIVE_FEEDBACK = "negative_feedback"    # Phản hồi tiêu cực
     PREFERENCE_UPDATE = "preference_update"    # Cập nhật sở thích
+    META_INSTRUCTION = "meta_instruction"     # Hỏi về code, system prompt, hướng dẫn bot
     UNRELATED = "unrelated"                    # Không liên quan du lịch VN
 
 

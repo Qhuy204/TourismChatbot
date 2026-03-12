@@ -2,7 +2,8 @@ from typing import List, Dict
 
 from ..state import MessageProcessingState, UserContextState, OutputState, EmotionType, IntentType
 from ..utils.gemini_client import gemini_fast, gemini_pro
-from ..utils.qwen_client import qwen_client
+from ..utils.llama_client import llama_client
+from ..utils.system_state import get_use_llama
 from .retriever import format_context_for_prompt
 from .summarizer import build_context_prompt
 
@@ -95,11 +96,13 @@ def build_system_prompt(
         "zh": {
             IntentType.CHIT_CHAT: "这是闲聊，回答要简短友好。",
             IntentType.NEGATIVE_FEEDBACK: "用户不满意，道歉并改进。",
+            IntentType.UNRELATED: "这是一个与越南旅游无关的话题。 请有礼貌地拒绝回答，并强调您只能在越南旅游方面提供帮助。",
             "emoji": "可以使用适当的表情符号。"
         }
     }.get(language, {
             IntentType.CHIT_CHAT: "Đây là chit-chat, hãy trả lời ngắn gọn và thân thiện.",
             IntentType.NEGATIVE_FEEDBACK: "User đang không hài lòng, hãy xin lỗi và cải thiện.",
+            IntentType.UNRELATED: "Đây là chủ đề KHÔNG liên quan đến du lịch Việt Nam. Hãy từ chối trả lời một cách lịch sự và nhấn mạnh rằng bạn chỉ có thể hỗ trợ về du lịch Việt Nam.",
             "emoji": "Có thể dùng emoji phù hợp."
         })
         
@@ -174,13 +177,23 @@ async def generate_response(
     
     try:
         if processing_state.model_mode == "qwen":
-            response_text = await qwen_client.generate(
-                prompt=final_prompt,
-                system_instruction=system_prompt,
-                temperature=0.7,
-                max_tokens=2048
-            )
-            model_name = "qwen3-vl-8b-unsloth"
+            if get_use_llama():
+                response_text = await llama_client.generate(
+                    prompt=final_prompt,
+                    system_instruction=system_prompt,
+                    temperature=0.7,
+                    max_tokens=2048
+                )
+                model_name = "qwen3-vl-8b-gguf-llama.cpp"
+            else:
+                from ..utils.qwen_client import qwen_client
+                response_text = await qwen_client.generate(
+                    prompt=final_prompt,
+                    system_instruction=system_prompt,
+                    temperature=0.7,
+                    max_tokens=2048
+                )
+                model_name = "qwen3-vl-8b-unsloth"
         else:
             client = gemini_fast
             
@@ -273,10 +286,42 @@ async def generate_response_stream(
     prompt_parts.append(conversation)
     prompt_parts.append("")
     instr = {
-        "vi": "Trả lời (chi tiết, hữu ích):",
-        "en": "Response (detailed, helpful):",
-        "zh": "回答（详细、有用）："
-    }.get(processing_state.language, "Trả lời (chi tiết, hữu ích):")
+    "vi": """
+    Hãy trả lời chi tiết và hữu ích cho du khách.
+
+    Yêu cầu:
+    - Viết ít nhất 4–6 câu.
+    - Nếu là câu hỏi về địa điểm, hãy gợi ý nhiều lựa chọn cụ thể.
+    - Có thể thêm mẹo hoặc thông tin hữu ích cho du khách.
+    - Trình bày rõ ràng, tự nhiên.
+    """,
+        "en": """
+    Provide a detailed and helpful answer for a traveler.
+
+    Requirements:
+    - Write at least 4–6 sentences.
+    - If the question is about places, suggest multiple specific options.
+    - Add useful tips for travelers when possible.
+    - Keep the explanation clear and natural.
+    """,
+        "zh": """
+    请提供详细且有帮助的回答。
+
+    要求：
+    - 至少写4–6句话。
+    - 如果问题涉及地点，请给出多个具体推荐。
+    - 可以补充对游客有用的小提示。
+    - 表达清晰自然。
+    """
+    }.get(
+        processing_state.language,
+        """
+    Hãy trả lời chi tiết và hữu ích cho du khách.
+    - Viết ít nhất 4–6 câu.
+    - Nếu có thể, đưa ra nhiều gợi ý cụ thể.
+    """
+    )
+
     prompt_parts.append(instr)
     
     final_prompt = "\n".join(prompt_parts)
@@ -291,14 +336,25 @@ async def generate_response_stream(
         print(f"📷 Sending {len(image_urls)} image(s) to LLM ({processing_state.model_mode})")
     
     if processing_state.model_mode == "qwen":
-        async for chunk in qwen_client.stream_generate(
-            prompt=final_prompt,
-            system_instruction=system_prompt,
-            temperature=0.7,
-            max_tokens=4096,
-            image_urls=image_urls if image_urls else None
-        ):
-            yield chunk
+        if get_use_llama():
+            async for chunk in llama_client.stream_generate(
+                prompt=final_prompt,
+                system_instruction=system_prompt,
+                temperature=0.7,
+                max_tokens=4096,
+                image_urls=image_urls if image_urls else None
+            ):
+                yield chunk
+        else:
+            from ..utils.qwen_client import qwen_client
+            async for chunk in qwen_client.stream_generate(
+                prompt=final_prompt,
+                system_instruction=system_prompt,
+                temperature=0.7,
+                max_tokens=4096,
+                image_urls=image_urls if image_urls else None
+            ):
+                yield chunk
     else:
         # We exclusively use gemini_fast (gemini-3-flash-preview) for blazing fast TTFT
         async for chunk in gemini_fast.generate_stream(

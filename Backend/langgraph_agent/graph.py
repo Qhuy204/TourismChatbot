@@ -200,8 +200,8 @@ def route_after_intent(state: GraphState) -> str:
     """Route based on intent classification"""
     intent = state["processing"].intent
     
-    if intent in [IntentType.CHIT_CHAT, IntentType.NEGATIVE_FEEDBACK, IntentType.META_INSTRUCTION]:
-        return "generate"  # Skip RAG for simple interactions
+    if intent in [IntentType.CHIT_CHAT, IntentType.NEGATIVE_FEEDBACK, IntentType.META_INSTRUCTION, IntentType.UNRELATED]:
+        return "generate"  # Skip RAG for simple interactions or unrelated topics
     else:
         return "parallel"  # Full processing
 
@@ -342,16 +342,7 @@ async def run_graph(
     # Run post-processing
     final_locations = []
     try:
-        # 1. NEW: Extract locations from both message and response
-        try:
-            from .nodes.location_extractor import extract_locations, store_locations
-            combined_text = f"User asked: {message}\nBot responded: {output.response}"
-            loc_objects = await extract_locations(combined_text)
-            final_locations = [vars(l) for l in loc_objects]
-        except Exception as e:
-            print(f"⚠️ Location extraction for response failed: {e}")
-
-        # 2. Titling (from message 1 onwards)
+        # Titling (from message 1 onwards)
         new_title = await perform_auto_titling(
             session_id=session_id, 
             message=message, 
@@ -368,6 +359,7 @@ async def run_graph(
                     response=output.response,
                     emotion=processing.emotion.value if processing.emotion else "neutral",
                     intent=processing.intent.value if processing.intent else "travel_query",
+                    location=processing.detected_location,
                     debug=final_debug,
                     attachments=processing.attachments
                 ),
@@ -379,10 +371,6 @@ async def run_graph(
                 )
             ]
             
-            # Store extracted locations if any
-            if 'loc_objects' in locals() and loc_objects:
-                tasks.append(store_locations(loc_objects))
-                
             await asyncio.gather(*tasks, return_exceptions=True)
         
         # Launch remaining post-processing in background
@@ -440,19 +428,30 @@ async def run_graph_stream(
     t0 = time.time()
     state = await node_init(state)
     timings["init"] = round((time.time() - t0) * 1000)
+    print(f"⏱️ NODE: init | {timings['init']}ms")
     
     t0 = time.time()
     state = await node_context(state)
     timings["context"] = round((time.time() - t0) * 1000)
+    print(f"⏱️ NODE: context | {timings['context']}ms")
     
     t0 = time.time()
     state = await node_intent(state)
     timings["intent"] = round((time.time() - t0) * 1000)
+    print(f"⏱️ NODE: intent | {timings['intent']}ms")
+    
+    # Yield initial metadata EARLY for better UI responsiveness
+    yield {
+        "type": "metadata",
+        "intent": state["processing"].intent.value if state["processing"].intent else "travel_query",
+        "emotion": "neutral"  # Placeholder until emotion node runs
+    }
     
     # Run emotion detection regardless of intent (for timing and logs)
     t0_emo = time.time()
     state = await node_emotion(state)
     timings["emotion"] = round((time.time() - t0_emo) * 1000)
+    print(f"⏱️ NODE: emotion | {timings['emotion']}ms")
 
     intent = state["processing"].intent
     # Full processing for all intents except chit_chat and feedback/meta
@@ -460,26 +459,31 @@ async def run_graph_stream(
         t0 = time.time()
         state = await node_profile(state)
         timings["profile"] = round((time.time() - t0) * 1000)
+        print(f"⏱️ NODE: profile | {timings['profile']}ms")
         
         t0 = time.time()
         state = await node_rewrite(state)
         timings["rewrite"] = round((time.time() - t0) * 1000)
+        print(f"⏱️ NODE: rewrite | {timings['rewrite']}ms")
         
         t0 = time.time()
         state = await node_guard(state)
         timings["guard"] = round((time.time() - t0) * 1000)
+        print(f"⏱️ NODE: guard | {timings['guard']}ms")
         
         if state["processing"].is_relevant:
             t0 = time.time()
             state = await node_retrieve(state)
             timings["retrieve"] = round((time.time() - t0) * 1000)
-    
-    # Yield initial metadata
-    yield {
-        "type": "metadata",
-        "intent": state["processing"].intent.value if state["processing"].intent else "travel_query",
-        "emotion": state["processing"].emotion.value if state["processing"].emotion else "neutral"
-    }
+            print(f"⏱️ NODE: retrieve | {timings['retrieve']}ms")
+            
+    # Update metadata with actual emotion if it changed
+    if state["processing"].emotion and state["processing"].emotion.value != "neutral":
+        yield {
+            "type": "metadata",
+            "intent": state["processing"].intent.value,
+            "emotion": state["processing"].emotion.value
+        }
 
     # 2. Fan-out: Start suggestions in background while streaming
     # We pass the state with retrieved_context (and an empty response)
@@ -535,9 +539,12 @@ async def run_graph_stream(
     
     try:
         from .nodes.location_extractor import fast_extract_locations
-        fast_locs = fast_extract_locations(combined_text)
-        # Convert to format expected by frontend/store
-        final_locations = [{"name": l["name"], "province": l["name"] if l["type"] == "province" else None} for l in fast_locs]
+        if state["processing"].intent not in [IntentType.CHIT_CHAT, IntentType.UNRELATED]:
+            fast_locs = fast_extract_locations(combined_text)
+            # Convert to format expected by frontend/store
+            final_locations = [{"name": l["name"], "province": l["name"] if l["type"] == "province" else None} for l in fast_locs]
+        else:
+            final_locations = []
     except Exception as e:
         print(f"Fast extraction failed: {e}")
         
@@ -550,19 +557,10 @@ async def run_graph_stream(
         response=full_response
     )
 
-    # Run memory & background tasks (Deep Extraction, Logging)
+    # Run memory & background tasks (Logging)
     async def run_bg():
         await node_memory(state)
         
-        # Deep AI Extraction & Store (Slow)
-        try:
-            from .nodes.location_extractor import extract_locations, store_locations
-            loc_objects = await extract_locations(combined_text)
-            if loc_objects:
-                await store_locations(loc_objects)
-        except Exception as e:
-            print(f"Bg extraction error: {e}")
-            
         from .memory import log_chat
         await log_chat(
             user_id=user_id,
@@ -571,6 +569,7 @@ async def run_graph_stream(
             response=full_response,
             emotion=state["processing"].emotion.value if state["processing"].emotion else "neutral",
             intent=state["processing"].intent.value if state["processing"].intent else "travel_query",
+            location=state["processing"].detected_location,
             attachments=state["processing"].attachments
         )
     

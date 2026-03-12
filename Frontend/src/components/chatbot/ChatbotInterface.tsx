@@ -455,6 +455,7 @@ export function ChatbotInterface() {
     };
 
     const handleSuggestion = async (text: string) => {
+        if (isLoading) return;
         let sid = sessionManager.activeSessionId;
         if (!sid) {
             sid = await sessionManager.createSession(text.substring(0, 30) || 'Cuộc trò chuyện mới');

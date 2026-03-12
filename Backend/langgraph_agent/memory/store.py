@@ -148,6 +148,7 @@ async def log_chat(
         context = debug or {}
         context["emotion"] = emotion
         context["intent"] = intent
+        context["location_extracted"] = False # Track for background loop
         if location:
             context["location"] = location
         

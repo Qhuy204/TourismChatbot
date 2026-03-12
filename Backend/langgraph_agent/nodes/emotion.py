@@ -52,7 +52,7 @@ class EmotionDetector:
         if not onnx_files:
             raise FileNotFoundError(f"No .onnx file found in {model_dir}")
 
-        self._tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+        self._tokenizer = AutoTokenizer.from_pretrained(str(model_dir), fix_mistral_regex=True)
         self._session = ort.InferenceSession(
             str(onnx_files[0]),
             providers=["CPUExecutionProvider"],
