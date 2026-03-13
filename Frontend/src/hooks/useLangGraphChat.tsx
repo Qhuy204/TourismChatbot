@@ -107,9 +107,11 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
 
     // Handle session switch and cleanup empty sessions
     useEffect(() => {
+        console.log('[DEBUG] useLangGraphChat useEffect session switch. initialSessionId=', initialSessionId, 'sidRef.current=', sidRef.current);
 
         // If the prop matches our current internal ID, nothing to do.
         if (initialSessionId === sidRef.current) return;
+        console.log('[DEBUG] useLangGraphChat: session switch DETECTED', initialSessionId);
 
         // If we are switching TO "New Chat" (undefined) AND we are ALREADY empty, skip to avoid infinite loops.
         if (!initialSessionId && messages.length === 0) {
@@ -118,6 +120,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
 
         // Cleanup old session if it was empty before switching
         if (messages.length === 0 && sidRef.current) {
+            console.log('[DEBUG] Cleaning up old empty session:', sidRef.current);
             fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
                 method: 'DELETE'
             }).catch(e => console.warn('Failed to cleanup empty session:', e));
@@ -125,6 +128,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
 
         if (!initialSessionId) {
             const newSid = crypto.randomUUID();
+            console.log('[DEBUG] Generating new empty session:', newSid);
             sidRef.current = newSid;
             setMessages([]);
             setSuggestions([]);
@@ -132,16 +136,19 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
             return;
         }
 
+        console.log('[DEBUG] Switching to existing session:', initialSessionId);
         sidRef.current = initialSessionId;
         setSuggestions([]);
         setError(null);
 
         const cached = sessionMessagesCache[initialSessionId];
         if (cached) {
+            console.log('[DEBUG] Session hit cache! Messages length:', cached.length);
             setMessages(cached);
             return;
         }
 
+        console.log('[DEBUG] Session NOT in cache, fetching history for:', initialSessionId);
         setMessages([]); // Clear old messages immediately
         setIsLoading(true);
         fetch(`${LANGGRAPH_API_URL}/langgraph/history/${initialSessionId}`)
@@ -159,6 +166,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
                     intent: log.role === 'assistant' ? (log.context as Record<string, unknown>)?.intent as string : undefined,
                     attachments: log.role === 'user' ? (log.context as Record<string, unknown>)?.attachments as any[] : undefined,
                 }));
+                console.log('[DEBUG] Fetched history for', initialSessionId, 'length:', msgs.length);
                 setMessages(msgs);
                 sessionMessagesCache[initialSessionId] = msgs;
             })
@@ -190,6 +198,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
     // Cache messages
     useEffect(() => {
         if (messages.length > 0 && !messages.some(m => m.isLoading)) {
+            console.log('[DEBUG] useLangGraphChat: caching messages for', sidRef.current, 'count:', messages.length);
             sessionMessagesCache[sidRef.current] = messages;
         }
     }, [messages, sidRef.current]);

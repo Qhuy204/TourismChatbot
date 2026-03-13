@@ -127,6 +127,9 @@ class BanRequest(BaseModel):
 class RoleChangeRequest(BaseModel):
     role: str
 
+class RoleChangeRequest(BaseModel):
+    role: str
+
 
 
 @asynccontextmanager
