@@ -500,11 +500,11 @@ export function ChatbotInterface() {
 
     useEffect(() => {
         const sid = sessionManager.activeSessionId;
-        if (sid && messages.length > 0) {
+        if (sid && messages.length > 0 && !isLoading) {
             const last = messages[messages.length - 1];
             sessionManager.updateSessionMeta(sid, messages.length, last?.content?.slice(0, 50) ?? '');
         }
-    }, [messages, sessionManager]);
+    }, [messages.length, sessionManager.activeSessionId, sessionManager.updateSessionMeta, isLoading]);
 
     const displayName = user?.user_metadata?.display_name ?? user?.email?.split('@')[0] ?? 'Bạn';
     const initials = displayName.slice(0, 2).toUpperCase();

@@ -108,8 +108,10 @@ class ContextualSuggestionsRequest(BaseModel):
     """Request for AI-generated contextual suggestions based on recent locations"""
     locations: List[str]  # Recent locations from response
     last_question: Optional[str] = None  # User's last question for context
-    user_messages: Optional[List[str]] = []  # Recent user messages for style mimicry
+    last_response: Optional[str] = None
+    user_messages: Optional[List[Dict | str]] = []  # Recent user messages for style mimicry
     limit: int = 4
+    language: Optional[str] = "vi"
 
 
 from langgraph_agent.utils.security import Admin
@@ -124,10 +126,6 @@ class BanRequest(BaseModel):
 
 class RoleChangeRequest(BaseModel):
     role: str
-
-class DuplicateCleanupRequest(BaseModel):
-    threshold: float = 0.85
-    dry_run: bool = True
 
 
 
@@ -556,13 +554,6 @@ async def track_event(request: EventRequest):
         return {"status": "error", "message": str(e)}
 
 
-class ContextualSuggestionsRequest(BaseModel):
-    locations: List[str]
-    last_question: Optional[str] = None
-    last_response: Optional[str] = None
-    user_messages: Optional[List[Dict]] = []
-    limit: int = 4
-    language: Optional[str] = "vi"
 
 @app.post("/langgraph/contextual_suggestions")
 async def get_contextual_suggestions(request: ContextualSuggestionsRequest):

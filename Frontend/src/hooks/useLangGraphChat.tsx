@@ -107,7 +107,6 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
 
     // Handle session switch and cleanup empty sessions
     useEffect(() => {
-        console.log('[DEBUG] useLangGraphChat useEffect session switch. initialSessionId=', initialSessionId, 'sidRef.current=', sidRef.current);
 
         // If the prop matches our current internal ID, nothing to do.
         if (initialSessionId === sidRef.current) return;
@@ -119,7 +118,6 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
 
         // Cleanup old session if it was empty before switching
         if (messages.length === 0 && sidRef.current) {
-            console.log('[DEBUG] Cleaning up old empty session:', sidRef.current);
             fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
                 method: 'DELETE'
             }).catch(e => console.warn('Failed to cleanup empty session:', e));
@@ -127,7 +125,6 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
 
         if (!initialSessionId) {
             const newSid = crypto.randomUUID();
-            console.log('[DEBUG] Generating new empty session:', newSid);
             sidRef.current = newSid;
             setMessages([]);
             setSuggestions([]);
@@ -135,19 +132,16 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
             return;
         }
 
-        console.log('[DEBUG] Switching to existing session:', initialSessionId);
         sidRef.current = initialSessionId;
         setSuggestions([]);
         setError(null);
 
         const cached = sessionMessagesCache[initialSessionId];
         if (cached) {
-            console.log('[DEBUG] Session hit cache! Messages length:', cached.length);
             setMessages(cached);
             return;
         }
 
-        console.log('[DEBUG] Session NOT in cache, fetching history for:', initialSessionId);
         setMessages([]); // Clear old messages immediately
         setIsLoading(true);
         fetch(`${LANGGRAPH_API_URL}/langgraph/history/${initialSessionId}`)
@@ -165,7 +159,6 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
                     intent: log.role === 'assistant' ? (log.context as Record<string, unknown>)?.intent as string : undefined,
                     attachments: log.role === 'user' ? (log.context as Record<string, unknown>)?.attachments as any[] : undefined,
                 }));
-                console.log('[DEBUG] Fetched history for', initialSessionId, 'length:', msgs.length);
                 setMessages(msgs);
                 sessionMessagesCache[initialSessionId] = msgs;
             })
@@ -199,7 +192,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         if (messages.length > 0 && !messages.some(m => m.isLoading)) {
             sessionMessagesCache[sidRef.current] = messages;
         }
-    }, [messages]);
+    }, [messages, sidRef.current]);
 
     // Note: Removed frontend auto-title fallback to rely entirely on backend SLM
 
@@ -348,7 +341,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         } finally {
             setIsLoading(false);
         }
-    }, [user?.id, messages, modelMode, trackTopic, updateRecentLocations]);
+    }, [user?.id, modelMode, trackTopic, updateRecentLocations]);
 
     // fetchInitialSuggestions: histogram-based personalization
     const fetchInitialSuggestions = useCallback(async (topics?: string[], forceSet: boolean = false) => {
@@ -383,7 +376,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         } catch (e) {
             console.error('Initial suggestions failed:', e);
         }
-    }, [user?.id, messages.length, preferences]);
+    }, [user?.id, language, preferences]);
 
     // refreshSuggestions: location-context or fallback
     const refreshSuggestions = useCallback(async () => {
@@ -423,7 +416,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         } catch (e) {
             console.warn('Refresh contextual suggestions error:', e);
         }
-    }, [user?.id, messages, recentLocations, fetchInitialSuggestions]);
+    }, [user?.id, recentLocations, fetchInitialSuggestions, language]);
 
     // clearMessages
     const clearMessages = useCallback(() => {
