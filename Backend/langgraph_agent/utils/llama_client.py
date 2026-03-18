@@ -14,11 +14,11 @@ LLAMA_SERVER_BIN = os.path.join(
 )
 MODEL_GGUF = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "model", "Qwen3.5-9B", "Qwen3.5-9B.Q4_K_M.gguf"
+    "model", "Qwen3-VL8B", "qwen3-vl-8b-instruct-q4_k_m.gguf"
 )
 MMPROJ_GGUF = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "model", "Qwen3.5-9B", "mmproj-f16.gguf"
+    "model", "Qwen3-VL8B", "mmproj-f16.gguf"
 )
 
 LLAMA_HOST = "127.0.0.1"
@@ -29,9 +29,9 @@ _server_process: Optional[subprocess.Popen] = None
 
 
 def start_llama_server(
-    n_gpu_layers: int = 99,
-    ctx_size: int = 12288,
-    n_parallel: int = 1,
+    n_gpu_layers: int = 32,   
+    ctx_size: int = 12288,     
+    n_parallel: int = 2,
 ) -> subprocess.Popen:
     """Start llama-server as a subprocess."""
     global _server_process
@@ -63,11 +63,21 @@ def start_llama_server(
     ])
 
     print(f"🚀 Starting llama-server: {' '.join(cmd)}")
+    print(f"   GPU layers: {n_gpu_layers}/36 | CPU layers: {36 - min(n_gpu_layers, 36)} | ctx: {ctx_size}")
+    print(f"   Est. VRAM usage: ~{n_gpu_layers * 133 + 300} MiB (weights + KV cache)")
+    
+    # Ensure the build/bin dir is in LD_LIBRARY_PATH so libmtmd.so.0 is found
+    _build_bin = os.path.dirname(LLAMA_SERVER_BIN)
+    _env = os.environ.copy()
+    _existing_ld = _env.get("LD_LIBRARY_PATH", "")
+    _env["LD_LIBRARY_PATH"] = f"{_build_bin}:{_existing_ld}" if _existing_ld else _build_bin
+
     _server_process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        env=_env,
     )
 
     # Wait for server to be ready (poll /health)

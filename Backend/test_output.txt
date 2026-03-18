@@ -1,0 +1,101 @@
+/home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pytest_asyncio/plugin.py:247: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-8.3.5, pluggy-1.6.0 -- /home/qhuy/anaconda3/envs/chatbot/bin/python3.12
+cachedir: .pytest_cache
+rootdir: /home/qhuy/TourismChatbot/TourismChatbot/Backend
+plugins: langsmith-0.6.4, anyio-4.12.1, typeguard-4.4.4, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... ✅ Loaded 67 provinces and 690 districts plus aliases
+collected 2 items
+
+tests/test_retrieval_logic.py::test_extract_location Input: Kinh nghiệm đi chợ nổi Cái Răng Cần Thơ | Extracted: cai rang | Expected: cai rang
+Input: Tôi muốn đi Đà Lạt | Extracted: da lat | Expected: da lat
+Input: Sapa có gì đẹp? | Extracted: sa pa | Expected: sa pa
+Input: Chào bạn! | Extracted: None | Expected: None
+PASSED
+tests/test_retrieval_logic.py::test_boost_by_location PASSED
+
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: Type google._upb._message.MessageMapContainer uses PyType_Spec with a metaclass that has custom tp_new. This is deprecated and will no longer be allowed in Python 3.14.
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: Type google._upb._message.ScalarMapContainer uses PyType_Spec with a metaclass that has custom tp_new. This is deprecated and will no longer be allowed in Python 3.14.
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/torchao/dtypes/floatx/__init__.py:5
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/torchao/dtypes/floatx/__init__.py:5: DeprecationWarning: Importing from torchao.dtypes.floatx.floatx_tensor_core_layout is deprecated. Please use 'from torchao.prototype.dtypes.floatx.floatx_tensor_core_layout import ...' instead. This import path will be removed in a future torchao release. Please check issue: https://github.com/pytorch/ao/issues/2752 for more details. 
+    from .floatx_tensor_core_layout import (
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/torchao/dtypes/uintx/__init__.py:1
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/torchao/dtypes/uintx/__init__.py:1: DeprecationWarning: Importing from torchao.dtypes.uintx.dyn_int8_act_int4_wei_cpu_layout is deprecated. Please use 'from torchao.prototype.dtypes import Int8DynamicActInt4WeightCPULayout' instead. This import path will be removed in a future release of torchao. See https://github.com/pytorch/ao/issues/2752 for more details.
+    from .dyn_int8_act_int4_wei_cpu_layout import (
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/torchao/dtypes/uintx/__init__.py:10
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/torchao/dtypes/uintx/__init__.py:10: DeprecationWarning: Importing from torchao.dtypes.uintx.marlin_qqq_tensor is deprecated. Please use 'from torchao.prototype.dtypes import MarlinQQQLayout, MarlinQQQTensor' instead. This import path will be removed in a future release of torchao. See https://github.com/pytorch/ao/issues/2752 for more details.
+    from .marlin_qqq_tensor import (
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/torchao/dtypes/uintx/__init__.py:30
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/torchao/dtypes/uintx/__init__.py:30: DeprecationWarning: Importing from torchao.dtypes.uintx.uintx_layout is deprecated. Please use 'from torchao.prototype.dtypes import UintxLayout, UintxTensor' instead. This import path will be removed in a future release of torchao. See https://github.com/pytorch/ao/issues/2752 for more details.
+    from .uintx_layout import (
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/torchao/dtypes/__init__.py:25
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/torchao/dtypes/__init__.py:25: DeprecationWarning: Importing BlockSparseLayout from torchao.dtypes is deprecated. Please use 'from torchao.prototype.dtypes import BlockSparseLayout' instead. This import path will be removed in a future torchao release. Please check issue: https://github.com/pytorch/ao/issues/2752 for more details. 
+    from .uintx.block_sparse_layout import BlockSparseLayout
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/torchao/dtypes/__init__.py:26
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/torchao/dtypes/__init__.py:26: DeprecationWarning: Importing from torchao.dtypes is deprecated. Please use 'from torchao.prototype.dtypes import CutlassInt4PackedLayout' instead. This import path will be removed in a future torchao release. Please check issue: https://github.com/pytorch/ao/issues/2752 for more details. 
+    from .uintx.cutlass_int4_packed_layout import CutlassInt4PackedLayout
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/expressions/parser.py:72
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/expressions/parser.py:72: DeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+    ParserElement.enablePackrat()
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/expressions/parser.py:85
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/expressions/parser.py:85: DeprecationWarning: 'escChar' argument is deprecated, use 'esc_char'
+    quoted_identifier = QuotedString('"', escChar="\\", unquoteResults=True)
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/expressions/parser.py:85
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/expressions/parser.py:85: DeprecationWarning: 'unquoteResults' argument is deprecated, use 'unquote_results'
+    quoted_identifier = QuotedString('"', escChar="\\", unquoteResults=True)
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:365
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:365: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:494
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:494: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:498
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:498: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:502
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:502: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:506
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:506: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:538
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:538: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:542
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:542: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:546
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:546: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+../../../anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:550
+  /home/qhuy/anaconda3/envs/chatbot/lib/python3.12/site-packages/pyiceberg/table/metadata.py:550: PydanticDeprecatedSince212: Using `@model_validator` with mode='after' on a classmethod is deprecated. Instead, use an instance method. See the documentation at https://docs.pydantic.dev/2.12/concepts/validators/#model-after-validator. Deprecated in Pydantic V2.12 to be removed in V3.0.
+    @model_validator(mode="after")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 2 passed, 20 warnings in 4.11s ========================

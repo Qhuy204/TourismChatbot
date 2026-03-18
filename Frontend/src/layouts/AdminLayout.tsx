@@ -10,7 +10,7 @@ import {
     DashboardOutlined, UserOutlined, SafetyCertificateOutlined,
     MessageOutlined, AuditOutlined, CloudServerOutlined,
     BarChartOutlined, SettingOutlined, ArrowLeftOutlined,
-    SunOutlined, MoonOutlined, LoadingOutlined,
+    SunOutlined, MoonOutlined, LoadingOutlined, EnvironmentOutlined,
 } from '@ant-design/icons';
 
 const { Sider, Header, Content } = Layout;
@@ -26,6 +26,7 @@ const navItems: MenuItem[] = [
     { key: '/admin/logs', icon: <AuditOutlined />, label: 'Audit Logs' },
     { key: '/admin/system', icon: <CloudServerOutlined />, label: 'System Check' },
     { key: '/admin/analytics', icon: <BarChartOutlined />, label: 'Analytics & Exports' },
+    { key: '/admin/locations', icon: <EnvironmentOutlined />, label: 'Location Monitor' },
     { key: '/admin/settings', icon: <SettingOutlined />, label: 'Settings' },
 ];
 

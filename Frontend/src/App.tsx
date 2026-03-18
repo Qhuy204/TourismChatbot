@@ -20,6 +20,7 @@ import AdminLogs from '@/pages/admin/AdminLogs';
 import AdminSystem from '@/pages/admin/AdminSystem';
 import AdminSettings from '@/pages/admin/AdminSettings';
 import AdminAnalytics from '@/pages/admin/AdminAnalytics';
+import AdminLocations from '@/pages/admin/AdminLocations';
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,7 @@ export default function App() {
               <Route path="system" element={<AdminSystem />} />
               <Route path="settings" element={<AdminSettings />} />
               <Route path="analytics" element={<AdminAnalytics />} />
+              <Route path="locations" element={<AdminLocations />} />
               <Route path="*" element={<NotFound />} />
             </Route>
 

@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📍 Location Monitor — TourismBot</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#0d1117; --bg2:#161b22; --bg3:#21262d;
+      --border:#30363d; --text:#c9d1d9; --muted:#6e7681;
+      --accent:#58a6ff; --green:#3fb950; --yellow:#d29922;
+      --red:#f85149; --purple:#a371f7;
+    }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; padding-bottom:60px; }
+
+    /* ─── Header ─── */
+    header {
+      background:var(--bg2); border-bottom:1px solid var(--border);
+      padding:14px 28px; display:flex; align-items:center; justify-content:space-between;
+      position:sticky; top:0; z-index:100;
+    }
+    header h1 { font-size:16px; font-weight:600; display:flex; align-items:center; gap:8px; }
+    .badge-live { font-size:10px; font-weight:600; padding:2px 8px; border-radius:99px;
+      background:rgba(63,185,80,.15); color:var(--green); border:1px solid rgba(63,185,80,.3);
+      animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.5} }
+    #api-url-input {
+      background:var(--bg3); border:1px solid var(--border); border-radius:7px;
+      color:var(--text); font-size:12px; padding:5px 10px; width:260px;
+      font-family:'JetBrains Mono',monospace;
+    }
+    #api-url-input:focus { outline:none; border-color:var(--accent); }
+
+    /* ─── Layout ─── */
+    main { max-width:1200px; margin:24px auto; padding:0 20px; display:grid; gap:18px; }
+
+    /* ─── Tabs ─── */
+    .tabs { display:flex; gap:4px; border-bottom:1px solid var(--border); padding-bottom:0; margin-bottom:0; }
+    .tab-btn {
+      font-size:13px; font-weight:500; padding:8px 18px; border:none; background:transparent;
+      color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; transition:all .15s; border-radius:6px 6px 0 0;
+    }
+    .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); background:rgba(88,166,255,.06); }
+    .tab-btn:hover:not(.active) { color:var(--text); background:var(--bg3); }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+
+    /* ─── Stat cards ─── */
+    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; }
+    .card {
+      background:var(--bg2); border:1px solid var(--border); border-radius:10px;
+      padding:16px; display:flex; flex-direction:column; gap:4px; transition:border-color .2s;
+    }
+    .card:hover { border-color:var(--accent); }
+    .card .label { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+    .card .value { font-size:28px; font-weight:700; font-family:'JetBrains Mono',monospace; }
+    .card .sub   { font-size:11px; color:var(--muted); }
+    .card.green .value { color:var(--green); }
+    .card.yellow .value { color:var(--yellow); }
+    .card.blue   .value { color:var(--accent); }
+    .card.purple .value { color:var(--purple); }
+    .card.red    .value { color:var(--red); }
+
+    /* ─── Section ─── */
+    section { background:var(--bg2); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .sec-header {
+      padding:12px 18px; border-bottom:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    }
+    .sec-header h2 { font-size:13px; font-weight:600; display:flex; align-items:center; gap:7px; white-space:nowrap; }
+
+    /* ─── Buttons ─── */
+    .btn {
+      display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500;
+      padding:6px 14px; border-radius:7px; border:none; cursor:pointer; transition:all .15s;
+    }
+    .btn-primary { background:var(--accent); color:#0d1117; }
+    .btn-primary:hover { filter:brightness(1.1); }
+    .btn-danger { background:rgba(248,81,73,.15); color:var(--red); border:1px solid rgba(248,81,73,.3); }
+    .btn-danger:hover { background:rgba(248,81,73,.25); }
+    .btn-outline { background:transparent; color:var(--text); border:1px solid var(--border); }
+    .btn-outline:hover { border-color:var(--accent); color:var(--accent); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+    /* ─── Tables ─── */
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:12px; }
+    thead tr { background:var(--bg3); }
+    th { padding:8px 14px; text-align:left; font-size:10px; font-weight:600;
+         text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+         border-bottom:1px solid var(--border); white-space:nowrap; }
+    td { padding:9px 14px; border-bottom:1px solid var(--border); vertical-align:top; }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:rgba(88,166,255,.04); }
+
+    /* Tags */
+    .tag { display:inline-block; font-size:10px; font-weight:500; padding:2px 7px; border-radius:99px; }
+    .tag-beach,.tag-island,.tag-city,.tag-blue { background:rgba(88,166,255,.15); color:var(--accent); }
+    .tag-heritage,.tag-museum,.tag-purple { background:rgba(163,113,247,.15); color:var(--purple); }
+    .tag-food,.tag-yellow { background:rgba(210,153,34,.15); color:var(--yellow); }
+    .tag-nature,.tag-mountain,.tag-green { background:rgba(63,185,80,.15); color:var(--green); }
+    .tag-temple,.tag-red { background:rgba(248,81,73,.15); color:var(--red); }
+    .tag-other,.tag-muted { background:rgba(110,118,129,.15); color:var(--muted); }
+    .tag-intent { background:rgba(88,166,255,.1); color:var(--accent); font-family:'JetBrains Mono',monospace; font-size:10px; }
+
+    /* Response preview cells */
+    .preview-user { color:var(--muted); font-size:11px; }
+    .preview-response {
+      font-size:12px; color:var(--text);
+      max-width:400px; white-space:pre-wrap; word-break:break-word; line-height:1.5;
+    }
+    .log-id-cell { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); }
+    .ts-cell { font-size:10px; color:var(--muted); white-space:nowrap; }
+
+    /* ─── Search / filter row ─── */
+    .filter-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .search-bar {
+      background:var(--bg3); border:1px solid var(--border); border-radius:7px;
+      color:var(--text); font-size:12px; padding:5px 10px; min-width:180px;
+    }
+    .search-bar:focus { outline:none; border-color:var(--accent); }
+    select.search-bar { cursor:pointer; }
+
+    /* ─── Log box ─── */
+    #log-box {
+      background:var(--bg); font-family:'JetBrains Mono',monospace; font-size:11px;
+      padding:10px 14px; height:160px; overflow-y:auto; color:var(--muted);
+    }
+    .log-line { padding:1px 0; }
+    .log-line.ok   { color:var(--green); }
+    .log-line.err  { color:var(--red);   }
+    .log-line.info { color:var(--accent); }
+
+    /* ─── Toast ─── */
+    #toast-area { position:fixed; bottom:20px; right:20px; display:flex; flex-direction:column; gap:8px; z-index:9999; }
+    .toast {
+      background:var(--bg3); border:1px solid var(--border); border-radius:9px;
+      padding:10px 16px; font-size:12px; box-shadow:0 4px 20px rgba(0,0,0,.5);
+      animation:slideIn .2s ease; max-width:320px;
+    }
+    @keyframes slideIn { from{transform:translateX(40px);opacity:0} to{transform:none;opacity:1} }
+    .toast.ok   { border-left:3px solid var(--green); }
+    .toast.err  { border-left:3px solid var(--red);   }
+    .toast.info { border-left:3px solid var(--accent); }
+
+    .empty-state { padding:36px; text-align:center; color:var(--muted); font-size:13px; }
+    .spinner { display:inline-block; width:12px; height:12px; border:2px solid transparent;
+               border-top-color:currentColor; border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    #last-refresh { font-size:11px; color:var(--muted); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📍 Location Monitor <span class="badge-live">LIVE</span></h1>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span id="last-refresh">–</span>
+    <input id="api-url-input" value="http://localhost:8000" placeholder="API base URL" />
+    <button class="btn btn-outline" onclick="refreshAll()">⟳ Refresh</button>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)">
+      <input type="checkbox" id="auto-refresh-chk" onchange="toggleAutoRefresh()" />
+      Auto 10s
+    </label>
+  </div>
+</header>
+
+<main>
+
+  <!-- ─── Stat cards ─── -->
+  <div class="cards">
+    <div class="card yellow">
+      <div class="label">⏳ Staging Queue</div>
+      <div class="value" id="stat-staged">–</div>
+      <div class="sub" id="stat-oldest">chờ flush cuối ngày</div>
+    </div>
+    <div class="card green">
+      <div class="label">✅ Locations Cached</div>
+      <div class="value" id="stat-cached">–</div>
+      <div class="sub">trong locations_cache DB</div>
+    </div>
+    <div class="card blue">
+      <div class="label">🕛 Flush tiếp theo</div>
+      <div class="value" style="font-size:18px;padding-top:4px" id="stat-next-flush">–</div>
+      <div class="sub">midnight UTC</div>
+    </div>
+    <div class="card purple">
+      <div class="label">📡 API Status</div>
+      <div class="value" style="font-size:20px;padding-top:4px" id="stat-api">–</div>
+      <div class="sub" id="stat-api-sub">checking...</div>
+    </div>
+  </div>
+
+  <!-- ─── Action bar ─── -->
+  <section>
+    <div class="sec-header">
+      <h2>⚡ Actions</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="btn-flush" onclick="triggerFlush()">
+          🌙 Flush Now — Extract & Store All
+        </button>
+        <button class="btn btn-outline" onclick="refreshAll()">🔄 Refresh All</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Tabs ─── -->
+  <section style="overflow:visible">
+    <div class="sec-header" style="padding-bottom:0;border-bottom:0">
+      <div class="tabs" id="tabs">
+        <button class="tab-btn active" onclick="switchTab('tab-queue',this)">
+          📋 Staging Queue <span id="tab-queue-badge" style="font-size:10px;color:var(--yellow)"></span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('tab-cache',this)">
+          🗂️ Locations Cache <span id="tab-cache-badge" style="font-size:10px;color:var(--green)"></span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('tab-log',this)">
+          📋 Activity Log
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB: Staging Queue -->
+    <div class="tab-panel active" id="tab-queue">
+      <div class="sec-header" style="border-top:1px solid var(--border)">
+        <span style="font-size:12px;color:var(--muted)">
+          Responses đang chờ trong RAM — chưa gọi AI, chưa lưu DB
+        </span>
+        <div class="filter-row">
+          <input class="search-bar" id="queue-search" placeholder="🔍 Tìm trong response..." oninput="filterQueue()" style="width:220px" />
+          <select id="queue-intent-filter" class="search-bar" onchange="filterQueue()">
+            <option value="">Tất cả intent</option>
+            <option value="place_exploration">place_exploration</option>
+            <option value="itinerary_planning">itinerary_planning</option>
+            <option value="food_drink">food_drink</option>
+            <option value="transportation">transportation</option>
+            <option value="accommodation">accommodation</option>
+            <option value="budget_info">budget_info</option>
+            <option value="opening_hours">opening_hours</option>
+            <option value="history_culture">history_culture</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Log ID</th>
+              <th>Session</th>
+              <th>Intent</th>
+              <th>Câu hỏi user</th>
+              <th>Response bot (preview)</th>
+              <th>Staged lúc</th>
+            </tr>
+          </thead>
+          <tbody id="queue-table-body">
+            <tr><td colspan="6" class="empty-state">Đang tải...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB: Locations Cache -->
+    <div class="tab-panel" id="tab-cache">
+      <div class="sec-header" style="border-top:1px solid var(--border)">
+        <span style="font-size:12px;color:var(--muted)">Địa điểm đã extract và lưu vào Supabase</span>
+        <div class="filter-row">
+          <input class="search-bar" id="loc-search" placeholder="🔍 Tìm địa điểm..." oninput="filterLocations()" />
+          <select id="cat-filter" class="search-bar" onchange="filterLocations()">
+            <option value="">Tất cả danh mục</option>
+            <option value="beach">🏖️ Beach</option>
+            <option value="heritage">🏛️ Heritage</option>
+            <option value="food">🍜 Food</option>
+            <option value="nature">🌿 Nature</option>
+            <option value="temple">⛩️ Temple</option>
+            <option value="mountain">⛰️ Mountain</option>
+            <option value="island">🏝️ Island</option>
+            <option value="museum">🏛️ Museum</option>
+            <option value="city">🏙️ City</option>
+            <option value="other">📌 Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Tên địa điểm</th>
+              <th>Tỉnh/Thành</th>
+              <th>Thành phố</th>
+              <th>Danh mục</th>
+              <th>Mô tả</th>
+              <th>Ngày lưu</th>
+            </tr>
+          </thead>
+          <tbody id="loc-table-body">
+            <tr><td colspan="6" class="empty-state">Đang tải...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB: Activity Log -->
+    <div class="tab-panel" id="tab-log">
+      <div class="sec-header" style="border-top:1px solid var(--border)">
+        <span style="font-size:12px;color:var(--muted)">Activity log</span>
+        <button class="btn btn-outline" onclick="clearLog()" style="font-size:11px;padding:4px 10px">Xoá</button>
+      </div>
+      <div id="log-box"></div>
+    </div>
+
+  </section>
+
+</main>
+
+<div id="toast-area"></div>
+
+<script>
+  const API = () => document.getElementById('api-url-input').value.replace(/\/$/, '');
+
+  let _allLocations = [];
+  let _allQueue     = [];
+  let _autoTimer    = null;
+
+  // ─── Tab switching ──────────────────────────────────────────────────────────
+  function switchTab(id, btn) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  // ─── Fetch helpers ──────────────────────────────────────────────────────────
+  async function fetchJSON(path, opts = {}) {
+    const r = await fetch(API() + path, opts);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  }
+
+  // ─── Refresh everything ─────────────────────────────────────────────────────
+  async function refreshAll() {
+    document.getElementById('last-refresh').textContent = 'Refreshing…';
+    document.getElementById('stat-next-flush').textContent = nextMidnight();
+    await Promise.allSettled([
+      loadApiStatus(),
+      loadStagingStats(),
+      loadStagingQueue(),
+      loadCachedLocations()
+    ]);
+    document.getElementById('last-refresh').textContent = '↻ ' + new Date().toLocaleTimeString('vi-VN');
+  }
+
+  async function loadApiStatus() {
+    try {
+      const d = await fetchJSON('/health');
+      document.getElementById('stat-api').textContent = '✅ ON';
+      document.getElementById('stat-api-sub').textContent = d.service || 'ok';
+    } catch {
+      document.getElementById('stat-api').textContent = '❌ OFF';
+      document.getElementById('stat-api-sub').textContent = 'cannot reach API';
+    }
+  }
+
+  async function loadStagingStats() {
+    try {
+      const d = await fetchJSON('/langgraph/locations/staging-stats');
+      const n = d.staged_count ?? 0;
+      document.getElementById('stat-staged').textContent = n;
+      document.getElementById('tab-queue-badge').textContent = n > 0 ? `(${n})` : '';
+      document.getElementById('stat-oldest').textContent = d.oldest_staged_at
+        ? 'Cũ nhất: ' + new Date(d.oldest_staged_at).toLocaleTimeString('vi-VN')
+        : 'Queue trống';
+    } catch (e) {
+      document.getElementById('stat-staged').textContent = '?';
+    }
+  }
+
+  async function loadStagingQueue() {
+    try {
+      const data = await fetchJSON('/langgraph/locations/staging-queue?limit=100');
+      _allQueue = Array.isArray(data) ? data : [];
+      renderQueueTable(_allQueue);
+      logLine(`📋 Queue: ${_allQueue.length} staged responses`, 'info');
+    } catch (e) {
+      logLine('⚠️ Không lấy được staging queue: ' + e.message, 'err');
+      renderQueueTable([]);
+    }
+  }
+
+  async function loadCachedLocations() {
+    try {
+      const data = await fetchJSON('/langgraph/locations/cached?limit=200');
+      _allLocations = Array.isArray(data) ? data : (data.locations || []);
+      document.getElementById('stat-cached').textContent = _allLocations.length;
+      document.getElementById('tab-cache-badge').textContent = `(${_allLocations.length})`;
+      renderLocationsTable(_allLocations);
+      logLine(`✅ Cache: ${_allLocations.length} locations`, 'ok');
+    } catch (e) {
+      logLine('⚠️ Không tải được locations cache: ' + e.message, 'err');
+      renderLocationsTable([]);
+    }
+  }
+
+  // ─── Flush ──────────────────────────────────────────────────────────────────
+  async function triggerFlush() {
+    const btn = document.getElementById('btn-flush');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Đang flush…';
+    logLine('🌙 Triggering flush...', 'info');
+    try {
+      const d = await fetchJSON('/langgraph/locations/flush', { method: 'POST' });
+      logLine(`✅ Flush xong: ${d.locations_stored} địa điểm đã lưu vào DB`, 'ok');
+      showToast(`✅ Đã lưu ${d.locations_stored} địa điểm`, 'ok');
+      await refreshAll();
+    } catch (e) {
+      logLine('❌ Flush thất bại: ' + e.message, 'err');
+      showToast('❌ Flush lỗi: ' + e.message, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '🌙 Flush Now — Extract & Store All';
+    }
+  }
+
+  // ─── Queue table ────────────────────────────────────────────────────────────
+  function filterQueue() {
+    const q  = document.getElementById('queue-search').value.toLowerCase();
+    const fi = document.getElementById('queue-intent-filter').value;
+    const filtered = _allQueue.filter(r => {
+      const matchQ = !q || [r.user_preview, r.response_preview, r.intent]
+        .some(v => v && v.toLowerCase().includes(q));
+      const matchI = !fi || r.intent === fi;
+      return matchQ && matchI;
+    });
+    renderQueueTable(filtered);
+  }
+
+  function renderQueueTable(rows) {
+    const tbody = document.getElementById('queue-table-body');
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-state">
+        ${_allQueue.length === 0
+          ? '📭 Queue trống — chưa có response nào được staged'
+          : '🔍 Không tìm thấy kết quả phù hợp'}
+      </td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td class="log-id-cell">#${r.log_id}</td>
+        <td class="log-id-cell">${esc(r.session_id)}</td>
+        <td><span class="tag tag-intent">${esc(r.intent || '?')}</span></td>
+        <td class="preview-user">${esc(r.user_preview || '–')}</td>
+        <td class="preview-response">${esc(r.response_preview || '–')}</td>
+        <td class="ts-cell">${r.staged_at ? new Date(r.staged_at).toLocaleTimeString('vi-VN') : '–'}</td>
+      </tr>`).join('');
+  }
+
+  // ─── Cache table ────────────────────────────────────────────────────────────
+  function filterLocations() {
+    const q  = document.getElementById('loc-search').value.toLowerCase();
+    const cat= document.getElementById('cat-filter').value;
+    const filtered = _allLocations.filter(l => {
+      const matchQ = !q || [l.name, l.province, l.city, l.description]
+        .some(v => v && v.toLowerCase().includes(q));
+      return matchQ && (!cat || l.category === cat);
+    });
+    renderLocationsTable(filtered);
+  }
+
+  function renderLocationsTable(rows) {
+    const tbody = document.getElementById('loc-table-body');
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Không có dữ liệu</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.map(l => `
+      <tr>
+        <td><strong>${esc(l.name)}</strong></td>
+        <td>${esc(l.province || '–')}</td>
+        <td>${esc(l.city || '–')}</td>
+        <td><span class="tag tag-${l.category || 'other'}">${l.category || 'other'}</span></td>
+        <td style="color:var(--muted);max-width:240px;white-space:pre-wrap;font-size:11px">${esc(l.description || '–')}</td>
+        <td class="ts-cell">${l.extracted_at ? new Date(l.extracted_at).toLocaleString('vi-VN') : '–'}</td>
+      </tr>`).join('');
+  }
+
+  // ─── Log ────────────────────────────────────────────────────────────────────
+  function logLine(msg, type = '') {
+    const box = document.getElementById('log-box');
+    const el  = document.createElement('div');
+    el.className = 'log-line ' + type;
+    el.textContent = `[${new Date().toLocaleTimeString('vi-VN')}] ${msg}`;
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+  }
+  function clearLog() { document.getElementById('log-box').innerHTML = ''; }
+
+  // ─── Toast ──────────────────────────────────────────────────────────────────
+  function showToast(msg, type = 'info') {
+    const area = document.getElementById('toast-area');
+    const el   = document.createElement('div');
+    el.className = 'toast ' + type;
+    el.textContent = msg;
+    area.appendChild(el);
+    setTimeout(() => el.remove(), 4000);
+  }
+
+  // ─── Auto-refresh ───────────────────────────────────────────────────────────
+  function toggleAutoRefresh() {
+    const on = document.getElementById('auto-refresh-chk').checked;
+    clearInterval(_autoTimer);
+    if (on) {
+      _autoTimer = setInterval(refreshAll, 10000);
+      logLine('🔄 Auto-refresh bật (10s)', 'info');
+    } else {
+      logLine('⏸️ Auto-refresh tắt', 'info');
+    }
+  }
+
+  // ─── Countdown ──────────────────────────────────────────────────────────────
+  function nextMidnight() {
+    const now  = new Date();
+    const m    = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+    const diff = Math.max(0, m - now);
+    const h = Math.floor(diff / 3600000);
+    const min = Math.floor((diff % 3600000) / 60000);
+    return `${h}h ${min}m`;
+  }
+  setInterval(() => {
+    document.getElementById('stat-next-flush').textContent = nextMidnight();
+  }, 60000);
+
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ─── Init ───────────────────────────────────────────────────────────────────
+  logLine('🚀 Location Monitor khởi động', 'info');
+  logLine('💡 Chỉnh API URL ở góc phải nếu dùng ngrok/tunnel', 'info');
+  refreshAll();
+</script>
+</body>
+</html>

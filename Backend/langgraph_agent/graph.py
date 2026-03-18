@@ -16,6 +16,7 @@ from .nodes import (
 )
 from .nodes.evaluator import evaluate_response
 from .nodes.location_extractor import extract_locations, store_locations
+from .nodes.background_worker import stage_response
 from .memory import memory_pipeline, log_chat
 
 
@@ -371,7 +372,33 @@ async def run_graph(
                 )
             ]
             
-            await asyncio.gather(*tasks, return_exceptions=True)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Stage for end-of-day location extraction
+            # We need the log_id – fetch the latest assistant log for this session
+            try:
+                from .memory.store import get_supabase
+                client = get_supabase()
+                if client:
+                    res = client.table("chat_logs") \
+                        .select("id") \
+                        .eq("session_id", session_id) \
+                        .eq("role", "assistant") \
+                        .order("id", desc=True) \
+                        .limit(1) \
+                        .execute()
+                    if res.data:
+                        log_id = res.data[0]["id"]
+                        intent_val = processing.intent.value if processing.intent else "travel_query"
+                        combined = f"User: {message}\nAssistant: {output.response}"
+                        await stage_response(
+                            log_id=log_id,
+                            session_id=session_id,
+                            combined_text=combined,
+                            intent=intent_val,
+                        )
+            except Exception as _e:
+                print(f"⚠️ stage_response error (non-stream): {_e}")
         
         # Launch remaining post-processing in background
         asyncio.create_task(run_remaining_tasks())
@@ -557,21 +584,46 @@ async def run_graph_stream(
         response=full_response
     )
 
-    # Run memory & background tasks (Logging)
+    # Run memory & background tasks (Logging + Staging)
     async def run_bg():
         await node_memory(state)
         
         from .memory import log_chat
+        from .memory.store import get_supabase
+        intent_val = state["processing"].intent.value if state["processing"].intent else "travel_query"
         await log_chat(
             user_id=user_id,
             session_id=session_id,
             message=message,
             response=full_response,
             emotion=state["processing"].emotion.value if state["processing"].emotion else "neutral",
-            intent=state["processing"].intent.value if state["processing"].intent else "travel_query",
+            intent=intent_val,
             location=state["processing"].detected_location,
             attachments=state["processing"].attachments
         )
+
+        # Stage for end-of-day location extraction
+        try:
+            client = get_supabase()
+            if client:
+                res = client.table("chat_logs") \
+                    .select("id") \
+                    .eq("session_id", session_id) \
+                    .eq("role", "assistant") \
+                    .order("id", desc=True) \
+                    .limit(1) \
+                    .execute()
+                if res.data:
+                    log_id = res.data[0]["id"]
+                    combined = f"User: {message}\nAssistant: {full_response}"
+                    await stage_response(
+                        log_id=log_id,
+                        session_id=session_id,
+                        combined_text=combined,
+                        intent=intent_val,
+                    )
+        except Exception as _e:
+            print(f"⚠️ stage_response error (stream): {_e}")
     
     asyncio.create_task(run_bg())
 

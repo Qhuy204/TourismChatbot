@@ -139,9 +139,13 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting LangGraph Tourism Chatbot...")
     set_app_state("RUNNING")
     
-    # 0. Start Background Worker
-    from langgraph_agent.nodes.background_worker import periodic_location_extraction_loop
-    asyncio.create_task(periodic_location_extraction_loop(interval_seconds=60))
+    # 0. Start Background Workers
+    from langgraph_agent.nodes.background_worker import (
+        daily_location_flush_loop,
+        periodic_location_extraction_loop,
+    )
+    asyncio.create_task(daily_location_flush_loop())
+    asyncio.create_task(periodic_location_extraction_loop(interval_seconds=300))
     
     # 1. Test Gemini connection
     from langgraph_agent.utils.gemini_client import test_connection
@@ -204,6 +208,13 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Serve static dev tools (location_monitor.html, etc.)
+import os as _os
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+_static_dir = _os.path.join(_os.path.dirname(__file__), "static")
+if _os.path.isdir(_static_dir):
+    app.mount("/static", _StaticFiles(directory=_static_dir), name="static")
 
 # CORS
 app.add_middleware(
@@ -740,6 +751,25 @@ async def export_session(session_id: str):
 
 
 
+@app.get("/langgraph/locations/cached")
+async def get_cached_locations_endpoint(
+    category: str = None,
+    city: str = None,
+    search: str = None,
+    limit: int = 200
+):
+    """Return cached locations from Supabase (for Location Monitor dashboard)."""
+    from langgraph_agent.nodes.location_extractor import get_cached_locations
+    return await get_cached_locations(category=category, city=city, search=search, limit=limit)
+
+
+@app.get("/langgraph/locations/stats")
+async def get_location_stats_endpoint():
+    """Return location category statistics."""
+    from langgraph_agent.nodes.location_extractor import get_location_stats
+    return await get_location_stats()
+
+
 @app.post("/langgraph/locations/insert")
 async def insert_location(request: LocationInsertRequest):
     from langgraph_agent.memory.store import insert_location_smart
@@ -787,6 +817,30 @@ async def cleanup_locations(request: DuplicateCleanupRequest):
         "dry_run": request.dry_run
     }
 
+
+@app.get("/langgraph/locations/staging-stats")
+async def get_location_staging_stats():
+    """Return current in-memory staging table stats (staged responses pending end-of-day flush)."""
+    from langgraph_agent.nodes.background_worker import get_staging_stats
+    return await get_staging_stats()
+
+
+@app.get("/langgraph/locations/staging-queue")
+async def get_location_staging_queue(limit: int = 50):
+    """Return list of staged bot responses waiting for end-of-day extraction."""
+    from langgraph_agent.nodes.background_worker import get_staged_responses
+    return await get_staged_responses(limit=limit)
+
+
+@app.post("/langgraph/locations/flush")
+async def manual_flush_locations():
+    """
+    Trigger end-of-day location flush manually (admin / testing use).
+    Runs AI extraction on all staged responses and writes to locations_cache.
+    """
+    from langgraph_agent.nodes.background_worker import flush_staged_locations
+    total_stored = await flush_staged_locations()
+    return {"status": "ok", "locations_stored": total_stored}
 
 
 import time
