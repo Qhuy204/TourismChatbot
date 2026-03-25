@@ -51,6 +51,8 @@ export default function App() {
             <Route path="/about" element={<AboutPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/auth" element={<AuthPage />} />
+            <Route path="/chat" element={<ChatApp />} />
+            <Route path="/chat/:id" element={<ChatApp />} />
             <Route path="/app" element={<ChatApp />} />
             <Route path="/profile" element={<ProfilePage />} />
 

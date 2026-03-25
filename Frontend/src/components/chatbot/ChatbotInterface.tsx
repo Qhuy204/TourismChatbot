@@ -47,10 +47,10 @@ const navItems = [
 ];
 
 const quickActions = [
-    { icon: Search, label: 'Tìm kiếm AI', desc: 'Hỏi về du lịch VN', color: '#1d6de0' },
-    { icon: MessageSquare, label: 'Lên kế hoạch', desc: 'Lịch trình chi tiết', color: '#06b6d4' },
-    { icon: Image, label: 'AI Images', desc: 'Khám phá hình ảnh', color: '#8b5cf6' },
-    { icon: Mic, label: 'Hỗ trợ giọng nói', desc: 'Hỏi đáp tự nhiên', color: '#10b981' },
+    { icon: Search, label: 'Tìm kiếm AI', desc: 'Hỏi về du lịch VN', color: '#1d6de0', prompt: 'Giới thiệu cho tôi một vài địa điểm du lịch nổi tiếng ở Việt Nam' },
+    { icon: MessageSquare, label: 'Lên kế hoạch', desc: 'Lịch trình chi tiết', color: '#06b6d4', prompt: 'Giúp tôi lên lịch trình chi tiết du lịch 3 ngày 2 đêm' },
+    { icon: Image, label: 'AI Images', desc: 'Khám phá hình ảnh', color: '#8b5cf6', prompt: 'Cho tôi xem ảnh các địa điểm du lịch đẹp ở Việt Nam' },
+    { icon: Mic, label: 'Hỗ trợ giọng nói', desc: 'Hỏi đáp tự nhiên', color: '#10b981', prompt: 'Vui lòng hướng dẫn tôi cách du lịch bằng giọng nói' },
 ];
 
 // Markdown components  
@@ -227,12 +227,25 @@ function CustomComboBox({ value, options, onChange }: { value: string; options: 
 }
 
 // Main component  
-export function ChatbotInterface() {
+export function ChatbotInterface({ initialSessionId }: { initialSessionId?: string }) {
     const { user, signOut } = useAuth();
     const { theme, toggleTheme } = useThemeMode();
     const navigate = useNavigate();
     const sessionManager = useSessionManager();
     const { appLanguage, langKey, t, setAppLanguage } = useLanguage();
+
+    // Sync URL with active session to prevent F5 reload bug
+    useEffect(() => {
+        if (initialSessionId && initialSessionId !== sessionManager.activeSessionId) {
+            sessionManager.setActiveSession(initialSessionId);
+        }
+    }, [initialSessionId]);
+
+    useEffect(() => {
+        if (sessionManager.activeSessionId && window.location.pathname !== \/chat/\) {
+            navigate(\/chat/\, { replace: true });
+        }
+    }, [sessionManager.activeSessionId, navigate]);
     const [emotionEnabled, setEmotionEnabled] = useState(() => localStorage.getItem('vivi-emotion-enabled') !== 'false');
     const [customAccent, setCustomAccent] = useState(() => localStorage.getItem('vivi-custom-accent') || '#1d6de0');
     const emotionTheme = useEmotionTheme({ enabled: emotionEnabled, customAccent });
@@ -712,11 +725,11 @@ export function ChatbotInterface() {
                                     </div>
                                 </div>
                                 <div style={{ padding: '4px 0', borderBottom: '1px solid var(--border)' }}>
-                                    <button onClick={() => { setUserMenuOpen(false); window.location.href = '/profile'; }} style={{ width: '100%', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 13 }} onMouseOver={e => e.currentTarget.style.background = 'var(--bg-muted)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                                    <button onClick={() => { setUserMenuOpen(false); navigate('/profile'); }} style={{ width: '100%', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 13 }} onMouseOver={e => e.currentTarget.style.background = 'var(--bg-muted)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
                                         <User size={15} /> Hồ sơ cá nhân
                                     </button>
                                     {isAdmin && (
-                                        <button onClick={() => { setUserMenuOpen(false); window.location.href = '/admin'; }} style={{ width: '100%', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 13 }} onMouseOver={e => e.currentTarget.style.background = 'var(--bg-muted)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                                        <button onClick={() => { setUserMenuOpen(false); navigate('/admin'); }} style={{ width: '100%', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 13 }} onMouseOver={e => e.currentTarget.style.background = 'var(--bg-muted)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
                                             <Shield size={15} /> Admin Dashboard
                                         </button>
                                     )}
@@ -842,8 +855,8 @@ export function ChatbotInterface() {
                             )}
 
                             <div className="quick-actions-mobile" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 24, maxWidth: 480, width: '100%' }}>
-                                {quickActions.map(({ icon: Icon, label, desc, color }) => (
-                                    <button key={label} onClick={() => handleSuggestion(label)} style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit', transition: 'all 0.2s' }}
+                                {quickActions.map(({ icon: Icon, label, desc, color, prompt }) => (
+                                    <button key={label} onClick={() => handleSuggestion(prompt || label)} style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit', transition: 'all 0.2s' }}
                                         onMouseOver={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.background = `${color}08`; }}
                                         onMouseOut={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)'; }}
                                     >
