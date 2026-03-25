@@ -369,7 +369,7 @@ export function ChatbotInterface() {
     const handleSubmit = async (e?: React.FormEvent) => {
         e?.preventDefault();
         let sid = sessionManager.activeSessionId;
-        if ((!input.trim() && attachments.length === 0) || isLoading) return;
+        if (!input.trim() && attachments.length === 0) return;
 
         // On-demand session creation if none is active
         if (!sid) {
@@ -1286,6 +1286,11 @@ function MessageBubble({ message, onFeedback }: { message: ChatMessage; onFeedba
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Loader2 size={13} className="animate-spin" />
                             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>ViVi đang suy nghĩ...</span>
+                        </div>
+                    ) : message.isQueued ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: 0.7 }}>
+                            <span>{message.content}</span>
+                            <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 8, background: 'rgba(255,255,255,0.25)', whiteSpace: 'nowrap' }}>⏳ Đang chờ</span>
                         </div>
                     ) : isUser ? (
                         message.content

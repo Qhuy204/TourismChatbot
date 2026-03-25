@@ -20,6 +20,8 @@ export interface ChatMessage {
     timestamp: Date;
     feedbackScore?: number | null;
     isLoading?: boolean;
+    /** true = message is queued in line, waiting for current bot reply to finish */
+    isQueued?: boolean;
     attachments?: Array<{ url: string; type: string; name: string }>;
     emotion?: string;
     intent?: string;
@@ -49,6 +51,21 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
     const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
     const [recentLocations, setRecentLocations] = useState<string[]>([]);
     const [initialData, setInitialData] = useState<{ welcome_message?: string; suggestions: SuggestionItem[] } | null>(null);
+
+    // Message queue: holds messages submitted while a response is streaming
+    type QueuedMessage = {
+        content: string;
+        attachments?: Array<{ url: string; type: string; name?: string }>;
+        memoryShareEnabled: boolean;
+        onNewTitle?: (title: string) => void;
+        overrideModelMode?: 'gemini' | 'qwen';
+        language?: string;
+        overrideSessionId?: string;
+        /** id of the isQueued placeholder bubble to replace when this message is sent */
+        queuedMsgId?: string;
+    };
+    const messageQueueRef = useRef<QueuedMessage[]>([]);
+    const [queueLength, setQueueLength] = useState(0); // reactive indicator for UI
     const [modelMode, setModelModeInternal] = useState<'gemini' | 'qwen'>(() => {
         const saved = localStorage.getItem(`model_mode_${user?.id}`);
         return saved === 'qwen' ? 'qwen' : 'gemini';
@@ -205,8 +222,8 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
 
     // Note: Removed frontend auto-title fallback to rely entirely on backend SLM
 
-    // sendMessage
-    const sendMessage = useCallback(async (
+    // Internal: executes a single send and drains the queue afterwards
+    const _executeSend = useCallback(async (
         content: string,
         attachments?: Array<{ url: string; type: string; name?: string }>,
         memoryShareEnabled: boolean = false,
@@ -214,8 +231,11 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         overrideModelMode?: 'gemini' | 'qwen',
         language?: string,
         overrideSessionId?: string,
+        // snapshot of messages at the time of send (needed because queue executes asynchronously)
+        messagesSnapshot?: ChatMessage[],
+        // if set, replace the queued placeholder with id=queuedMsgId instead of appending a new user bubble
+        queuedMsgId?: string,
     ) => {
-        if (!content.trim() || !user?.id || isLoading) return;
         setError(null);
 
         if (overrideSessionId && overrideSessionId !== sidRef.current) {
@@ -223,12 +243,9 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         }
 
         const currentSid = sidRef.current;
-        const isFirstMessage = messages.filter(m => !m.isLoading).length === 0;
 
         // Track topic for histogram-based recommendations
         trackTopic(content.trim());
-
-        // Immediate client-side fallback title removed to let backend handle it
 
         const userMsg: ChatMessage = {
             id: crypto.randomUUID(),
@@ -245,22 +262,34 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
             isLoading: true,
         };
 
-        setMessages(prev => [...prev, userMsg, loadingMsg]);
+        // Use snapshot for history (to account for concurrent queue processing)
+        let historyForRequest: { role: string; content: string }[] = [];
+        setMessages(prev => {
+            const base = messagesSnapshot ?? prev;
+            historyForRequest = base
+                .filter(m => !m.isLoading && !m.isQueued)
+                .map(m => ({ role: m.role, content: m.content }));
+
+            if (queuedMsgId) {
+                // Replace the queued placeholder bubble — upgrade it from pending to sent
+                const upgraded = prev.map(m =>
+                    m.id === queuedMsgId ? { ...userMsg, id: queuedMsgId, isQueued: false } : m
+                );
+                return [...upgraded, loadingMsg];
+            }
+            return [...prev, userMsg, loadingMsg];
+        });
         setIsLoading(true);
 
         try {
-            const history = messages
-                .filter(m => !m.isLoading)
-                .map(m => ({ role: m.role, content: m.content }));
-
             const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/chat/stream`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    user_id: user.id,
+                    user_id: user!.id,
                     session_id: currentSid,
                     message: content.trim(),
-                    history,
+                    history: historyForRequest,
                     memory_scope: memoryShareEnabled ? 'global' : 'session',
                     model_mode: overrideModelMode || modelMode,
                     attachments: attachments?.map(a => ({ url: a.url, type: a.type, name: a.name || 'image' })),
@@ -300,13 +329,11 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
 
                             if (data.new_title && onNewTitle) onNewTitle(data.new_title);
 
-                            // Location-based contextual suggestions
                             if (data.extracted_locations?.length > 0) {
                                 const locationNames: string[] = data.extracted_locations.map((loc: Record<string, string>) => loc.name);
                                 setRecentLocations(locationNames.slice(0, 3));
                                 updateRecentLocations(locationNames);
 
-                                // Track each location with histogram
                                 data.extracted_locations.forEach((loc: Record<string, string>) => {
                                     trackTopic(loc.name, true, {
                                         city: loc.city,
@@ -314,27 +341,6 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
                                         adminId: loc.admin_id,
                                     });
                                 });
-
-                                // Fetch AI-powered contextual suggestions (non-blocking)
-                                fetch(`${LANGGRAPH_API_URL}/langgraph/contextual_suggestions`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        locations: locationNames.slice(0, 3),
-                                        last_question: userMsg.content,
-                                        limit: 4,
-                                    }),
-                                })
-                                    .then(r => r.json())
-                                    .then(result => {
-                                        if (result.suggestions?.length > 0) {
-                                            setSuggestions(prev => {
-                                                const base = data.suggested_prompts || prev;
-                                                return [...result.suggestions, ...base.slice(0, 1)].slice(0, 5);
-                                            });
-                                        }
-                                    })
-                                    .catch(e => console.warn('Contextual suggestions error:', e));
                             }
                         } else if (data.type === 'error') {
                             throw new Error(data.message);
@@ -349,8 +355,75 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
             setMessages(prev => prev.filter(m => m.id !== loadingMsg.id));
         } finally {
             setIsLoading(false);
+
+            // ── Drain queue: if there are queued messages, send next one ──
+            const next = messageQueueRef.current.shift();
+            setQueueLength(messageQueueRef.current.length);
+            if (next) {
+                // Small tick to let React re-render before next stream starts
+                setTimeout(() => {
+                    _executeSend(
+                        next.content,
+                        next.attachments,
+                        next.memoryShareEnabled,
+                        next.onNewTitle,
+                        next.overrideModelMode,
+                        next.language,
+                        next.overrideSessionId,
+                        undefined, // messagesSnapshot
+                        next.queuedMsgId, // replace placeholder bubble
+                    );
+                }, 0);
+            }
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id, modelMode, trackTopic, updateRecentLocations]);
+
+    // sendMessage: public API — queues if busy, sends immediately if idle
+    const sendMessage = useCallback(async (
+        content: string,
+        attachments?: Array<{ url: string; type: string; name?: string }>,
+        memoryShareEnabled: boolean = false,
+        onNewTitle?: (title: string) => void,
+        overrideModelMode?: 'gemini' | 'qwen',
+        language?: string,
+        overrideSessionId?: string,
+    ) => {
+        if (!content.trim() || !user?.id) return;
+
+        if (isLoading) {
+            // Bot is busy → enqueue for later
+            const queuedMsgId = `queued-${crypto.randomUUID()}`;
+            messageQueueRef.current.push({
+                content,
+                attachments,
+                memoryShareEnabled,
+                onNewTitle,
+                overrideModelMode,
+                language,
+                overrideSessionId,
+                queuedMsgId,
+            });
+            setQueueLength(messageQueueRef.current.length);
+
+            // Show queued user message immediately in UI (grayed out / pending badge)
+            setMessages(prev => [...prev, {
+                id: queuedMsgId,
+                role: 'user',
+                content: content.trim(),
+                timestamp: new Date(),
+                attachments: attachments?.map(a => ({ url: a.url, type: a.type, name: a.name || 'file' })),
+                isQueued: true,
+            } as ChatMessage]);
+            return;
+        }
+
+        // Bot is free → send immediately
+        await _executeSend(
+            content, attachments, memoryShareEnabled, onNewTitle,
+            overrideModelMode, language, overrideSessionId,
+        );
+    }, [user?.id, isLoading, _executeSend]);
 
     // fetchInitialSuggestions: histogram-based personalization
     const fetchInitialSuggestions = useCallback(async (topics?: string[], forceSet: boolean = false) => {
@@ -466,6 +539,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
     return {
         messages,
         isLoading,
+        queueLength,
         suggestions,
         error,
         sendMessage,

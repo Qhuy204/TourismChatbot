@@ -9,6 +9,7 @@ from langgraph_agent.retrieval.vqa_store import get_vqa_store
 from langgraph_agent.nodes.intent import analyze_intent_with_llm
 from langgraph_agent.nodes.location_extractor import VNAdministrativeManager
 
+
 async def interactive_test():
     print("🚀 Retrieval Interactive Test Mode")
     print("Type 'exit' to quit.")

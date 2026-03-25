@@ -285,13 +285,11 @@ class GeminiClient:
             print("🦙 Attempt 3: Local Llama fallback...")
             try:
                 from .llama_client import llama_client
-                llama_response = await llama_client.generate(
+                return await llama_client.generate_json(
                     prompt=prompt,
                     temperature=0.2,
                     max_tokens=2048
                 )
-                if llama_response:
-                    return self._parse_json_response(llama_response)
             except Exception as le:
                 print(f"⚠️ Llama fallback failed: {le}")
         

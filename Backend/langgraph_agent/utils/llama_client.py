@@ -5,7 +5,7 @@ import signal
 import time
 import asyncio
 import httpx
-from typing import Optional, List, AsyncIterator
+from typing import Optional, List, AsyncIterator, Any
 
 # Paths
 LLAMA_SERVER_BIN = os.path.join(
@@ -29,8 +29,8 @@ _server_process: Optional[subprocess.Popen] = None
 
 
 def start_llama_server(
-    n_gpu_layers: int = 32,   
-    ctx_size: int = 12288,     
+    n_gpu_layers: int = 48,   
+    ctx_size: int = 24000,     
     n_parallel: int = 2,
 ) -> subprocess.Popen:
     """Start llama-server as a subprocess."""
@@ -81,7 +81,7 @@ def start_llama_server(
     )
 
     # Wait for server to be ready (poll /health)
-    max_wait = 120  # seconds
+    max_wait = 60  # seconds
     start = time.time()
     while time.time() - start < max_wait:
         try:
@@ -160,6 +160,7 @@ class LlamaClient:
         temperature: float = 0.7,
         max_tokens: int = 1024,
         role: str = "user",
+        grammar: Optional[str] = None,
     ) -> str:
         """Non-streaming generation via /v1/chat/completions."""
         messages = self._build_messages(prompt, system_instruction)
@@ -173,12 +174,132 @@ class LlamaClient:
             "stop": ["<|im_end|>"],
             "stream": False,
         }
+        
+        if grammar:
+            payload["grammar"] = grammar
 
         http = self._get_http()
         resp = await http.post("/v1/chat/completions", json=payload)
         resp.raise_for_status()
         data = resp.json()
         return data["choices"][0]["message"]["content"].strip()
+
+    async def generate_json(
+        self,
+        prompt: str,
+        system_instruction: Optional[str] = None,
+        temperature: float = 0.2,
+        max_tokens: int = 1536,
+        root_type: Optional[str] = None, # object or array
+    ) -> dict | list:
+        """Generate structured JSON using local model with GBNF grammar."""
+        
+        # Generic JSON grammar components
+        obj_def = """object ::= "{" ws ( pair ( "," ws pair )* )? "}" ws
+pair   ::= string ":" ws value
+array  ::= "[" ws ( value ( "," ws value )* )? "]" ws
+value  ::= object | array | string | number | "true" | "false" | "null"
+string ::= "\"" ( [^"\\\x00-\x1F] | "\\" ( ["\\/bfnrt] | "u" [0-9a-fA-F]{4} ) )* "\"" ws
+number ::= "-"? ([0-9] | [1-9] [0-9]*) ("." [0-9]+)? ([eE] [+-]? [0-9]+)? ws
+ws     ::= [ \t\n\r]*"""
+
+        # Determine the root based on prompt or parameter
+        if not root_type:
+            root_type = "object" if "{" in prompt or "object" in prompt.lower() else "array"
+        
+        json_grammar = f"root ::= {root_type}\n{obj_def}"
+        
+        # Suffix to help the model start
+        start_char = "{" if root_type == "object" else "["
+        json_prompt = prompt + f"\n\nJSON:\n{start_char}"
+        
+        try:
+            response_text = await self.generate(
+                prompt=json_prompt,
+                system_instruction=system_instruction,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                grammar=json_grammar
+            )
+            
+            # Prepend the missing start character if not already in result
+            full_response = response_text.strip()
+            if not full_response.startswith(start_char):
+                full_response = start_char + full_response
+            
+            # Use robust parsing
+            return self._parse_json_response(full_response)
+        except Exception as e:
+            print(f"❌ Llama generate_json error: {e}")
+            return {}
+
+    def _parse_json_response(self, text: str) -> dict | list:
+        """Robustly parse JSON from local model output, handling common hallucinations."""
+        if not text:
+            return {}
+            
+        # 1. Basic cleanup
+        clean_text = text.strip()
+        
+        # 2. Handle markdown blocks if the model ignored our "no backticks" rule
+        if "```" in clean_text:
+            import re
+            match = re.search(r"```(?:json)?\s*(.*?)(?:```|$)", clean_text, re.DOTALL)
+            if match:
+                clean_text = match.group(1).strip()
+        
+        # 3. Aggressive search for JSON structure
+        try:
+            # Find the balanced boundaries for the first object or array
+            # This helps skip preamble or trailing garbage
+            first_brace = clean_text.find('{')
+            first_bracket = clean_text.find('[')
+            
+            start_idx = -1
+            if first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket):
+                start_idx = first_brace
+                end_char = '}'
+            elif first_bracket != -1:
+                start_idx = first_bracket
+                end_char = ']'
+            
+            if start_idx != -1:
+                # Find the LAST matching end character
+                end_idx = clean_text.rfind(end_char)
+                if end_idx != -1:
+                    clean_text = clean_text[start_idx : end_idx + 1]
+        except Exception:
+            pass
+
+        # 4. Final attempt to parse with auto-closing of brackets/braces
+        try:
+            return json.loads(clean_text)
+        except json.JSONDecodeError:
+            # Try to fix truncated JSON by appending missing closing characters
+            tmp_text = clean_text.strip()
+            stack = []
+            for char in tmp_text:
+                if char == '{': stack.append('}')
+                elif char == '[': stack.append(']')
+                elif char == '}' and stack and stack[-1] == '}': stack.pop()
+                elif char == ']' and stack and stack[-1] == ']': stack.pop()
+            
+            # Close in reverse order
+            if stack:
+                try:
+                    # Try to close any open string first if it's truncated
+                    fixed_text = tmp_text
+                    if fixed_text.count('"') % 2 != 0:
+                        fixed_text += '"'
+                        
+                    # Add missing closings
+                    fixed_text += "".join(reversed(stack))
+                    return json.loads(fixed_text)
+                except:
+                    pass
+                
+            print(f"⚠️ Llama JSON parse failed after cleanup: {clean_text[:100]}...")
+            return {}
 
     async def stream_generate(
         self,

@@ -479,6 +479,10 @@ async def get_initial_suggestions(request: RecommendationsRequest):
         return default_data
     
     try:
+        from langgraph_agent.utils.gemini_client import gemini_fast
+        from langgraph_agent.utils.llama_client import llama_client
+        from langgraph_agent.utils.system_state import get_use_llama
+        
         # Build context string from interests
         interest_str = ", ".join(all_interests[:5])
         city_str = ", ".join(preferred_cities[:3]) if preferred_cities else ""
@@ -490,56 +494,77 @@ async def get_initial_suggestions(request: RecommendationsRequest):
             "zh": "用中文回答（简体中文）。"
         }.get(request.language, "Hãy trả lời bằng tiếng Việt.")
         
-        prompt = f"""Bạn là trợ lý du lịch AI thông minh. {lang_instruction}
-Người dùng đặc biệt quan tâm các chủ đề: {interest_str}
+        # Use a more forceful prompt for local model
+        if get_use_llama():
+            prompt = f"""Bạn là trợ lý du lịch AI chuyên nghiệp. {lang_instruction}
+YÊU CẦU: Tạo một JSON object chứa lời chào mừng và 5 gợi ý tìm kiếm du lịch.
+Các chủ đề ưu tiên: Phở Hà Nội, món ăn đường phố Huế, du lịch Kiên Giang.
+
+CẤU TRÚC JSON BẮT BUỘC:
+{{
+    "welcome_message": "Chào bạn, mình có thể giúp gì cho bạn?",
+    "suggestions": [
+        {{"text": "Thưởng thức phở Hà Nội ngon nhất tại phố cổ", "category": "food"}},
+        {{"text": "Khám phá vẻ đẹp cổ kính của đại nội Huế", "category": "history"}},
+        {{"text": "Trải nghiệm du lịch biển đảo tại Kiên Giang", "category": "discovery"}},
+        {{"text": "Các quán ăn đường phố nổi tiếng ở cố đô Huế", "category": "food"}},
+        {{"text": "Lịch trình du lịch tâm linh tại Hà Nội", "category": "itinerary"}}
+    ]
+}}
+
+Chỉ trả về JSON:"""
+        else:
+            prompt = f"""Bạn là trợ lý du lịch AI chuyên nghiệp. {lang_instruction}
+Người dùng quan tâm các chủ đề: {interest_str}
 {f"Các địa điểm tìm kiếm gần nhất: {recent_loc_str}" if recent_loc_str else f"Địa điểm yêu thích: {city_str}" if city_str else ""}
 
-Hãy tạo nội dung gợi ý NGẮN GỌN, HỮU ÍCH:
+Hãy tạo 5 gợi ý tìm kiếm thực tế, khách quan và chuyên nghiệp:
 
-1. Lời chào (dưới 15 từ):
-   - Thân thiện, lịch sự, không quá suồng sã.
-   - VD: "Chào bạn, hôm nay bạn muốn khám phá ở đâu?", "Mình có thể giúp bạn lên kế hoạch đi đâu?"
-
-2. 5 gợi ý TÌM KIẾM (như keyword):
-   - Khoảng 60% (3 gợi ý) liên quan trực tiếp đến "Các địa điểm tìm kiếm gần nhất" (nếu có).
-   - Khoảng 40% (2 gợi ý) liên quan đến "chủ đề" người dùng quan tâm ở các địa điểm nổi tiếng khác.
-   - Tập trung vào thông tin thực tế.
-   - KHÔNG dùng emojis.
-   - KHÔNG dùng "nhé", "nha", "thử xem".
+YÊU CẦU BẮT BUỘC:
+1. Tỷ lệ nội dung:
+   - 60% (3 gợi ý) liên quan trực tiếp đến "Các địa điểm tìm kiếm gần nhất" (nếu có). Tập trung vào thông tin khám phá và trải nghiệm thực tế.
+   - 40% (2 gợi ý) liên quan đến "chủ đề" người dùng quan tâm ở các địa điểm nổi tiếng khác (Ưu tiên: Đặc sản phở Hà Nội, món ăn đường phố ở Huế, hoặc Kiên Giang).
+2. Phong cách:
+   - Ngôn ngữ chuyên nghiệp, lịch sự.
+   - KHÔNG dùng từ viết tắt, KHÔNG dùng emojis.
+   - KHÔNG dùng "Gợi ý", "Top", "Tìm kiếm", "nhé", "nha", "thử xem".
    - KHÔNG dùng dấu "?".
-   - VD: "Kinh nghiệm du lịch Phú Quốc", "Lịch trình Đà Lạt 3 ngày", "Đặc sản phở Hà Nội", "Vé cáp treo Bà Đen"
+3. Hình thức: Câu khẳng định ngắn gọn (dưới 15 từ).
 
-Trả về JSON nguyên vẹn, đảm bảo điền nội dung cụ thể không viết tắt:
+Trả về JSON nguyên vẹn:
 {{
-    "welcome_message": "<Câu chào ngắn gọn>",
+    "welcome_message": "Chào bạn, mình có thể hỗ trợ gì cho kế hoạch du lịch của bạn?",
     "suggestions": [
-        {{"text": "<Giá trị gợi ý 1>", "category": "itinerary"}},
-        {{"text": "<Giá trị gợi ý 2>", "category": "experience"}},
-        {{"text": "<Giá trị gợi ý 3>", "category": "tips"}},
-        {{"text": "<Giá trị gợi ý 4>", "category": "discovery"}},
-        {{"text": "<Giá trị gợi ý 5>", "category": "food"}}
+        {{"text": "Khám phá vẻ đẹp hoang sơ của đảo ngọc Phú Quốc", "category": "experience"}},
+        {{"text": "Thưởng thức phở Hà Nội tại các quán ăn truyền thống", "category": "food"}},
+        ...
     ]
 }}"""
         
-        response = await gemini_fast.generate_json(prompt, schema={
-            "type": "object",
-            "properties": {
-                "welcome_message": {"type": "string"},
-                "suggestions": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "text": {"type": "string"},
-                            "category": {"type": "string"}
+        # Get suggestions using preferred model
+        if get_use_llama():
+            print("🦙 Initial suggestions: Using local Qwen/Llama...")
+            response = await llama_client.generate_json(prompt=prompt, temperature=0.3, root_type="object")
+        else:
+            response = await gemini_fast.generate_json(prompt=prompt, schema={
+                "type": "object",
+                "properties": {
+                    "welcome_message": {"type": "string"},
+                    "suggestions": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "category": {"type": "string"}
+                            }
                         }
                     }
                 }
-            }
-        })
+            })
         
         if not response or "suggestions" not in response or not response["suggestions"]:
-            print("⚠️ Gemini returned empty suggestions, using defaults")
+            print("⚠️ Suggestions model returned empty result or error. Using defaults.")
             return default_data
             
         return response
@@ -615,12 +640,14 @@ PHONG CÁCH CỦA USER (Hãy bắt chước tone giọng này):
 {style_instruction}
 {lang_instruction}
 
-Tạo {limit} câu hỏi gợi ý tiếp theo TỰ NHIÊN, NGẮN GỌN (dưới 15 từ) để kích thích cuộc hội thoại.
+Tạo {limit} gợi ý tiếp theo CHUYÊN NGHIỆP, THỰC TẾ và NGẮN GỌN (dưới 15 từ).
 
-QUY TẮC:
-- Đa dạng chủ đề: ăn uống, lịch trình, thời tiết, kinh nghiệm, khách sạn.
-- Câu hỏi thực tế, như một người dùng thật đang tò mò (Vd: "Đi Hội An mùa nào thì bớt đông?").
-- KHÔNG dùng "Gợi ý", "Top", "Du lịch X mấy ngày?" máy móc.
+QUY TẮC BẮT BUỘC:
+- 60% gợi ý liên quan đến các địa điểm đang đề cập ({', '.join(locations) if locations else 'hiện tại'}). Tập trung vào thông tin khám phá và trải nghiệm thực tế.
+- 40% gợi ý liên quan đến các chủ đề mở rộng hoặc đặc sản (Hà Nội, Huế, Kiên Giang).
+- Phong cách chuyên nghiệp, lịch sự, KHÔNG viết tắt, KHÔNG emojis.
+- KHÔNG dùng dấu hỏi (?), KHÔNG dùng "Gợi ý", "Top".
+- KHÔNG dùng các từ suồng sã như "nhé", "nha".
 
 Trả về JSON mẫu:
 {{
@@ -632,23 +659,32 @@ Trả về JSON mẫu:
     ]
 }}"""
         
-        result = await gemini_fast.generate_json(prompt, schema={
-            "type": "object",
-            "properties": {
-                "suggestions": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "text": {"type": "string"},
-                            "category": {"type": "string"}
-                        },
-                        "required": ["text"]
+        # Get suggestions using preferred model
+        from langgraph_agent.utils.gemini_client import gemini_fast
+        from langgraph_agent.utils.llama_client import llama_client
+        from langgraph_agent.utils.system_state import get_use_llama
+
+        if get_use_llama():
+            print("🦙 Contextual suggestions: Using local Qwen/Llama...")
+            result = await llama_client.generate_json(prompt=prompt, temperature=0.3)
+        else:
+            result = await gemini_fast.generate_json(prompt=prompt, schema={
+                "type": "object",
+                "properties": {
+                    "suggestions": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "category": {"type": "string"}
+                            },
+                            "required": ["text"]
+                        }
                     }
-                }
-            },
-            "required": ["suggestions"]
-        })
+                },
+                "required": ["suggestions"]
+            })
         
         suggestions = result.get("suggestions", [])
         if not isinstance(suggestions, list):

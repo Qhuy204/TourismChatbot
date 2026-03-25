@@ -59,6 +59,31 @@ async def generate_suggestions(
     """
     exclude = exclude or []
     
+    # Collect context for personalized suggestions
+    # 1. Recently searched/discussed locations
+    current_locations = []
+    if processing_state.detected_location:
+        current_locations.append(processing_state.detected_location)
+    
+    # Also add locations from retrieved context metadata if available
+    for ctx in (processing_state.retrieved_context or []):
+        if isinstance(ctx, dict) and ctx.get("name"):
+            current_locations.append(ctx["name"])
+    
+    # Deduplicate and limit
+    current_locations = list(dict.fromkeys(current_locations))[:5]
+    
+    # 2. User interests from profile
+    user_interests = user_context.interests or []
+    
+    # Language instruction
+    lang_map = {
+        "vi": "Hãy gợi ý bằng tiếng Việt.",
+        "en": "Respond in English.",
+        "zh": "用中文回答。"
+    }
+    lang_instruction = lang_map.get(processing_state.language, lang_map["vi"])
+
     # Build conversational context
     context_str = ""
     if processing_state.history:
@@ -68,78 +93,90 @@ async def generate_suggestions(
             
     context_str += f"User: {processing_state.message[:300]}"
     
-    # Prompt LLM to predict follow-ups based on conversation state
-    prompt = f"""Dựa trên đoạn hội thoại ngắn sau, hãy gợi ý ít nhất 5 câu hỏi tiếp theo NGẮN GỌN (dưới 15 từ) mà người dùng có thể muốn hỏi tiếp.
+    # Prompt LLM to predict follow-ups based on conversation state and requirements
+    prompt = f"""Bạn là chuyên gia tư vấn du lịch AI. {lang_instruction}
+Dựa trên hội thoại và thông tin sau, hãy gợi ý 5 câu hỏi tiếp theo NGẮN GỌN (dưới 15 từ).
 
-Đoạn hội thoại:
+Hội thoại:
 {context_str}
 
-Yêu cầu:
-- Câu hỏi TỰ NHIÊN, đa dạng chủ đề (ẩm thực, lịch trình, thời tiết, kinh phí).
-- KHÔNG dùng "Gợi ý", "Top".
-- Chỉ trả về JSON array của các object.
+Thông tin bổ sung:
+- Các địa điểm tìm kiếm gần nhất: {', '.join(current_locations) if current_locations else 'Chưa có'}
+- Các chủ đề quan tâm: {', '.join(user_interests) if user_interests else 'Du lịch Việt Nam'}
 
-Trả về JSON array mẫu:
+YÊU CẦU BẮT BUỘC:
+1. Số lượng: Đúng 5 gợi ý.
+2. Tỷ lệ nội dung:
+   - 60% (3 gợi ý): Liên quan trực tiếp đến "Các địa điểm tìm kiếm gần nhất". Hãy tập trung vào thông tin thực tế, khám phá và trải nghiệm tại các điểm này.
+   - 40% (2 gợi ý): Liên quan đến "Các chủ đề quan tâm" hoặc các địa điểm nổi tiếng khác (Ưu tiên đặc sản phở Hà Nội, món ăn đường phố ở Huế, hoặc Kiên Giang nếu phù hợp).
+3. Phong cách: Chuyên nghiệp, lịch sự, không dùng dấu hỏi (?), không dùng emojis, không viết tắt.
+4. KHÔNG dùng "Gợi ý", "Top", "Tìm kiếm".
+
+Trả về JSON array của các object:
 [
-  {{ "text": "Hội An có đặc sản gì ngon?", "category": "food" }},
-  {{ "text": "Lịch trình đi 3 ngày 2 đêm như thế nào?", "category": "schedule" }},
-  {{ "text": "Thời tiết tháng này có thích hợp đi không?", "category": "weather" }},
-  {{ "text": "Có khách sạn nào gần Phố Cổ giá rẻ không?", "category": "stay" }},
-  {{ "text": "Cách di chuyển từ Đà Nẵng đến đây?", "category": "transport" }}
+  {{ "text": "Ở Phong Nha có hang động nào đẹp và dễ tham quan", "category": "experience" }},
+  {{ "text": "Ăn phở bò ngon đúng vị Hà Nội thì nên đi đâu", "category": "food" }}
 ]"""
 
     try:
         from ..utils.gemini_client import gemini_fast
+        from ..utils.llama_client import llama_client
+        from ..utils.system_state import get_use_llama
         
-        result = await gemini_fast.generate_json(
-            prompt=prompt,
-            schema={
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "text": {"type": "string"},
-                        "category": {"type": "string"}
-                    },
-                    "required": ["text"]
-                }
-            },
-            temperature=0.7,
-            max_tokens=1024
-        )
+        # Prioritize local model if requested or available to save quota
+        if get_use_llama() or processing_state.model_mode == "qwen":
+             print("🦙 Generating suggestions using local Qwen/Llama...")
+             result = await llama_client.generate_json(
+                prompt=prompt,
+                temperature=0.3,
+                max_tokens=1024
+            )
+        else:
+            result = await gemini_fast.generate_json(
+                prompt=prompt,
+                schema={
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                            "category": {"type": "string"}
+                        },
+                        "required": ["text"]
+                    }
+                },
+                temperature=0.4, # Lower temperature for better adherence to rules
+                max_tokens=1024
+            )
         
-        # result might be a list directly if the schema is array
-        suggestions_data = result if isinstance(result, list) else result.get("suggestions", [])
+        suggestions_data = result if isinstance(result, list) else []
         
         if suggestions_data:
             formatted_suggestions = []
             for item in suggestions_data:
                 if not isinstance(item, dict): continue
                 text = item.get("text", "").strip()
+                # Clean up if model ignored "no question mark" rule
+                text = text.rstrip('?')
                 category = item.get("category", "next_step")
-                if text and len(text) < 65:
+                if text and len(text) < 80:
                     formatted_suggestions.append({"text": text, "category": category})
             
-            if len(formatted_suggestions) >= 2:
+            if len(formatted_suggestions) >= 3:
                 output_state.suggested_prompts = formatted_suggestions[:5]
                 return output_state
                 
     except Exception as e:
         print(f"❌ Suggestions error: {e}")
     
-    # FALLBACK: Extract location name from message or last bot response
-    location_name = extract_location_name(processing_state.message)
-    if location_name == "địa điểm này" and processing_state.history:
-        last_bot = next((m for m in reversed(processing_state.history) if m['role'] == 'assistant'), None)
-        if last_bot:
-            location_name = extract_location_name(last_bot.get('content', ''))
-            
+    # FALLBACK: Natural professional suggestions
+    loc = current_locations[0] if current_locations else "Việt Nam"
     output_state.suggested_prompts = [
-        {"text": f"Du lịch {location_name} nên đi mấy ngày?", "category": "schedule"},
-        {"text": f"Đặc sản ở đây là gì?", "category": "food"},
-        {"text": "Đi mùa nào đẹp nhất?", "category": "weather"},
-        {"text": "Có những khách sạn nào gần đây?", "category": "stay"},
-        {"text": "Có những điểm tham quan lân cận nào?", "category": "open_ended"}
+        {"text": f"Kinh nghiệm khám phá thực tế tại {loc}", "category": "experience"},
+        {"text": f"Lịch trình tham quan tối ưu ở {loc}", "category": "schedule"},
+        {"text": "Đặc sản phở Hà Nội tại các quán lâu đời", "category": "food"},
+        {"text": "Món ăn đường phố đặc sắc tại cố đô Huế", "category": "food"},
+        {"text": "Trải nghiệm du lịch biển đảo tại Kiên Giang", "category": "discovery"}
     ]
     
     return output_state
