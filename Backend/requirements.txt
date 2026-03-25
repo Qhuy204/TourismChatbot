@@ -26,7 +26,6 @@ onnxruntime>=1.16.0
 
 # ============== Database ==============
 supabase>=2.3.0
-redis>=5.0.0
 
 # ============== Utilities ==============
 python-dotenv>=1.0.0

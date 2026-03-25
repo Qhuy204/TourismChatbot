@@ -17,7 +17,7 @@ import asyncio
 from fastapi import FastAPI, HTTPException, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -34,7 +34,7 @@ if _LLAMA_MODE:
 class ChatRequest(BaseModel):
     user_id: str
     session_id: str
-    message: str
+    message: str = Field(..., max_length=2000)
     history: List[Dict] = []
     model_mode: Optional[str] = "gemini"
     attachments: Optional[List[Dict]] = None  # [{url, type, name}]
@@ -127,9 +127,6 @@ class BanRequest(BaseModel):
 class RoleChangeRequest(BaseModel):
     role: str
 
-class RoleChangeRequest(BaseModel):
-    role: str
-
 
 
 @asynccontextmanager
@@ -146,6 +143,17 @@ async def lifespan(app: FastAPI):
     )
     asyncio.create_task(daily_location_flush_loop())
     asyncio.create_task(periodic_location_extraction_loop(interval_seconds=300))
+    
+    # Export Memory Leak GC loop
+    async def cleanup_exports_loop():
+        while True:
+            await asyncio.sleep(600)  # each 10 mins
+            try:
+                _cleanup_exports()
+            except:
+                pass
+                
+    asyncio.create_task(cleanup_exports_loop())
     
     # 1. Test Gemini connection
     from langgraph_agent.utils.gemini_client import test_connection
@@ -166,7 +174,15 @@ async def lifespan(app: FastAPI):
         vqa_path = os.path.join(project_root, "Data", "vqa_dataset.jsonl")
         
         print("⏳ Starting VQA indexing in background...")
-        loop.run_in_executor(executor, init_vqa_store, vqa_path, None)
+        async def init_vqa_timeout():
+            try:
+                await asyncio.wait_for(
+                    loop.run_in_executor(executor, init_vqa_store, vqa_path, None),
+                    timeout=60.0
+                )
+            except Exception as e:
+                print(f"⚠️ VQA index timeout or error: {e}")
+        asyncio.create_task(init_vqa_timeout())
         
         if _LLAMA_MODE:
             # Start llama-server subprocess (light VRAM)
@@ -219,7 +235,7 @@ if _os.path.isdir(_static_dir):
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=["http://localhost:3000", "http://localhost:5173", os.environ.get("FRONTEND_URL", "https://chat.vqa.vn")],  # Configure for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -327,6 +343,7 @@ async def chat(request: ChatRequest):
             message=request.message,
             history=request.history,
             model_mode=request.model_mode,
+            attachments=request.attachments,
             language=request.language
         )
         
@@ -348,7 +365,7 @@ async def chat(request: ChatRequest):
         )
     except Exception as e:
         print(f"Chat error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Lỗi hệ thống nội bộ, vui lòng thử lại sau.")
 
 
 @app.post("/langgraph/chat/stream")
@@ -359,7 +376,7 @@ async def chat_stream(request: ChatRequest):
 
     # Rate limiting check
     from langgraph_agent.utils.rate_limiter import check_quota, increment_usage
-    allowed, reason, usage_info = check_quota(request.user_id)
+    allowed, reason, usage_info = await asyncio.to_thread(check_quota, request.user_id)
     if not allowed:
         async def quota_exceeded():
             yield f"data: {json.dumps({'type': 'error', 'message': reason, 'quota_exceeded': True, 'usage': usage_info}, ensure_ascii=False)}\n\n"
@@ -383,7 +400,7 @@ async def chat_stream(request: ChatRequest):
             increment_usage(request.user_id, requests=1)
         except Exception as e:
             print(f"Streaming error: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Hệ thống đang bận hoặc gặp lỗi nội bộ. Vui lòng thử lại sau.'}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -392,7 +409,7 @@ async def chat_stream(request: ChatRequest):
 async def get_usage(user_id: str):
     """Get user's current usage and quota limits"""
     from langgraph_agent.utils.rate_limiter import check_quota
-    _, _, usage_info = check_quota(user_id)
+    _, _, usage_info = await asyncio.to_thread(check_quota, user_id)
     return usage_info
 
 
@@ -494,11 +511,14 @@ async def get_initial_suggestions(request: RecommendationsRequest):
             "zh": "用中文回答（简体中文）。"
         }.get(request.language, "Hãy trả lời bằng tiếng Việt.")
         
+        fallback_cities = preferred_cities[:3] if preferred_cities else ["Hà Nội", "Hội An", "Phú Quốc"]
+        fallback_str = ", ".join(fallback_cities)
+        
         # Use a more forceful prompt for local model
         if get_use_llama():
             prompt = f"""Bạn là trợ lý du lịch AI chuyên nghiệp. {lang_instruction}
 YÊU CẦU: Tạo một JSON object chứa lời chào mừng và 5 gợi ý tìm kiếm du lịch.
-Các chủ đề ưu tiên: Phở Hà Nội, món ăn đường phố Huế, du lịch Kiên Giang.
+Các chủ đề ưu tiên: Trải nghiệm tại {fallback_str}.
 
 CẤU TRÚC JSON BẮT BUỘC:
 {{
@@ -523,7 +543,7 @@ Hãy tạo 5 gợi ý tìm kiếm thực tế, khách quan và chuyên nghiệp:
 YÊU CẦU BẮT BUỘC:
 1. Tỷ lệ nội dung:
    - 60% (3 gợi ý) liên quan trực tiếp đến "Các địa điểm tìm kiếm gần nhất" (nếu có). Tập trung vào thông tin khám phá và trải nghiệm thực tế.
-   - 40% (2 gợi ý) liên quan đến "chủ đề" người dùng quan tâm ở các địa điểm nổi tiếng khác (Ưu tiên: Đặc sản phở Hà Nội, món ăn đường phố ở Huế, hoặc Kiên Giang).
+   - 40% (2 gợi ý) liên quan đến "chủ đề" người dùng quan tâm ở các địa điểm nổi tiếng ({fallback_str}).
 2. Phong cách:
    - Ngôn ngữ chuyên nghiệp, lịch sự.
    - KHÔNG dùng từ viết tắt, KHÔNG dùng emojis.
@@ -980,16 +1000,13 @@ async def admin_list_users(request: Request, admin: Admin = Depends(require_admi
     sb = get_supabase()
     roles_resp = sb.table("user_roles").select("user_id, role").execute()
     roles_map = {r["user_id"]: r["role"] for r in (roles_resp.data or [])}
-    msg_resp = sb.table("chat_logs").select("user_id", count="exact").execute()
-    sessions_resp = sb.table("chat_sessions").select("user_id, created_at").order("created_at", desc=True).execute()
+    sessions_resp = sb.table("chat_sessions").select("user_id, created_at, message_count").order("created_at", desc=True).execute()
     user_messages = {}; user_sessions = {}; user_last_active = {}
-    for log in (msg_resp.data or []):
-        uid = log.get("user_id")
-        if uid: user_messages[uid] = user_messages.get(uid, 0) + 1
     for sess in (sessions_resp.data or []):
         uid = sess.get("user_id")
         if uid:
             user_sessions[uid] = user_sessions.get(uid, 0) + 1
+            user_messages[uid] = user_messages.get(uid, 0) + (sess.get("message_count") or 0)
             if uid not in user_last_active: user_last_active[uid] = sess.get("created_at")
     try:
         users_resp = sb.auth.admin.list_users()

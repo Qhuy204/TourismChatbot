@@ -1,10 +1,11 @@
 from typing import Optional, Dict
 from langgraph_agent.memory.store import get_supabase
-
+import threading
 
 # In-memory cache for quota limits (refreshed every 5 min)
 _quota_cache: Dict[str, dict] = {}
 _cache_ts: float = 0
+_quota_lock = threading.Lock()
 
 
 def _get_quota_limits() -> Dict[str, dict]:
@@ -12,23 +13,24 @@ def _get_quota_limits() -> Dict[str, dict]:
     import time
     global _quota_cache, _cache_ts
 
-    if time.time() - _cache_ts < 300 and _quota_cache:
-        return _quota_cache
+    with _quota_lock:
+        if time.time() - _cache_ts < 300 and _quota_cache:
+            return _quota_cache
 
-    try:
-        sb = get_supabase()
-        resp = sb.table("quota_limits").select("*").execute()
-        _quota_cache = {row["role"]: row for row in (resp.data or [])}
-        _cache_ts = time.time()
-    except Exception as e:
-        print(f"⚠️ Failed to load quota limits: {e}")
-        # Fallback defaults
-        _quota_cache = {
-            "user": {"daily_requests": 50, "daily_tokens": 100000, "daily_images": 10},
-            "admin": {"daily_requests": 999999, "daily_tokens": 999999999, "daily_images": 9999},
-            "api_client": {"daily_requests": 200, "daily_tokens": 500000, "daily_images": 50},
-        }
-        _cache_ts = time.time()
+        try:
+            sb = get_supabase()
+            resp = sb.table("quota_limits").select("*").execute()
+            _quota_cache = {row["role"]: row for row in (resp.data or [])}
+            _cache_ts = time.time()
+        except Exception as e:
+            print(f"⚠️ Failed to load quota limits: {e}")
+            # Fallback defaults
+            _quota_cache = {
+                "user": {"daily_requests": 50, "daily_tokens": 100000, "daily_images": 10},
+                "admin": {"daily_requests": 999999, "daily_tokens": 999999999, "daily_images": 9999},
+                "api_client": {"daily_requests": 200, "daily_tokens": 500000, "daily_images": 50},
+            }
+            _cache_ts = time.time()
 
     return _quota_cache
 

@@ -225,19 +225,42 @@ async def classify_intent(state: MessageProcessingState) -> MessageProcessingSta
     """
     LangGraph node: Classify user intent and extract location.
     """
-    # Force use LLM for now as per user request for "stronger" and location extraction
-    # The ONNX model might be too simple for complex blocking + location extraction
-    intent, location = await analyze_intent_with_llm(
-        message=state.message,
-        history=state.history,
-        model_mode=state.model_mode
-    )
-    
-    # NORMALIZE: Use administrative manager to get official name (e.g., "TP. Đà Nẵng")
+    intent = None
+    location = None
+    use_llm = True
     admin_manager = VNAdministrativeManager()
     
+    try:
+        detector = IntentDetector.get()
+        pred = detector.predict(state.message)
+        if pred.confidence >= _CONFIDENCE_THRESHOLD:
+            # Map string to enum
+            for i in IntentType:
+                if i.value == pred.label:
+                    intent = i
+                    break
+            else:
+                intent = IntentType.PLACE_EXPLORATION
+            
+            # Check if we need LLM for location extraction
+            matches = admin_manager.scan_text(state.message)
+            if matches:
+                location = matches[0]["name"]
+                use_llm = False
+            elif intent in [IntentType.CHIT_CHAT, IntentType.NEGATIVE_FEEDBACK, IntentType.META_INSTRUCTION, IntentType.UNRELATED]:
+                use_llm = False
+    except Exception as e:
+        print(f"⚠️ ONNX Intent error: {e}")
+        pass
+        
+    if use_llm:
+        intent, location = await analyze_intent_with_llm(
+            message=state.message,
+            history=state.history,
+            model_mode=state.model_mode
+        )
+        
     if not location:
-        # FALLBACK: Scan text directly if LLM missed it
         matches = admin_manager.scan_text(state.message)
         if matches:
             location = matches[0]["name"]

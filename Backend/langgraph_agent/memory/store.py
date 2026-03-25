@@ -96,13 +96,39 @@ async def store_facts(
     Store multiple facts for user.
     Returns number of facts stored.
     """
+    client = get_supabase()
+    array_fields = ["interests", "preferred_cities", "disliked_places", "dietary_restrictions"]
     stored = 0
     
-    for fact in facts:
-        success = await store_fact(user_id, fact)
-        if success:
-            stored += 1
-    
+    if not client:
+        # Fallback to single store
+        for fact in facts:
+            if await store_fact(user_id, fact):
+                stored += 1
+    else:
+        try:
+            response = client.table("user_preferences").select("*").eq("user_id", user_id).execute()
+            current = response.data[0] if response.data else {"user_id": user_id}
+            update_data = {"user_id": user_id}
+            
+            for fact in facts:
+                if fact.key in array_fields:
+                    existing = update_data.get(fact.key, current.get(fact.key) or [])
+                    if fact.value not in existing:
+                        update_data[fact.key] = existing + [fact.value]
+                        stored += 1
+                else:
+                    if update_data.get(fact.key, current.get(fact.key)) != fact.value:
+                        update_data[fact.key] = fact.value
+                        stored += 1
+                        
+            if stored > 0:
+                client.table("user_preferences").upsert(update_data, on_conflict="user_id").execute()
+                
+        except Exception as e:
+            print(f"❌ Batch store_facts error: {e}")
+            return 0
+            
     # Invalidate cache if any facts stored
     if stored > 0:
         from ..nodes.profiler import invalidate_cache
@@ -162,16 +188,19 @@ async def log_chat(
         }).execute()
 
         # 3. Update session metadata (updated_at and message_count)
-        # Fetch current count to increment safely
-        session_res = client.table("chat_sessions").select("message_count").eq("id", session_id).execute()
-        current_count = 0
-        if session_res.data:
-            current_count = session_res.data[0].get("message_count") or 0
-        
-        client.table("chat_sessions").update({
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "message_count": current_count + 1 # Increment for the new turn
-        }).eq("id", session_id).execute()
+        try:
+            client.rpc("increment_session_message_count", {"p_session_id": session_id}).execute()
+        except:
+            # Fallback read-modify-write if RPC is not deployed yet
+            session_res = client.table("chat_sessions").select("message_count").eq("id", session_id).execute()
+            current_count = 0
+            if session_res.data:
+                current_count = session_res.data[0].get("message_count") or 0
+            
+            client.table("chat_sessions").update({
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "message_count": current_count + 1
+            }).eq("id", session_id).execute()
         
         return True
             

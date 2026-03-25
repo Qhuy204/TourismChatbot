@@ -61,15 +61,9 @@ async def perform_auto_titling(session_id: str, message: str, response: str) -> 
         client = get_supabase()
         if not client: return None
         
-        # Check how many messages exist in the session so far
-        # We only title on the very first user message.
-        res = client.table("chat_logs").select("id", count="exact").eq("session_id", session_id).execute()
-        
-        # Note: If logging happens after titling, count is 0. If before, count is 1. 
-        # We allow <= 1 just in case, or we check the title simply as a fallback.
-        # But even better: check if the title is still default OR looks like a frontend fallback (no spaces or just a slice of the message).
-        # Actually, let's just title if count <= 2 (1 round of conversation).
-        if res.count > 2:
+        # Check if the title is still default OR looks like a frontend fallback
+        res = client.table("chat_sessions").select("title").eq("id", session_id).execute()
+        if res.data and res.data[0].get("title") and res.data[0]["title"] != "Cuộc hội thoại mới":
             return None
             
         prompt = f"""Dựa vào câu hỏi và trả lời sau, hãy viết 1 tiêu đề thật ngắn gọn (4-10 từ) tóm tắt mục đích chính của user.
@@ -300,6 +294,7 @@ async def run_graph(
     message: str,
     history: List[Dict] = None,
     model_mode: str = "gemini",
+    attachments: List[Dict] = None,
     language: str = "vi"
 ) -> Dict:
     """
@@ -321,6 +316,7 @@ async def run_graph(
         "processing": None,
         "output": None,
         "model_mode": model_mode,
+        "attachments": attachments or [],
         "language": language
     }
     
@@ -462,30 +458,34 @@ async def run_graph_stream(
     timings["context"] = round((time.time() - t0) * 1000)
     print(f"⏱️ NODE: context | {timings['context']}ms")
     
-    t0 = time.time()
-    state = await node_intent(state)
-    timings["intent"] = round((time.time() - t0) * 1000)
+    # Parallel execution for Intent, Emotion, and Profile
+    t0_para = time.time()
+    from .nodes import classify_intent, detect_emotion, load_user_profile
+    
+    intent_task = asyncio.create_task(classify_intent(state["processing"]))
+    emotion_task = asyncio.create_task(detect_emotion(state["processing"]))
+    profile_task = asyncio.create_task(load_user_profile(state["user_context"]))
+    
+    state["processing"] = await intent_task
+    timings["intent"] = round((time.time() - t0_para) * 1000)
     print(f"⏱️ NODE: intent | {timings['intent']}ms")
     
     # Yield initial metadata EARLY for better UI responsiveness
     yield {
         "type": "metadata",
         "intent": state["processing"].intent.value if state["processing"].intent else "travel_query",
-        "emotion": "neutral"  # Placeholder until emotion node runs
+        "emotion": "neutral"
     }
     
-    # Run emotion detection regardless of intent (for timing and logs)
-    t0_emo = time.time()
-    state = await node_emotion(state)
-    timings["emotion"] = round((time.time() - t0_emo) * 1000)
+    state["processing"] = await emotion_task
+    timings["emotion"] = round((time.time() - t0_para) * 1000)
     print(f"⏱️ NODE: emotion | {timings['emotion']}ms")
 
     intent = state["processing"].intent
     # Full processing for all intents except chit_chat and feedback/meta
     if intent not in [IntentType.CHIT_CHAT, IntentType.NEGATIVE_FEEDBACK, IntentType.META_INSTRUCTION]:
-        t0 = time.time()
-        state = await node_profile(state)
-        timings["profile"] = round((time.time() - t0) * 1000)
+        state["user_context"] = await profile_task
+        timings["profile"] = round((time.time() - t0_para) * 1000)
         print(f"⏱️ NODE: profile | {timings['profile']}ms")
         
         t0 = time.time()
@@ -577,15 +577,17 @@ async def run_graph_stream(
         
     timings["fast_extract"] = round((time.time() - t0) * 1000)
     
-    # 2. Titling (from message 1 onwards)
-    new_title = await perform_auto_titling(
-        session_id=session_id, 
-        message=message, 
-        response=full_response
-    )
+    new_title = None
 
-    # Run memory & background tasks (Logging + Staging)
+    # Run memory & background tasks (Logging + Staging + Titling)
     async def run_bg():
+        # 2. Titling (from message 1 onwards) in background
+        await perform_auto_titling(
+            session_id=session_id, 
+            message=message, 
+            response=full_response
+        )
+        
         await node_memory(state)
         
         from .memory import log_chat
