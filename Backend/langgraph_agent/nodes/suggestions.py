@@ -108,14 +108,13 @@ YÊU CẦU BẮT BUỘC:
 1. Số lượng: Đúng 5 gợi ý.
 2. Tỷ lệ nội dung:
    - 60% (3 gợi ý): Liên quan trực tiếp đến "Các địa điểm tìm kiếm gần nhất". Hãy tập trung vào thông tin thực tế, khám phá và trải nghiệm tại các điểm này.
-   - 40% (2 gợi ý): Liên quan đến "Các chủ đề quan tâm" hoặc các địa điểm nổi tiếng khác (Ưu tiên đặc sản phở Hà Nội, món ăn đường phố ở Huế, hoặc Kiên Giang nếu phù hợp).
+   - 40% (2 gợi ý): Liên quan đến "Các chủ đề quan tâm" hoặc các địa điểm nổi tiếng khác.
 3. Phong cách: Chuyên nghiệp, lịch sự, không dùng dấu hỏi (?), không dùng emojis, không viết tắt.
-4. KHÔNG dùng "Gợi ý", "Top", "Tìm kiếm".
 
 Trả về JSON array của các object:
 [
-  {{ "text": "Ở Phong Nha có hang động nào đẹp và dễ tham quan", "category": "experience" }},
-  {{ "text": "Ăn phở bò ngon đúng vị Hà Nội thì nên đi đâu", "category": "food" }}
+  {{ "text": "Ở (Tên địa điểm) có hang động nào đẹp và dễ tham quan", "category": "experience" }},
+  {{ "text": "Ăn (Tên món ăn) ngon đúng vị (Tên địa điểm) thì nên đi đâu", "category": "food" }}
 ]"""
 
     try:

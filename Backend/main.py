@@ -664,18 +664,16 @@ Tạo {limit} gợi ý tiếp theo CHUYÊN NGHIỆP, THỰC TẾ và NGẮN GỌ
 
 QUY TẮC BẮT BUỘC:
 - 60% gợi ý liên quan đến các địa điểm đang đề cập ({', '.join(locations) if locations else 'hiện tại'}). Tập trung vào thông tin khám phá và trải nghiệm thực tế.
-- 40% gợi ý liên quan đến các chủ đề mở rộng hoặc đặc sản (Hà Nội, Huế, Kiên Giang).
+- 40% gợi ý liên quan đến các chủ đề mở rộng hoặc đặc sản.
 - Phong cách chuyên nghiệp, lịch sự, KHÔNG viết tắt, KHÔNG emojis.
-- KHÔNG dùng dấu hỏi (?), KHÔNG dùng "Gợi ý", "Top".
-- KHÔNG dùng các từ suồng sã như "nhé", "nha".
 
 Trả về JSON mẫu:
 {{
     "suggestions": [
-        {{ "text": "Hội An có món gì ngon ngoài Cao Lầu không?", "category": "food" }},
-        {{ "text": "Buổi tối ở Phố Cổ có hoạt động gì thú vị?", "category": "experience" }},
+        {{ "text": "(Tên địa điểm) có món gì ngon ngoài (Tên món ăn)?", "category": "food" }},
+        {{ "text": "Buổi tối ở (Tên địa điểm) có hoạt động gì thú vị?", "category": "experience" }},
         {{ "text": "Nên ở khách sạn nào gần trung tâm?", "category": "stay" }},
-        {{ "text": "Có tour đi Cù Lao Chàm trong ngày không?", "category": "discovery" }}
+        {{ "text": "Có tour đi (Tên địa điểm) trong ngày không?", "category": "discovery" }}
     ]
 }}"""
         
