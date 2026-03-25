@@ -242,8 +242,8 @@ export function ChatbotInterface({ initialSessionId }: { initialSessionId?: stri
     }, [initialSessionId]);
 
     useEffect(() => {
-        if (sessionManager.activeSessionId && window.location.pathname !== \/chat/\) {
-            navigate(\/chat/\, { replace: true });
+        if (sessionManager.activeSessionId && window.location.pathname !== `/chat/${sessionManager.activeSessionId}`) {
+            navigate(`/chat/${sessionManager.activeSessionId}`, { replace: true });
         }
     }, [sessionManager.activeSessionId, navigate]);
     const [emotionEnabled, setEmotionEnabled] = useState(() => localStorage.getItem('vivi-emotion-enabled') !== 'false');
