@@ -235,15 +235,28 @@ export function ChatbotInterface({ initialSessionId }: { initialSessionId?: stri
     const { appLanguage, langKey, t, setAppLanguage } = useLanguage();
 
     // Sync URL with active session to prevent F5 reload bug
+    // Sync URL with active session to prevent F5 reload bug
     useEffect(() => {
-        if (initialSessionId && initialSessionId !== sessionManager.activeSessionId) {
-            sessionManager.setActiveSession(initialSessionId);
+        if (initialSessionId) {
+            if (initialSessionId !== sessionManager.activeSessionId) {
+                sessionManager.setActiveSession(initialSessionId);
+            }
+        } else if (window.location.pathname === '/chat' || window.location.pathname === '/chat/') {
+            if (sessionManager.activeSessionId !== null) {
+                sessionManager.setActiveSession(null);
+            }
         }
     }, [initialSessionId]);
 
+    // Navigation trigger
     useEffect(() => {
-        if (sessionManager.activeSessionId && window.location.pathname !== `/chat/${sessionManager.activeSessionId}`) {
-            navigate(`/chat/${sessionManager.activeSessionId}`, { replace: true });
+        if (sessionManager.activeSessionId) {
+            if (window.location.pathname !== `/chat/${sessionManager.activeSessionId}`) {
+                navigate(`/chat/${sessionManager.activeSessionId}`, { replace: true });
+            }
+        } else if (window.location.pathname.startsWith('/chat/') && window.location.pathname !== '/chat/') {
+            // New Chat state -> navigate to base if an ID exists in URL
+            navigate('/chat', { replace: true });
         }
     }, [sessionManager.activeSessionId, navigate]);
     const [emotionEnabled, setEmotionEnabled] = useState(() => localStorage.getItem('vivi-emotion-enabled') !== 'false');
@@ -306,7 +319,9 @@ export function ChatbotInterface({ initialSessionId }: { initialSessionId?: stri
         updateFeedback, suggestions, refreshSuggestions, error,
         switchSession, fetchInitialSuggestions, initialData,
         modelMode, setModelMode, preferences, sessionId
-    } = useLangGraphChat(sessionManager.activeSessionId ?? undefined, langKey);
+    } = useLangGraphChat(sessionManager.activeSessionId ?? undefined, langKey, {
+        onFirstMessage: sessionManager.registerSession
+    });
 
     const { trackPageView, trackChatMessage } = useEventTracking();
     const [input, setInput] = useState('');
@@ -322,11 +337,11 @@ export function ChatbotInterface({ initialSessionId }: { initialSessionId?: stri
     // Fetch suggestions on new session
     const fetchedRef = useRef<string | null>(null);
     useEffect(() => {
-        console.log('[DEBUG] ChatbotInterface Check: sessionId=', sessionId, 'messages.length=', messages.length, 'isLoading=', isLoading, 'fetchedRef=', fetchedRef.current);
-        if (sessionId && messages.length === 0 && !isLoading && fetchedRef.current !== sessionId) {
-            console.log('[DEBUG] ChatbotInterface FETCHING initial suggestions for', sessionId);
-            fetchedRef.current = sessionId;
-            fetchInitialSuggestions(preferences?.askedTopics);
+        const currentSlot = sessionId || 'new-session';
+        if (messages.length === 0 && !isLoading && fetchedRef.current !== currentSlot) {
+            console.log('[DEBUG] ChatbotInterface FETCHING initial suggestions for', currentSlot);
+            fetchedRef.current = currentSlot;
+            fetchInitialSuggestions(preferences?.askedTopics, true);
         }
     }, [sessionId, messages.length, isLoading, fetchInitialSuggestions, preferences]);
 
@@ -381,14 +396,8 @@ export function ChatbotInterface({ initialSessionId }: { initialSessionId?: stri
 
     const handleSubmit = async (e?: React.FormEvent) => {
         e?.preventDefault();
-        let sid = sessionManager.activeSessionId;
+        const sid = sessionId;
         if (!input.trim() && attachments.length === 0) return;
-
-        // On-demand session creation if none is active
-        if (!sid) {
-            sid = await sessionManager.createSession(input.substring(0, 30) || 'Cuộc trò chuyện mới');
-            if (!sid) return;
-        }
 
         const msg = input.trim();
         setInput('');
@@ -410,10 +419,10 @@ export function ChatbotInterface({ initialSessionId }: { initialSessionId?: stri
             msg,
             attachments.length > 0 ? attachments.map(a => ({ url: a.url, type: a.mimeType, name: a.name })) : undefined,
             sessionManager.memoryShareEnabled,
-            (newTitle: string) => sessionManager.renameSession(sid!, newTitle),
+            (newTitle: string) => sid && sessionManager.renameSession(sid, newTitle),
             undefined, // modelMode
             langKey,
-            sid // Provide exactly this SID as an override to ensure no async wiping
+            sid ?? undefined // Provide exactly this SID (or undefined)
         );
     };
 
@@ -469,14 +478,10 @@ export function ChatbotInterface({ initialSessionId }: { initialSessionId?: stri
 
     const handleSuggestion = async (text: string) => {
         if (isLoading) return;
-        let sid = sessionManager.activeSessionId;
-        if (!sid) {
-            sid = await sessionManager.createSession(text.substring(0, 30) || 'Cuộc trò chuyện mới');
-            if (!sid) return;
-        }
+        const sid = sessionId;
 
         trackChatMessage('user', `(suggestion) ${text}`);
-        sendMessage(text, undefined, sessionManager.memoryShareEnabled, (t: string) => sessionManager.renameSession(sid!, t), undefined, langKey, sid);
+        sendMessage(text, undefined, sessionManager.memoryShareEnabled, (t: string) => sid && sessionManager.renameSession(sid, t), undefined, langKey, sid ?? undefined);
     };
 
     const handleSessionChange = (sid: string) => {
@@ -877,34 +882,12 @@ export function ChatbotInterface({ initialSessionId }: { initialSessionId?: stri
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
                                         {suggestions.slice(0, 5).map((s, i) => {
                                             const text = typeof s === 'string' ? s : (s as { text: string }).text;
-                                            // Fix 2: Count how many times user asked about locations in this suggestion
-                                            const topicCounts = preferences?.topicCounts || {};
-                                            let matchCount = 0;
-                                            const lowerText = text.toLowerCase();
-                                            Object.entries(topicCounts).forEach(([topic, count]) => {
-                                                if (lowerText.includes(topic.toLowerCase()) || topic.toLowerCase().includes(lowerText.split(' ').slice(-1)[0])) {
-                                                    matchCount += count as number;
-                                                }
-                                            });
                                             return (
                                                 <button key={i} onClick={() => handleSuggestion(text)} style={{ position: 'relative', padding: '7px 16px', borderRadius: 100, border: '1px solid var(--border)', background: 'var(--bg-card)', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'inherit', transition: 'all 0.2s' }}
                                                     onMouseOver={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.color = 'var(--primary)'; }}
                                                     onMouseOut={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
                                                 >
                                                     {text}
-                                                    {matchCount > 0 && (
-                                                        <span style={{
-                                                            position: 'absolute', top: -6, right: -6,
-                                                            minWidth: 18, height: 18, borderRadius: '50%',
-                                                            background: '#ef4444', color: 'white',
-                                                            fontSize: 10, fontWeight: 700,
-                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                            padding: '0 4px', lineHeight: 1,
-                                                            boxShadow: '0 2px 6px rgba(239,68,68,0.4)',
-                                                        }}>
-                                                            {matchCount}
-                                                        </span>
-                                                    )}
                                                 </button>
                                             );
                                         })}

@@ -25,6 +25,8 @@ export interface ChatMessage {
     attachments?: Array<{ url: string; type: string; name: string }>;
     emotion?: string;
     intent?: string;
+    /** FIX FE#3: Backend chat_log row ID, used for precise feedback updates */
+    logId?: string;
 }
 
 export interface SuggestionItem {
@@ -35,7 +37,11 @@ export interface SuggestionItem {
 // Per-session message cache (avoids re-fetching on tab switch)
 const sessionMessagesCache: Record<string, ChatMessage[]> = {};
 
-export function useLangGraphChat(initialSessionId?: string, language: string = 'vi') {
+export function useLangGraphChat(
+    initialSessionId?: string,
+    language: string = 'vi',
+    options?: { onFirstMessage?: (sessionId: string, title: string, firstMessage: string) => void }
+) {
     const { user } = useAuth();
     const {
         sessionId: savedSessionId,
@@ -80,12 +86,26 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
     }, [user?.id]);
     const [error, setError] = useState<string | null>(null);
 
-    const sidRef = useRef<string>(initialSessionId || savedSessionId || '');
+    const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
+    const sidRef = useRef<string | null>(sessionId);
+    const [isRegistered, setIsRegistered] = useState(false);
 
-    // Generate UUID lazily only when we are sure we need a NEW session
-    if (!sidRef.current && !initialSessionId && !savedSessionId && cookiesLoaded) {
-        sidRef.current = crypto.randomUUID();
-    }
+    // Sync ref with state
+    useEffect(() => {
+        sidRef.current = sessionId;
+    }, [sessionId]);
+
+    // Sync isRegistered based on sessionId availability
+    useEffect(() => {
+        if (sessionId) {
+            // We only set isRegistered if it's already in the sessions list
+            // or if it was explicitly passed as initial/saved.
+            // For now, assume any existing ID is registered until known otherwise.
+            setIsRegistered(true);
+        } else {
+            setIsRegistered(false);
+        }
+    }, [sessionId]);
 
     // Load chat history when session + auth ready
     useEffect(() => {
@@ -96,9 +116,13 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
 
             setIsLoading(true);
             try {
-                const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/history/${sid}`);
-                if (!res.ok) throw new Error('Failed');
-                const data = await res.json();
+                const { data: { session } } = await supabase.auth.getSession();
+                const token = session?.access_token;
+                const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/history/${sid}`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                });
+                if (!response.ok) throw new Error('Failed');
+                const data = await response.json();
 
                 const loaded: ChatMessage[] = (data.history || []).map((log: Record<string, unknown>) => ({
                     id: String(log.id),
@@ -138,23 +162,30 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         // Cleanup old session if it was empty before switching
         if (messages.length === 0 && sidRef.current) {
             console.log('[DEBUG] Cleaning up old empty session:', sidRef.current);
-            fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
-                method: 'DELETE'
-            }).catch(e => console.warn('Failed to cleanup empty session:', e));
+            // This fetch is not awaited and runs in the background
+            supabase.auth.getSession().then(({ data: { session } }) => {
+                const token = session?.access_token;
+                fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
+                    method: 'DELETE',
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                }).catch(e => console.warn('Failed to cleanup empty session:', e));
+            });
         }
 
         if (!initialSessionId) {
-            const newSid = crypto.randomUUID();
-            console.log('[DEBUG] Generating new empty session:', newSid);
-            sidRef.current = newSid;
+            console.log('[DEBUG] Switching to truly New Chat (lazy id)');
+            sidRef.current = null;
+            setSessionId(null);
             setMessages([]);
             setSuggestions([]);
+            setIsRegistered(false);
             setError(null);
             return;
         }
 
         console.log('[DEBUG] Switching to existing session:', initialSessionId);
         sidRef.current = initialSessionId;
+        setSessionId(initialSessionId);
         setSuggestions([]);
         setError(null);
 
@@ -168,30 +199,36 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         console.log('[DEBUG] Session NOT in cache, fetching history for:', initialSessionId);
         setMessages([]); // Clear old messages immediately
         setIsLoading(true);
-        fetch(`${LANGGRAPH_API_URL}/langgraph/history/${initialSessionId}`)
-            .then(r => {
-                if (!r.ok) throw new Error('API error');
-                return r.json();
+        // This fetch is not awaited and runs in the background
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            const token = session?.access_token;
+            fetch(`${LANGGRAPH_API_URL}/langgraph/history/${initialSessionId}`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
             })
-            .then(data => {
-                const msgs: ChatMessage[] = (data.history || []).map((log: Record<string, unknown>) => ({
-                    id: String(log.id),
-                    role: log.role as 'user' | 'assistant',
-                    content: log.message as string,
-                    timestamp: new Date(log.created_at as string),
-                    emotion: log.role === 'assistant' ? (log.context as Record<string, unknown>)?.emotion as string : undefined,
-                    intent: log.role === 'assistant' ? (log.context as Record<string, unknown>)?.intent as string : undefined,
-                    attachments: log.role === 'user' ? (log.context as Record<string, unknown>)?.attachments as any[] : undefined,
-                }));
-                console.log('[DEBUG] Fetched history for', initialSessionId, 'length:', msgs.length);
-                setMessages(msgs);
-                sessionMessagesCache[initialSessionId] = msgs;
-            })
-            .catch(err => {
-                console.error('Failed to load session history:', err);
-                setError('Không thể tải lịch sử cuộc trò chuyện');
-            })
-            .finally(() => setIsLoading(false));
+                .then(r => {
+                    if (!r.ok) throw new Error('API error');
+                    return r.json();
+                })
+                .then(data => {
+                    const msgs: ChatMessage[] = (data.history || []).map((log: Record<string, unknown>) => ({
+                        id: String(log.id),
+                        role: log.role as 'user' | 'assistant',
+                        content: log.message as string,
+                        timestamp: new Date(log.created_at as string),
+                        emotion: log.role === 'assistant' ? (log.context as Record<string, unknown>)?.emotion as string : undefined,
+                        intent: log.role === 'assistant' ? (log.context as Record<string, unknown>)?.intent as string : undefined,
+                        attachments: log.role === 'user' ? (log.context as Record<string, unknown>)?.attachments as any[] : undefined,
+                    }));
+                    console.log('[DEBUG] Fetched history for', initialSessionId, 'length:', msgs.length);
+                    setMessages(msgs);
+                    sessionMessagesCache[initialSessionId] = msgs;
+                })
+                .catch(err => {
+                    console.error('Failed to load session history:', err);
+                    setError('Không thể tải lịch sử cuộc trò chuyện');
+                })
+                .finally(() => setIsLoading(false));
+        });
     }, [initialSessionId]);
 
     // Cleanup empty session on component unmount
@@ -199,10 +236,15 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         return () => {
             if (messages.length === 0 && sidRef.current) {
                 // Use keepalive or Beacon API if possible, but fetch is usually fine for simple unmounts
-                fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
-                    method: 'DELETE',
-                    keepalive: true
-                }).catch(() => { });
+                // This fetch is not awaited and runs in the background
+                supabase.auth.getSession().then(({ data: { session } }) => {
+                    const token = session?.access_token;
+                    fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
+                        method: 'DELETE',
+                        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                        keepalive: true
+                    }).catch(() => { });
+                });
             }
         };
     }, [messages.length]);
@@ -214,11 +256,11 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
 
     // Cache messages
     useEffect(() => {
-        if (messages.length > 0 && !messages.some(m => m.isLoading)) {
+        if (messages.length > 0 && !messages.some(m => m.isLoading) && sidRef.current) {
             console.log('[DEBUG] useLangGraphChat: caching messages for', sidRef.current, 'count:', messages.length);
             sessionMessagesCache[sidRef.current] = messages;
         }
-    }, [messages, sidRef.current]);
+    }, [messages, sessionId]);
 
     // Note: Removed frontend auto-title fallback to rely entirely on backend SLM
 
@@ -238,11 +280,24 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
     ) => {
         setError(null);
 
-        if (overrideSessionId && overrideSessionId !== sidRef.current) {
-            sidRef.current = overrideSessionId;
+        let currentSid = overrideSessionId || sessionId;
+        let needsRegistration = !isRegistered;
+
+        if (!currentSid) {
+            currentSid = crypto.randomUUID();
+            setSessionId(currentSid);
+            needsRegistration = true;
+        } else if (overrideSessionId && overrideSessionId !== sessionId) {
+            setSessionId(overrideSessionId);
+            needsRegistration = false; // Assume existing if overridden
+            setIsRegistered(true);
         }
 
-        const currentSid = sidRef.current;
+        // Register session if first message
+        if (needsRegistration && options?.onFirstMessage) {
+            options.onFirstMessage(currentSid, 'Cuộc hội thoại mới', content.trim());
+            setIsRegistered(true);
+        }
 
         // Track topic for histogram-based recommendations
         trackTopic(content.trim());
@@ -282,9 +337,14 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         setIsLoading(true);
 
         try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
             const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/chat/stream`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
                 body: JSON.stringify({
                     user_id: user!.id,
                     session_id: currentSid,
@@ -304,13 +364,20 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
             if (!reader) throw new Error('No reader');
 
             let assistantContent = '';
+            // FIX FE#1: Buffer for incomplete SSE lines split across chunk boundaries
+            let sseBuffer = '';
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
-                const chunk = decoder.decode(value);
-                for (const line of chunk.split('\n')) {
+                sseBuffer += decoder.decode(value, { stream: true });
+                // Split on newlines but only process complete lines
+                const lines = sseBuffer.split('\n');
+                // The last element may be an incomplete line — keep it in the buffer
+                sseBuffer = lines.pop() ?? '';
+
+                for (const line of lines) {
                     if (!line.startsWith('data: ')) continue;
                     try {
                         const data = JSON.parse(line.slice(6));
@@ -325,6 +392,12 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
                                 m.id === loadingMsg.id ? { ...m, content: assistantContent, isLoading: false } : m
                             ));
                         } else if (data.type === 'final') {
+                            // FIX FE#2: Always clear isLoading on 'final', even if no content arrived
+                            setMessages(prev => prev.map(m =>
+                                m.id === loadingMsg.id
+                                    ? { ...m, isLoading: false, logId: data.log_id ?? undefined }
+                                    : m
+                            ));
                             setSuggestions(data.suggested_prompts || []);
 
                             if (data.new_title && onNewTitle) onNewTitle(data.new_title);
@@ -343,6 +416,10 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
                                 });
                             }
                         } else if (data.type === 'error') {
+                            // FIX FE#2: Always clear isLoading on 'error'
+                            setMessages(prev => prev.map(m =>
+                                m.id === loadingMsg.id ? { ...m, isLoading: false } : m
+                            ));
                             throw new Error(data.message);
                         }
                     } catch (e) {
@@ -376,7 +453,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
                 }, 0);
             }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id, modelMode, trackTopic, updateRecentLocations]);
 
     // sendMessage: public API — queues if busy, sends immediately if idle
@@ -440,9 +517,14 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         const recentLocations = preferences?.recentLocations || [];
 
         try {
-            const res = await fetch(`${LANGGRAPH_API_URL}/langgraph/initial_suggestions`, {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/initial_suggestions`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
                 body: JSON.stringify({
                     user_id: user.id,
                     topics: mergedTopics,
@@ -450,8 +532,8 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
                     language: language
                 }),
             });
-            if (res.ok) {
-                const data = await res.json();
+            if (response.ok) {
+                const data = await response.json();
                 setInitialData(data);
                 if (messages.length === 0 || forceSet) setSuggestions(data.suggestions || []);
             }
@@ -503,13 +585,19 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
     // clearMessages
     const clearMessages = useCallback(() => {
         if (messages.length === 0 && sidRef.current) {
-            fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
-                method: 'DELETE'
-            }).catch(e => console.warn('Failed to cleanup empty session:', e));
+            supabase.auth.getSession().then(({ data: { session } }) => {
+                const token = session?.access_token;
+                fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/cleanup/${sidRef.current}`, {
+                    method: 'DELETE',
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                }).catch(e => console.warn('Failed to cleanup empty session:', e));
+            });
         }
         setMessages([]);
         setSuggestions([]);
-        sidRef.current = crypto.randomUUID();
+
+        setSessionId(null);
+        setIsRegistered(false);
     }, [messages.length]);
 
     // updateFeedback
@@ -517,23 +605,30 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         setMessages(prev => prev.map(m => m.id === messageId ? { ...m, feedbackScore: score } : m));
 
         const msg = messages.find(m => m.id === messageId);
-        if (msg && user?.id) {
-            await supabase.from('chat_logs')
-                .update({ feedback_score: score })
-                .eq('user_id', user.id)
-                .eq('session_id', sidRef.current)
-                .eq('role', msg.role)
-                .ilike('message', msg.content.slice(0, 100) + '%')
-                .then(() => { });
+        if (msg && user?.id && sidRef.current) {
+            if (msg.logId) {
+                // FIX FE#3: Update by exact DB row ID instead of content prefix match
+                await supabase.from('chat_logs')
+                    .update({ feedback_score: score })
+                    .eq('id', msg.logId);
+            } else {
+                // Fallback for old messages without logId stored
+                await supabase.from('chat_logs')
+                    .update({ feedback_score: score })
+                    .eq('user_id', user.id)
+                    .eq('session_id', sidRef.current)
+                    .eq('role', msg.role)
+                    .ilike('message', msg.content.slice(0, 100) + '%');
+            }
         }
     }, [messages, user?.id]);
 
     // switchSession
     const switchSession = useCallback((newSid: string) => {
-        if (messages.length > 0 && !messages.some(m => m.isLoading)) {
+        if (messages.length > 0 && !messages.some(m => m.isLoading) && sidRef.current) {
             sessionMessagesCache[sidRef.current] = messages;
         }
-        // Let the useEffect handle the actual loading, we just cache the current
+        // Let the useEffect handle the actual loading
     }, [messages]);
 
     return {
@@ -547,7 +642,7 @@ export function useLangGraphChat(initialSessionId?: string, language: string = '
         clearMessages,
         updateFeedback,
         switchSession,
-        sessionId: sidRef.current,
+        sessionId,
         fetchInitialSuggestions,
         initialData,
         modelMode,

@@ -5,7 +5,7 @@ import { getAdminApiBaseUrl } from '@/lib/api-config';
 import { toast } from 'sonner';
 import {
     Card, Row, Col, Statistic, Button, Table, Input, Select, Tag,
-    Space, Typography, Tooltip, Badge,
+    Space, Typography, Tooltip, Badge, Progress
 } from 'antd';
 import {
     EnvironmentOutlined, ThunderboltOutlined, ClockCircleOutlined,
@@ -86,7 +86,11 @@ export default function AdminLocations() {
         queryFn: async () => {
             const h = await getAuthHeaders();
             const r = await fetch(`${apiUrl}/langgraph/locations/staging-stats`, { headers: h });
-            return r.json() as Promise<{ staged_count: number; oldest_staged_at: string | null }>;
+            return r.json() as Promise<{
+                staged_count: number;
+                max_staged_items: number;
+                oldest_staged_at: string | null
+            }>;
         },
         refetchInterval: 15000,
     });
@@ -145,49 +149,73 @@ export default function AdminLocations() {
 
     /* ─── Table columns ─── */
     const queueCols = [
-        { title: 'Log ID', dataIndex: 'log_id', width: 80,
-            render: (v: number) => <Text code style={{ fontSize: 11 }}>#{v}</Text> },
-        { title: 'Session', dataIndex: 'session_id', width: 90,
-            render: (v: string) => <Text type="secondary" style={{ fontSize: 11 }}>{v}</Text> },
-        { title: 'Intent', dataIndex: 'intent', width: 130,
-            render: (v: string) => <Tag color={INTENT_COLORS[v] ?? 'default'} style={{ fontSize: 10 }}>{v || '?'}</Tag> },
-        { title: 'Câu hỏi', dataIndex: 'user_preview',
-            render: (v: string) => <Text type="secondary" style={{ fontSize: 12 }}>{v || '–'}</Text> },
-        { title: 'Response bot (preview)', dataIndex: 'response_preview',
+        {
+            title: 'Log ID', dataIndex: 'log_id', width: 80,
+            render: (v: number) => <Text code style={{ fontSize: 11 }}>#{v}</Text>
+        },
+        {
+            title: 'Session', dataIndex: 'session_id', width: 90,
+            render: (v: string) => <Text type="secondary" style={{ fontSize: 11 }}>{v}</Text>
+        },
+        {
+            title: 'Intent', dataIndex: 'intent', width: 130,
+            render: (v: string) => <Tag color={INTENT_COLORS[v] ?? 'default'} style={{ fontSize: 10 }}>{v || '?'}</Tag>
+        },
+        {
+            title: 'Câu hỏi', dataIndex: 'user_preview',
+            render: (v: string) => <Text type="secondary" style={{ fontSize: 12 }}>{v || '–'}</Text>
+        },
+        {
+            title: 'Response bot (preview)', dataIndex: 'response_preview',
             render: (v: string) => (
                 <Tooltip title={v} placement="topLeft">
-                    <Text style={{ fontSize: 12, display: 'block', maxWidth: 360,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <Text style={{
+                        fontSize: 12, display: 'block', maxWidth: 360,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                    }}>
                         {v || '–'}
                     </Text>
                 </Tooltip>
-            ) },
-        { title: 'Staged lúc', dataIndex: 'staged_at', width: 90,
+            )
+        },
+        {
+            title: 'Staged lúc', dataIndex: 'staged_at', width: 90,
             render: (v: string) => <Text type="secondary" style={{ fontSize: 11 }}>
                 {v ? new Date(v).toLocaleTimeString('vi-VN') : '–'}
-            </Text> },
+            </Text>
+        },
     ];
 
     const cacheCols = [
-        { title: 'Tên địa điểm', dataIndex: 'name',
-            render: (v: string) => <strong>{v}</strong> },
+        {
+            title: 'Tên địa điểm', dataIndex: 'name',
+            render: (v: string) => <strong>{v}</strong>
+        },
         { title: 'Tỉnh/Thành', dataIndex: 'province', width: 130 },
         { title: 'Thành phố', dataIndex: 'city', width: 130 },
-        { title: 'Danh mục', dataIndex: 'category', width: 110,
-            render: (v: string) => <Tag color={CATEGORY_COLORS[v] ?? 'default'}>{v || 'other'}</Tag> },
-        { title: 'Mô tả', dataIndex: 'description',
+        {
+            title: 'Danh mục', dataIndex: 'category', width: 110,
+            render: (v: string) => <Tag color={CATEGORY_COLORS[v] ?? 'default'}>{v || 'other'}</Tag>
+        },
+        {
+            title: 'Mô tả', dataIndex: 'description',
             render: (v: string) => (
                 <Tooltip title={v}>
-                    <Text type="secondary" style={{ fontSize: 12, display: 'block', maxWidth: 260,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <Text type="secondary" style={{
+                        fontSize: 12, display: 'block', maxWidth: 260,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                    }}>
                         {v || '–'}
                     </Text>
                 </Tooltip>
-            ) },
-        { title: 'Ngày lưu', dataIndex: 'extracted_at', width: 130,
+            )
+        },
+        {
+            title: 'Ngày lưu', dataIndex: 'extracted_at', width: 130,
             render: (v: string) => <Text type="secondary" style={{ fontSize: 11 }}>
                 {v ? new Date(v).toLocaleString('vi-VN') : '–'}
-            </Text> },
+            </Text>
+        },
     ];
 
     return (
@@ -222,13 +250,26 @@ export default function AdminLocations() {
                         <Statistic
                             title="⏳ Staging Queue"
                             value={stats?.staged_count ?? 0}
+                            suffix={stats?.max_staged_items ? `/ ${stats.max_staged_items}` : ''}
                             valueStyle={{ color: '#d29922', fontWeight: 800 }}
                         />
-                        <Text type="secondary" style={{ fontSize: 11 }}>
-                            {stats?.oldest_staged_at
-                                ? 'Từ ' + new Date(stats.oldest_staged_at).toLocaleTimeString('vi-VN')
-                                : 'Queue trống'}
-                        </Text>
+                        {stats?.max_staged_items ? (
+                            <div style={{ marginTop: 8 }}>
+                                <Progress
+                                    percent={Math.min(100, Math.round((stats.staged_count / stats.max_staged_items) * 100))}
+                                    size="small"
+                                    showInfo={false}
+                                    strokeColor="#d29922"
+                                    trailColor="rgba(210, 153, 34, 0.1)"
+                                />
+                            </div>
+                        ) : (
+                            <Text type="secondary" style={{ fontSize: 11 }}>
+                                {stats?.oldest_staged_at
+                                    ? 'Từ ' + new Date(stats.oldest_staged_at).toLocaleTimeString('vi-VN')
+                                    : 'Queue trống'}
+                            </Text>
+                        )}
                     </Card>
                 </Col>
                 <Col xs={12} sm={6}>

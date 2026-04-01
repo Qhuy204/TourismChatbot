@@ -14,11 +14,11 @@ LLAMA_SERVER_BIN = os.path.join(
 )
 MODEL_GGUF = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "model", "Qwen3-VL8B", "qwen3-vl-8b-instruct-q4_k_m.gguf"
+    "model", "Qwen3-VL8B", "Qwen3VL-8B-Instruct-Q4_K_M.gguf"
 )
 MMPROJ_GGUF = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "model", "Qwen3-VL8B", "mmproj-f16.gguf"
+    "model", "Qwen3-VL8B", "mmproj-Qwen3VL-8B-Instruct-F16.gguf"
 )
 
 LLAMA_HOST = "127.0.0.1"
@@ -194,8 +194,8 @@ class LlamaClient:
     ) -> dict | list:
         """Generate structured JSON using local model with GBNF grammar."""
         
-        # Generic JSON grammar components
-        obj_def = """object ::= "{" ws ( pair ( "," ws pair )* )? "}" ws
+        # Generic JSON grammar components (FIX: use raw string to preserve backslashes for GBNF)
+        obj_def = r"""object ::= "{" ws ( pair ( "," ws pair )* )? "}" ws
 pair   ::= string ":" ws value
 array  ::= "[" ws ( value ( "," ws value )* )? "]" ws
 value  ::= object | array | string | number | "true" | "false" | "null"

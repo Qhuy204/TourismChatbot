@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+    <!-- Large Language Model Settings -->
+    <llm>
+        <gemini_model>gemini-1.5-flash</gemini_model>
+        <temperature_default>0.4</temperature_default>
+        <temperature_local>0.3</temperature_local>
+        <max_tokens_limit>1024</max_tokens_limit>
+    </llm>
+
+    <!-- Chat & Interface Constraints -->
+    <chat>
+        <max_message_length>2000</max_message_length>
+        <default_session_title>Cuộc hội thoại mới</default_session_title>
+        <history_context_limit>5</history_context_limit>
+    </chat>
+
+    <!-- Suggestion Behavior -->
+    <suggestions>
+        <initial_suggestions_limit>5</initial_suggestions_limit>
+        <contextual_suggestions_limit>4</contextual_suggestions_limit>
+        <default_cities>Hà Nội, Hội An, Phú Quốc</default_cities>
+    </suggestions>
+
+    <!-- Retrieval (RAG) Parameters -->
+    <retrieval>
+        <vector_search_k>10</vector_search_k>
+        <rag_final_k>3</rag_final_k>
+        <min_retrieval_score>0.5</min_retrieval_score>
+        <location_boost_value>0.15</location_boost_value>
+        <image_verify_timeout>1.5</image_verify_timeout>
+    </retrieval>
+
+    <!-- Data Staging & Processing (Lazy Extraction) -->
+    <database>
+        <duplicate_threshold>0.85</duplicate_threshold>
+        <extraction_staging_limit>3</extraction_staging_limit>
+        <extraction_batch_size>5</extraction_batch_size>
+        <extraction_cycle_seconds>60</extraction_cycle_seconds>
+    </database>
+
+    <!-- System Defaults -->
+    <system>
+        <default_language>vi</default_language>
+        <use_llama_mode>false</use_llama_mode>
+    </system>
+</config>

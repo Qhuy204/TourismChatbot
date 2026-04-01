@@ -4,6 +4,7 @@ from ..state import MessageProcessingState, UserContextState, OutputState, Emoti
 from ..utils.gemini_client import gemini_fast, gemini_pro
 from ..utils.llama_client import llama_client
 from ..utils.system_state import get_use_llama
+from utils.config_manager import config
 from .retriever import format_context_for_prompt
 from .summarizer import build_context_prompt
 
@@ -66,20 +67,52 @@ def build_system_prompt(
     
     prompt_parts = base_prompts.get(language, base_prompts["vi"]).copy()
     
-    # Add user preferences if available
+    # 1. Focus instruction (Highest Priority)
+    location_focus = ""
+    # We can't easily get processing_state here without passing it, but we can infer from user_context
+    # Actually, build_system_prompt is called with user_context only.
+    
+    # 2. Add user preferences if available (Label as background info)
     if user_context.preferred_cities:
         cities = ", ".join(user_context.preferred_cities[:3])
-        pref_label = {"vi": "User thích", "en": "User likes", "zh": "用户喜欢"}.get(language, "User thích")
-        prompt_parts.append(f"{pref_label}: {cities}.")
+        pref_label = {
+            "vi": "Thông tin bổ sung về sở thích người dùng (CHỈ dùng để tham khảo phong cách, KHÔNG tự ý lồng vào địa điểm hiện tại nếu không liên quan)",
+            "en": "Additional information about user preferences (Reference ONLY, DO NOT mix into current location unless relevant)",
+            "zh": "关于用户偏好的补充信息（仅供参考，除非相关，否则不要混合到当前位置）"
+        }.get(language, "Sở thích người dùng")
+        prompt_parts.append(f"\n{pref_label}: {cities}.")
     
     if user_context.travel_style:
-        style_label = {"vi": "Phong cách du lịch", "en": "Travel style", "zh": "旅行风格"}.get(language, "Phong cách du lịch")
+        style_label = {"vi": "Phong cách du lịch ưu thích", "en": "Preferred travel style", "zh": "喜欢的旅行风格"}.get(language, "Phong cách du lịch")
         prompt_parts.append(f"{style_label}: {user_context.travel_style}.")
     
     if user_context.interests:
         interests = ", ".join(user_context.interests[:3])
-        interest_label = {"vi": "Sở thích", "en": "Interests", "zh": "兴趣"}.get(language, "Sở thích")
+        interest_label = {"vi": "Chủ đề quan tâm", "en": "Interests", "zh": "兴趣"}.get(language, "Sở thích")
         prompt_parts.append(f"{interest_label}: {interests}.")
+
+    # Add strict isolation rule
+    isolation_rule = {
+        "vi": """
+QUY TẮC CỐT LÕI: 
+1. Tập trung tuyệt đối vào địa điểm người dùng đang hỏi trong tin nhắn mới nhất.
+2. KHÔNG tự ý gợi ý các địa điểm ở xa (vd: đang ở miền Bắc KHÔNG gợi ý đi Đà Lạt, Phú Quốc) trừ khi người dùng yêu cầu 'đi đâu tiếp theo' hoặc 'chuyến đi dài ngày'.
+3. KIỂM TRA THỰC TẾ: Đảm bảo các địa danh (như 'Thung Lũng Cầu Đất', 'Hồ Xuân Hương') thuộc đúng tỉnh/thành đang thảo luận. Đừng để bị nhầm lẫn bởi địa điểm trong 'Sở thích'.
+""",
+        "en": """
+CORE RULES:
+1. Focus strictly on the location mentioned in the latest user message.
+2. DO NOT suggest geographically distant locations (e.g., if in North, DON'T suggest Đà Lạt or Phú Quốc) unless the user asks for 'where to go next' or a 'long trip'.
+3. FACT CHECK: Ensure landmarks (like 'Cầu Đất', 'Xuân Hương Lake') actually belong to the province/city being discussed. Don't let 'User Preferences' confuse you.
+""",
+        "zh": """
+核心规则：
+1. 严格关注最新消息中提到的地点。
+2. 除非用户要求“下一步去哪里”或“长途旅行”，否则不要建议地理位置偏远的地点（例如，如果在北部，不要建议去大叻或富国岛）。
+3. 事实核查：确保地标（如“Cầu Đất”、“Xuân Hương Lake”）确实属于正在讨论的省/市。 不要让“用户偏好”使您感到困惑。
+"""
+    }.get(language, "")
+    prompt_parts.append(isolation_rule)
     
     # Intent-specific instructions
     intent_instr = {
@@ -181,8 +214,8 @@ async def generate_response(
                 response_text = await llama_client.generate(
                     prompt=final_prompt,
                     system_instruction=system_prompt,
-                    temperature=0.7,
-                    max_tokens=2048
+                    temperature=config.get('llm.temperature_local', 0.3),
+                    max_tokens=config.get('llm.max_tokens_limit', 1024)
                 )
                 model_name = "qwen3-vl-8b-gguf-llama.cpp"
             else:
@@ -190,8 +223,8 @@ async def generate_response(
                 response_text = await qwen_client.generate(
                     prompt=final_prompt,
                     system_instruction=system_prompt,
-                    temperature=0.7,
-                    max_tokens=2048
+                    temperature=config.get('llm.temperature_local', 0.3),
+                    max_tokens=config.get('llm.max_tokens_limit', 1024)
                 )
                 model_name = "qwen3-vl-8b-unsloth"
         else:
@@ -200,8 +233,8 @@ async def generate_response(
             response_text = await client.generate(
                 prompt=final_prompt,
                 system_instruction=system_prompt,
-                temperature=0.7,
-                max_tokens=2048
+                temperature=config.get('llm.temperature_default', 0.4),
+                max_tokens=config.get('llm.max_tokens_limit', 1024)
             )
             model_name = client.model_name
         
@@ -340,8 +373,8 @@ async def generate_response_stream(
             async for chunk in llama_client.stream_generate(
                 prompt=final_prompt,
                 system_instruction=system_prompt,
-                temperature=0.7,
-                max_tokens=4096,
+                temperature=config.get('llm.temperature_local', 0.3),
+                max_tokens=2048,
                 image_urls=image_urls if image_urls else None
             ):
                 yield chunk
@@ -350,8 +383,8 @@ async def generate_response_stream(
             async for chunk in qwen_client.stream_generate(
                 prompt=final_prompt,
                 system_instruction=system_prompt,
-                temperature=0.7,
-                max_tokens=4096,
+                temperature=config.get('llm.temperature_local', 0.3),
+                max_tokens=2048,
                 image_urls=image_urls if image_urls else None
             ):
                 yield chunk
@@ -360,8 +393,8 @@ async def generate_response_stream(
         async for chunk in gemini_fast.generate_stream(
             prompt=final_prompt,
             system_instruction=system_prompt,
-            temperature=0.7,
-            max_tokens=4096,
+            temperature=config.get('llm.temperature_default', 0.4),
+            max_tokens=2048,
             image_urls=image_urls if image_urls else None
         ):
             yield chunk

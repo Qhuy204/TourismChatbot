@@ -31,16 +31,17 @@ class GraphState(TypedDict):
     session_id: str
     message: str
     history: List[Dict]
-    
+    attachments: List[Dict]  # FIX #2: was missing from TypedDict
+
     # User context
     user_context: UserContextState
-    
+
     # Processing
     processing: MessageProcessingState
-    
+
     # Output
     output: OutputState
-    
+
     # Configuration
     model_mode: str
     language: str
@@ -50,13 +51,15 @@ class GraphState(TypedDict):
 # Helpers
  
 
-async def perform_auto_titling(session_id: str, message: str, response: str) -> str:
+async def perform_auto_titling(session_id: str, message: str, response: str, mode: str = "gemini") -> str:
     """
-    Helper to generate and store a title using Gemini Fast SLM for abstractive summarization.
+    Helper to generate and store a title using SLM for abstractive summarization.
+    Supports both Gemini and Llama backends.
     """
     try:
         from .memory.store import get_supabase
         from .utils.gemini_client import gemini_fast
+        from .utils.llama_client import llama_client
         
         client = get_supabase()
         if not client: return None
@@ -71,8 +74,26 @@ Tiêu đề phải là tiếng Việt, viết hoa chữ cái đầu tiên. KHÔN
 Câu hỏi: {message}
 Trả lời: {response}"""
         
-        title = await gemini_fast.generate(prompt=prompt, temperature=0.7)
-        new_title = title.strip().strip('"').strip("'").strip("*").strip(".")
+        new_title = None
+        
+        # Try preferred mode first
+        if mode == "qwen" or mode == "llama":
+            try:
+                new_title = await llama_client.generate(prompt=prompt, temperature=0.7, max_tokens=100)
+            except Exception as e:
+                print(f"⚠️ Auto-titling: Llama failed, falling back to Gemini... ({e})")
+                new_title = await gemini_fast.generate(prompt=prompt, temperature=0.7)
+        else:
+            try:
+                new_title = await gemini_fast.generate(prompt=prompt, temperature=0.7)
+            except Exception as e:
+                print(f"⚠️ Auto-titling: Gemini failed, falling back to Llama... ({e})")
+                new_title = await llama_client.generate(prompt=prompt, temperature=0.7, max_tokens=100)
+
+        if not new_title:
+            return None
+
+        new_title = new_title.strip().strip('"').strip("'").strip("*").strip(".")
         
         # Capitalize first letter safely
         if new_title:
@@ -83,7 +104,7 @@ Trả lời: {response}"""
                 "title": new_title,
                 "first_message": message[:100]
             }).eq("id", session_id).execute()
-            print(f"🏷️ Auto-titled session with SLM: {new_title}")
+            print(f"🏷️ Auto-titled session with {mode if new_title else 'fallback'}: {new_title}")
             return new_title
     except Exception as e:
         print(f"⚠️ Auto-titling helper error: {e}")
@@ -338,13 +359,29 @@ async def run_graph(
     
     # Run post-processing
     final_locations = []
+    # FIX #1: Initialize new_title=None BEFORE try to prevent UnboundLocalError
+    new_title = None
     try:
         # Titling (from message 1 onwards)
         new_title = await perform_auto_titling(
-            session_id=session_id, 
-            message=message, 
-            response=output.response
+            session_id=session_id,
+            message=message,
+            response=output.response,
+            mode=processing.model_mode
         )
+
+        # FIX #3: Perform fast location extraction in non-stream mode too
+        try:
+            from .nodes.location_extractor import fast_extract_locations
+            if processing.intent not in [IntentType.CHIT_CHAT, IntentType.UNRELATED]:
+                combined_text = f"User: {message}\nAssistant: {output.response}"
+                fast_locs = fast_extract_locations(combined_text)
+                final_locations = [
+                    {"name": l["name"], "province": l["name"] if l["type"] == "province" else None}
+                    for l in fast_locs
+                ]
+        except Exception as _loc_e:
+            print(f"⚠️ Non-stream fast extraction failed: {_loc_e}")
 
         async def run_remaining_tasks():
             # Run other background tasks
@@ -367,11 +404,10 @@ async def run_graph(
                     session_id=session_id
                 )
             ]
-            
+
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             # Stage for end-of-day location extraction
-            # We need the log_id – fetch the latest assistant log for this session
             try:
                 from .memory.store import get_supabase
                 client = get_supabase()
@@ -395,13 +431,13 @@ async def run_graph(
                         )
             except Exception as _e:
                 print(f"⚠️ stage_response error (non-stream): {_e}")
-        
+
         # Launch remaining post-processing in background
         asyncio.create_task(run_remaining_tasks())
-        
+
     except Exception as e:
         print(f"Background orchestrator error: {e}")
-        
+
     return {
         "response": output.response,
         "suggested_prompts": output.suggested_prompts,
@@ -585,7 +621,8 @@ async def run_graph_stream(
         await perform_auto_titling(
             session_id=session_id, 
             message=message, 
-            response=full_response
+            response=full_response,
+            mode=state["model_mode"]
         )
         
         await node_memory(state)
@@ -634,10 +671,30 @@ async def run_graph_stream(
     timing_str = " | ".join([f"{k}={v}ms" for k, v in timings.items()])
     print(f"⏱️ TIMING: {timing_str} | TOTAL={total_time}ms")
 
+    # FIX FE#3 complement: Fetch assistant log_id to return in final event
+    # so frontend can use it for precise feedback updates
+    _log_id = None
+    try:
+        from .memory.store import get_supabase as _get_sb
+        _sb = _get_sb()
+        if _sb:
+            _lr = _sb.table("chat_logs") \
+                .select("id") \
+                .eq("session_id", session_id) \
+                .eq("role", "assistant") \
+                .order("id", desc=True) \
+                .limit(1) \
+                .execute()
+            if _lr.data:
+                _log_id = _lr.data[0]["id"]
+    except Exception:
+        pass
+
     yield {
         "type": "final",
         "suggested_prompts": state["output"].suggested_prompts,
         "memory_updated": state["output"].memory_updated,
         "extracted_locations": final_locations,
-        "new_title": new_title
+        "new_title": new_title,
+        "log_id": _log_id
     }

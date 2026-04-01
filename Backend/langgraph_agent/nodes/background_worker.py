@@ -19,6 +19,7 @@ from typing import List, Dict, Optional
 from ..memory.store import get_supabase
 from .location_extractor import extract_locations, store_locations
 from ..state import IntentType
+from utils.config_manager import config
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +37,10 @@ _SKIP_INTENTS = {
 }
 
 
+# Maximum items to keep in memory before auto-flushing to DB
+_MAX_STAGED_ITEMS = config.get('database.extraction_staging_limit', 3)
+
+
 async def stage_response(
     log_id: int,
     session_id: str,
@@ -43,8 +48,8 @@ async def stage_response(
     intent: Optional[str] = None,
 ) -> None:
     """
-    Stage a bot response for end-of-day location extraction.
-    Call this right after a response is logged to chat_logs.
+    Stage a bot response for location extraction.
+    Flushes automatically if threshold is reached.
     """
     if intent in _SKIP_INTENTS:
         return
@@ -57,10 +62,18 @@ async def stage_response(
         "staged_at": datetime.now(timezone.utc).isoformat(),
     }
 
+    should_flush = False
     async with _staging_lock:
         _staged_responses.append(entry)
+        if len(_staged_responses) >= _MAX_STAGED_ITEMS:
+            should_flush = True
 
-    print(f"📋 Staged log_id={log_id} for end-of-day extraction (total staged: {len(_staged_responses)})")
+    print(f"📋 Staged log_id={log_id} (total staged: {len(_staged_responses)}/{_MAX_STAGED_ITEMS})")
+
+    if should_flush:
+        print(f"🚀 Staging threshold reached ({_MAX_STAGED_ITEMS}). Triggering auto-flush...")
+        # Run flush in background task to not block the current chat flow
+        asyncio.create_task(flush_staged_locations())
 
 
 async def get_staging_stats() -> Dict:
@@ -68,7 +81,11 @@ async def get_staging_stats() -> Dict:
     async with _staging_lock:
         count = len(_staged_responses)
         oldest = _staged_responses[0]["staged_at"] if count else None
-    return {"staged_count": count, "oldest_staged_at": oldest}
+    return {
+        "staged_count": count, 
+        "max_staged_items": _MAX_STAGED_ITEMS,
+        "oldest_staged_at": oldest
+    }
 
 
 async def get_staged_responses(limit: int = 50) -> List[Dict]:
@@ -190,12 +207,15 @@ async def daily_location_flush_loop() -> None:
 # Legacy background worker (kept as fallback to mark already-logged rows)
 # ---------------------------------------------------------------------------
 
-async def periodic_location_extraction_loop(interval_seconds: int = 60) -> None:
+async def periodic_location_extraction_loop(interval_seconds: Optional[int] = None) -> None:
     """
     LEGACY: Background loop that processes chat_logs rows where
     location_extracted = false but were logged before the new staging
     system was deployed.  Runs less aggressively (once per interval).
     """
+    if interval_seconds is None:
+        interval_seconds = config.get('database.extraction_cycle_seconds', 60)
+        
     print(f"🔄 Legacy Background Location Extractor started (interval: {interval_seconds}s)")
 
     while True:
@@ -211,7 +231,7 @@ async def periodic_location_extraction_loop(interval_seconds: int = 60) -> None:
                     .select("id, session_id, message, context")
                     .eq("role", "assistant")
                     .eq("context->>location_extracted", "false")
-                    .limit(5)
+                    .limit(config.get('database.extraction_batch_size', 5))
                     .execute()
                 )
                 logs_to_process = response.data or []

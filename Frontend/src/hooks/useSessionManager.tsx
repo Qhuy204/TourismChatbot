@@ -10,6 +10,7 @@
  */
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 
 export interface ChatSession {
     id: string;
@@ -34,18 +35,20 @@ export function useSessionManager() {
     const { user } = useAuth();
     const [state, setState] = useState<SessionManagerState>(() => {
         // Synchronous restoration from localStorage if possible
-        const userStr = localStorage.getItem('supabase.auth.token'); // Fallback check to get simple user info or just use a generic key if we can't get ID yet
         // However, useAuth might not be ready yet. Let's try to get the last known user ID from localStorage keys.
-        let lastActiveSession = null;
+        let savedActiveSessionId: string | null = null;
         const keys = Object.keys(localStorage);
         const activeSessionKey = keys.find(k => k.startsWith('active_session_'));
         if (activeSessionKey) {
-            lastActiveSession = localStorage.getItem(activeSessionKey);
+            savedActiveSessionId = localStorage.getItem(activeSessionKey);
         }
+
+        // If explicitly at /chat/ or /chat, don't restore old session
+        const isNewChatRoute = typeof window !== 'undefined' && (window.location.pathname === '/chat' || window.location.pathname === '/chat/');
 
         return {
             sessions: [],
-            activeSessionId: lastActiveSession,
+            activeSessionId: isNewChatRoute ? null : savedActiveSessionId,
             memoryShareEnabled: false,
         };
     });
@@ -61,8 +64,12 @@ export function useSessionManager() {
         const fetchSessions = async () => {
             setIsLoading(true);
             try {
-                // Fetch sessions from Backend
-                const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/${user.id}`);
+                // FIX #8: Include auth token so backend can verify ownership
+                const { data: { session } } = await supabase.auth.getSession();
+                const token = session?.access_token;
+                const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/${user.id}`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                });
                 if (!response.ok) throw new Error('Failed to fetch sessions');
                 const data = await response.json();
 
@@ -78,9 +85,9 @@ export function useSessionManager() {
 
                 // Restore last active session from localStorage (per-user scoped)
                 const savedActiveSession = localStorage.getItem(`active_session_${user.id}`);
-                const restoredSessionId = (savedActiveSession && sessions.some(s => s.id === savedActiveSession))
-                    ? savedActiveSession
-                    : null;
+
+                // Allow activeSessionId to stay even if not in fetched list (it might be a new unsaved session)
+                const restoredSessionId = savedActiveSession;
 
                 setState(prev => ({
                     ...prev,
@@ -118,12 +125,18 @@ export function useSessionManager() {
         }
     }, [state.activeSessionId, user?.id]);
 
-    // Create new session via Backend
-    const createSession = useCallback(async (name?: string) => {
-        if (!user?.id) return null;
+    // Create new session - local only
+    const createSession = useCallback(() => {
+        setState(prev => ({
+            ...prev,
+            activeSessionId: null,
+        }));
+        return null;
+    }, []);
 
-        const newId = crypto.randomUUID();
-        const title = name || `Cuộc hội thoại mới`;
+    // Explicitly Register session to Backend (call this on first message)
+    const registerSession = useCallback(async (sessionId: string, title: string, firstMessage?: string) => {
+        if (!user?.id) return false;
 
         try {
             const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/sessions`, {
@@ -131,33 +144,36 @@ export function useSessionManager() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     user_id: user.id,
-                    session_id: newId,
+                    session_id: sessionId,
                     title: title,
+                    first_message: firstMessage
                 }),
             });
 
-            if (!response.ok) throw new Error('Failed to create session');
+            if (!response.ok) throw new Error('Failed to register session');
 
-            const newSession: ChatSession = {
-                id: newId,
-                name: title,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                isPinned: false,
-                messageCount: 0,
-                preview: '',
-            };
+            // Add to local list if not present
+            setState(prev => {
+                if (prev.sessions.some(s => s.id === sessionId)) return prev;
 
-            setState(prev => ({
-                ...prev,
-                sessions: [newSession, ...prev.sessions],
-                activeSessionId: newId,
-            }));
-
-            return newId;
+                const newSession: ChatSession = {
+                    id: sessionId,
+                    name: title,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    isPinned: false,
+                    messageCount: 1,
+                    preview: firstMessage || '',
+                };
+                return {
+                    ...prev,
+                    sessions: [newSession, ...prev.sessions]
+                };
+            });
+            return true;
         } catch (e) {
-            console.error('Create session error:', e);
-            return null;
+            console.error('Register session error:', e);
+            return false;
         }
     }, [user?.id]);
 
@@ -166,8 +182,12 @@ export function useSessionManager() {
         if (!user?.id) return;
 
         try {
+            // FIX #8: Include auth token so backend can verify ownership
+            const { data: { session: authSession } } = await supabase.auth.getSession();
+            const token = authSession?.access_token;
             const response = await fetch(`${LANGGRAPH_API_URL}/langgraph/sessions/${sessionId}`, {
                 method: 'DELETE',
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
             });
 
             if (!response.ok) throw new Error('Failed to delete session');
@@ -260,6 +280,7 @@ export function useSessionManager() {
         memoryShareEnabled: state.memoryShareEnabled,
         isLoading,
         createSession,
+        registerSession,
         deleteSession,
         renameSession,
         togglePin,

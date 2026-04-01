@@ -8,10 +8,12 @@ from .location_extractor import admin_manager, normalize_name
 
 
 # Configuration
-SEARCH_K = 10
-FINAL_K = 3
-MIN_SCORE = 0.5
-LOCATION_BOOST = 0.15
+from utils.config_manager import config
+
+SEARCH_K = config.get('retrieval.vector_search_k', 10)
+FINAL_K = config.get('retrieval.rag_final_k', 3)
+MIN_SCORE = config.get('retrieval.min_retrieval_score', 0.5)
+LOCATION_BOOST = config.get('retrieval.location_boost_value', 0.15)
 
 
 def extract_location(text: str) -> Optional[str]:

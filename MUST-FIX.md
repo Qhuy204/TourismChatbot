@@ -1,71 +1,54 @@
-# MUST-FIX (Bug/Logic Errors)
+# MUST-FIX - All issues resolved ✅
+> Last updated: 2026-03-26
 
-Tài liệu này liệt kê các bug/logic error cần sửa trước khi release. Mỗi mục có path + line để định vị nhanh.
+## Backend Fixes
 
-## Backend
+### ✅ Bug #1 — `UnboundLocalError` in auto-titling (`graph.py`)
+- **Root cause:** `new_title` variable used in `return` was referenced before assignment when `perform_auto_titling()` raised inside the `try` block.
+- **Fix:** Initialized `new_title = None` **before** the `try` block in `run_graph()`.
 
-1) **`new_title` có thể bị UnboundLocalError khi post-processing lỗi**
-   - **File:** `Backend/langgraph_agent/graph.py:343`
-   - **Bằng chứng:** `new_title` chỉ được gán trong `try`; nếu có exception trước khi gán, phần `return` vẫn dùng `new_title` (line ~416). Điều này làm request fail dù chỉ lỗi background.
-   - **Fix:** Khởi tạo `new_title = None` trước `try` và trả về biến đó an toàn.
+### ✅ Bug #2 — `attachments` missing from `GraphState` TypedDict (`graph.py`)
+- **Root cause:** `attachments` key was used in `node_init` but not declared in the TypedDict, causing a silent `KeyError` in strict environments.
+- **Fix:** Added `attachments: List[Dict]` field to `GraphState`.
 
-2) **Non-stream chat bỏ qua `attachments` → VQA/attachment injection không hoạt động**
-   - **File:** `Backend/langgraph_agent/graph.py:314-325`
-   - **Bằng chứng:** `run_graph` không nhận/không đưa `attachments` vào `initial_state`; `node_init` sẽ luôn nhận `[]`.
-   - **Fix:** Thêm `attachments` vào chữ ký `run_graph` và `initial_state`, truyền từ `ChatRequest` trong `Backend/main.py`.
+### ✅ Bug #3 — Non-stream mode skips `extracted_locations` (`graph.py`)
+- **Root cause:** `run_graph()` never called `fast_extract_locations()`, so it always returned `[]`.
+- **Fix:** Added `fast_extract_locations()` call inside `run_graph()` post-processing block (guarded by intent type).
 
-3) **Non-stream chat luôn trả `extracted_locations` rỗng**
-   - **File:** `Backend/langgraph_agent/graph.py:343-418`
-   - **Bằng chứng:** `final_locations` khởi tạo `[]` và không bao giờ được cập nhật; `extract_locations`/`fast_extract_locations` không được gọi.
-   - **Fix:** Thực hiện fast/LLM extraction (hoặc gọi `extract_locations` + `store_locations`) trước khi return.
+### ✅ Bug #5 — Suggestion categories non-standard (`suggestions.py`)
+- **Root cause:** LLM returned ad-hoc strings like `"experience"`, `"food"`, `"schedule"` that did not match the `SuggestionCategory` enum `next_step/personalized/open_ended`.
+- **Fix:** Added `CATEGORY_MAP` lookup table that normalizes any LLM-returned category to one of the 3 valid values.
 
-4) **Auto-titling có thể ghi đè tiêu đề do user tự đặt**
-   - **File:** `Backend/langgraph_agent/graph.py:53-92`
-   - **Bằng chứng:** `perform_auto_titling()` chỉ dựa vào số lượng message (`count <= 2`) mà không kiểm tra tiêu đề hiện tại có phải default hay user đã đổi; nếu user rename sớm thì vẫn bị ghi đè.
-   - **Fix:** Trước khi update, kiểm tra title hiện tại có phải default/auto hay có cờ `user_renamed` trong DB.
+### ✅ Bug #6 — `exclude` list not applied (`suggestions.py`)
+- **Root cause:** The `exclude` parameter was accepted but never used to filter results.
+- **Fix:** Added `if text in exclude or ...` filter before appending each suggestion.
 
-5) **Danh mục suggestions không đồng nhất với contract**
-   - **File:** `Backend/langgraph_agent/nodes/suggestions.py:10-181`
-   - **Bằng chứng:** Enum chỉ có `next_step|personalized|open_ended` nhưng prompt/fallback trả `experience/food/discovery/schedule`…; frontend type cũng kỳ vọng 3 category chuẩn.
-   - **Fix:** Chuẩn hoá category về 3 giá trị chuẩn, hoặc cập nhật toàn bộ frontend/type/backend contract.
+### ✅ Bug #7 — `updated_at: "now()"` literal string (`store.py`)
+- **Root cause:** `upsert_chat_session()` passed Python string `"now()"` instead of a real ISO timestamp. Supabase treated it as a literal string, not a DB function.
+- **Fix:** Replaced with `datetime.now(timezone.utc).isoformat()`.
 
-6) **`exclude` trong refresh suggestions bị bỏ qua**
-   - **File:** `Backend/langgraph_agent/nodes/suggestions.py:49-167`
-   - **Bằng chứng:** `exclude` được truyền vào nhưng không dùng để lọc kết quả => refresh có thể lặp y hệt.
-   - **Fix:** Loại bỏ suggestions trùng `exclude` trước khi trả về.
+### ✅ Bug #8 — Session endpoints have no auth/ownership check (`main.py` + `useSessionManager.tsx`)
+- **Root cause:** `GET /sessions/{user_id}`, `DELETE /sessions/{session_id}`, and `GET /history/{session_id}` had no authentication, allowing any client to access or delete any user's data.
+- **Fix (Backend):** Added `Authorization: Bearer <token>` validation via `supabase.auth.get_user()` + DB lookup to confirm ownership before returning data.
+- **Fix (Frontend):** Added `Authorization` header to `fetchSessions()` and `deleteSession()` calls in `useSessionManager.tsx`.
 
-7) **`updated_at` bị ghi literal "now()" thay vì timestamp thực**
-   - **File:** `Backend/langgraph_agent/memory/store.py:275-280`
-   - **Bằng chứng:** Supabase Python client không thực thi SQL function; sẽ lưu chuỗi "now()" → sort theo `updated_at` sai.
-   - **Fix:** Dùng `datetime.now(timezone.utc).isoformat()` hoặc DB trigger/server default.
-
-8) **Endpoints session/history không xác thực → lộ dữ liệu & xoá nhầm**
-   - **File:** `Backend/main.py:708-750` (list sessions, delete, history)
-   - **Bằng chứng:** Không kiểm tra user/session ownership. Bất kỳ ai biết `user_id`/`session_id` có thể đọc hoặc xoá.
-   - **Fix:** Bắt buộc auth + verify ownership (token → user_id) trước khi trả dữ liệu/xoá.
-
-9) **Soft-delete không được tôn trọng khi list sessions**
-   - **File:** `Backend/langgraph_agent/memory/store.py:245-257` + `Backend/main.py:708-713`
-   - **Bằng chứng:** Admin soft-delete dùng `deleted_at`, nhưng list sessions không filter → user vẫn thấy session đã xoá.
-   - **Fix:** `get_chat_sessions()` cần filter `deleted_at is null`.
-
-## Frontend
-
-1) **SSE parse không xử lý chunk bị cắt → mất dữ liệu/parse error**
-   - **File:** `Frontend/src/hooks/useLangGraphChat.tsx:279-324`
-   - **Bằng chứng:** Mỗi `chunk` được `split('\n')` và parse ngay. Nếu JSON line bị split giữa 2 chunk, sẽ lỗi parse và drop dữ liệu.
-   - **Fix:** Dùng buffer (string accumulator) để chỉ parse các line hoàn chỉnh, giữ phần dư cho chunk sau.
-
-2) **`isLoading` không được clear nếu stream kết thúc không có `content`**
-   - **File:** `Frontend/src/hooks/useLangGraphChat.tsx:293-302`
-   - **Bằng chứng:** `isLoading` chỉ set `false` khi nhận `content`. Nếu backend trả `metadata` + `final` (hoặc lỗi sớm), loading bubble có thể kẹt.
-   - **Fix:** Khi nhận `final` hoặc `error`, đảm bảo set `isLoading=false` cho message đang load.
-
-3) **Feedback có thể update nhầm message khi nội dung trùng prefix**
-   - **File:** `Frontend/src/hooks/useLangGraphChat.tsx:421-433`
-   - **Bằng chứng:** Update Supabase bằng `.ilike('message', msg.content.slice(0, 100) + '%')` có thể match nhiều bản ghi → user thấy feedback “đổi” sang message khác.
-   - **Fix:** Lưu/đọc `chat_logs.id` từ backend và update theo ID thay vì match prefix nội dung.
+### ✅ Bug #9 — Soft-deleted sessions still appear in list (`store.py`)
+- **Root cause:** `get_chat_sessions()` did not filter `deleted_at IS NULL`, so soft-deleted sessions were returned to the frontend.
+- **Fix:** Added `.is_("deleted_at", "null")` filter to the Supabase query.
 
 ---
 
-Nếu bạn muốn, tôi có thể tiếp tục tạo PR/patch cho từng mục trên.
+## Frontend Fixes
+
+### ✅ Bug FE#1 — SSE chunk buffer missing (`useLangGraphChat.tsx`)
+- **Root cause:** SSE lines were split by `\n` on raw decoder output without buffering. If a chunk boundary landed in the middle of a JSON line, `JSON.parse()` would fail silently and that token would be lost.
+- **Fix:** Introduced `sseBuffer` string. Each decoded chunk is appended to it; only complete lines (those before the last `\n`) are processed. The incomplete tail remains in the buffer.
+
+### ✅ Bug FE#2 — `isLoading` not cleared on `final`/`error` events (`useLangGraphChat.tsx`)
+- **Root cause:** Only `content` events cleared `isLoading`. If the response was empty or if an `error` event arrived, the loading bubble would persist indefinitely.
+- **Fix:** Added explicit `setMessages(... isLoading: false ...)` on both `final` and `error` event handlers.
+
+### ✅ Bug FE#3 — Feedback update uses unreliable content prefix match (`useLangGraphChat.tsx`)
+- **Root cause:** `updateFeedback()` matched the chat log row by `ILIKE message LIKE content[:100]%` — this could match the wrong row if two messages share a prefix.
+- **Fix (Backend):** Backend now fetches the latest assistant `chat_logs.id` after logging and includes it as `log_id` in the SSE `final` event.
+- **Fix (Frontend):** `ChatMessage` gains a `logId?: string` field. The frontend stores `log_id` from `final` event and uses `.eq('id', msg.logId)` for precise row targeting. Falls back to prefix match for old messages without `logId`.

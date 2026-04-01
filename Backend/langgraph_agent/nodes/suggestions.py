@@ -5,6 +5,7 @@ from enum import Enum
 
 from ..state import MessageProcessingState, UserContextState, OutputState
 from ..utils.gemini_client import gemini_fast
+from utils.config_manager import config
 
 
 class SuggestionCategory(str, Enum):
@@ -71,7 +72,7 @@ async def generate_suggestions(
             current_locations.append(ctx["name"])
     
     # Deduplicate and limit
-    current_locations = list(dict.fromkeys(current_locations))[:5]
+    current_locations = list(dict.fromkeys(current_locations))[:config.get('suggestions.contextual_suggestions_limit', 4)]
     
     # 2. User interests from profile
     user_interests = user_context.interests or []
@@ -94,27 +95,18 @@ async def generate_suggestions(
     context_str += f"User: {processing_state.message[:300]}"
     
     # Prompt LLM to predict follow-ups based on conversation state and requirements
-    prompt = f"""Bạn là chuyên gia tư vấn du lịch AI. {lang_instruction}
-Dựa trên hội thoại và thông tin sau, hãy gợi ý 5 câu hỏi tiếp theo NGẮN GỌN (dưới 15 từ).
+    prompt = f"""Bạn là trợ lý du lịch AI chuyên nghiệp. {lang_instruction}
+Dựa trên hội thoại, hãy gợi ý 5 CÂU HỎI mà người dùng có thể muốn hỏi tiếp theo.
 
-Hội thoại:
-{context_str}
+YÊU CẦU:
+- Đóng vai người dùng để viết câu hỏi (Ví dụ: 'Ở đó có gì ngon?' thay vì 'Gợi ý ẩm thực').
+- Nội dung: 60% liên quan đến địa điểm vừa nhắc ({', '.join(current_locations) if current_locations else 'Việt Nam'}), 40% mở rộng.
+- Phong cách: Thân thiện, ngắn gọn (dưới 15 từ), KHÔNG dùng emojis, KHÔNG thêm số thứ tự.
 
-Thông tin bổ sung:
-- Các địa điểm tìm kiếm gần nhất: {', '.join(current_locations) if current_locations else 'Chưa có'}
-- Các chủ đề quan tâm: {', '.join(user_interests) if user_interests else 'Du lịch Việt Nam'}
-
-YÊU CẦU BẮT BUỘC:
-1. Số lượng: Đúng 5 gợi ý.
-2. Tỷ lệ nội dung:
-   - 60% (3 gợi ý): Liên quan trực tiếp đến "Các địa điểm tìm kiếm gần nhất". Hãy tập trung vào thông tin thực tế, khám phá và trải nghiệm tại các điểm này.
-   - 40% (2 gợi ý): Liên quan đến "Các chủ đề quan tâm" hoặc các địa điểm nổi tiếng khác.
-3. Phong cách: Chuyên nghiệp, lịch sự, không dùng dấu hỏi (?), không dùng emojis, không viết tắt.
-
-Trả về JSON array của các object:
+Trả về JSON array:
 [
-  {{ "text": "Ở (Tên địa điểm) có hang động nào đẹp và dễ tham quan", "category": "experience" }},
-  {{ "text": "Ăn (Tên món ăn) ngon đúng vị (Tên địa điểm) thì nên đi đâu", "category": "food" }}
+  {{ "text": "Câu hỏi tự nhiên 1?", "category": "next_step" }},
+  {{ "text": "Câu hỏi tự nhiên 2?", "category": "open_ended" }}
 ]"""
 
     try:
@@ -144,38 +136,58 @@ Trả về JSON array của các object:
                         "required": ["text"]
                     }
                 },
-                temperature=0.4, # Lower temperature for better adherence to rules
-                max_tokens=1024
+                temperature=config.get('llm.temperature_default', 0.4), # Lower temperature for better adherence to rules
+                max_tokens=config.get('llm.max_tokens_limit', 1024)
             )
         
         suggestions_data = result if isinstance(result, list) else []
-        
+
         if suggestions_data:
+            # FIX #5: Normalize categories to the 3 standard values contract requires
+            CATEGORY_MAP = {
+                "next_step": "next_step",
+                "personalized": "personalized",
+                "open_ended": "open_ended",
+                # LLM sometimes returns these — map them to nearest standard
+                "experience": "next_step",
+                "food": "next_step",
+                "discovery": "open_ended",
+                "schedule": "next_step",
+                "history": "open_ended",
+                "stay": "next_step",
+                "weather": "open_ended",
+                "tips": "open_ended",
+                "trending": "open_ended",
+                "itinerary": "next_step",
+            }
             formatted_suggestions = []
             for item in suggestions_data:
                 if not isinstance(item, dict): continue
-                text = item.get("text", "").strip()
-                # Clean up if model ignored "no question mark" rule
-                text = text.rstrip('?')
-                category = item.get("category", "next_step")
-                if text and len(text) < 80:
-                    formatted_suggestions.append({"text": text, "category": category})
-            
+                text = item.get("text", "").strip().rstrip('?')
+                if not text or len(text) >= 80: continue
+                # FIX #6: Skip suggestions whose text is in the exclude list
+                if text in exclude or any(text.lower() in ex.lower() for ex in exclude):
+                    continue
+                raw_cat = item.get("category", "next_step")
+                category = CATEGORY_MAP.get(raw_cat, "open_ended")
+                formatted_suggestions.append({"text": text, "category": category})
+
             if len(formatted_suggestions) >= 3:
-                output_state.suggested_prompts = formatted_suggestions[:5]
+                output_state.suggested_prompts = formatted_suggestions[:config.get('suggestions.contextual_suggestions_limit', 4)]
                 return output_state
-                
+
     except Exception as e:
         print(f"❌ Suggestions error: {e}")
     
     # FALLBACK: Natural professional suggestions
+    # FALLBACK: Natural professional questions
     loc = current_locations[0] if current_locations else "Việt Nam"
     output_state.suggested_prompts = [
-        {"text": f"Kinh nghiệm khám phá thực tế tại {loc}", "category": "experience"},
-        {"text": f"Lịch trình tham quan tối ưu ở {loc}", "category": "schedule"},
-        {"text": "Đặc sản phở Hà Nội tại các quán lâu đời", "category": "food"},
-        {"text": "Món ăn đường phố đặc sắc tại cố đô Huế", "category": "food"},
-        {"text": "Trải nghiệm du lịch biển đảo tại Kiên Giang", "category": "discovery"}
+        {"text": f"Ở {loc} có những địa điểm check-in nào đẹp vậy bạn?", "category": "next_step"},
+        {"text": f"Bạn gợi ý cho mình lịch trình khám phá {loc} 3 ngày nhé?", "category": "next_step"},
+        {"text": f"Đi {loc} mùa này thì nên chuẩn bị trang phục thế nào?", "category": "open_ended"},
+        {"text": "Có món đặc sản nào nổi tiếng mà mình nên thử không?", "category": "next_step"},
+        {"text": "Làm sao để di chuyển đến các điểm tham quan thuận tiện nhất?", "category": "next_step"}
     ]
     
     return output_state

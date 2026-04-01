@@ -272,15 +272,17 @@ async def clear_user_memory(user_id: str) -> bool:
 
 
 async def get_chat_sessions(user_id: str) -> List[Dict]:
-    """Fetch all chat sessions for a user from Supabase"""
+    """Fetch all chat sessions for a user from Supabase (excludes soft-deleted)"""
     client = get_supabase()
     if not client:
         return []
-        
+
     try:
+        # FIX #9: Filter out soft-deleted sessions (deleted_at IS NULL)
         response = client.table("chat_sessions") \
             .select("*") \
             .eq("user_id", user_id) \
+            .is_("deleted_at", "null") \
             .order("updated_at", desc=True) \
             .execute()
         return response.data
@@ -299,17 +301,20 @@ async def upsert_chat_session(
     client = get_supabase()
     if not client:
         return False
-        
+
     try:
+        from datetime import datetime, timezone
+        # FIX #7: Use real ISO timestamp instead of literal "now()" string
+        now_iso = datetime.now(timezone.utc).isoformat()
         data = {
             "id": session_id,
             "user_id": user_id,
             "title": title,
-            "updated_at": "now()"
+            "updated_at": now_iso
         }
         if first_message:
             data["first_message"] = first_message
-            
+
         client.table("chat_sessions").upsert(data, on_conflict="id").execute()
         return True
     except Exception as e:

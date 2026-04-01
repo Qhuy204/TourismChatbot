@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+from utils.config_manager import config
 from langgraph_agent.utils.system_state import get_app_state, set_app_state, set_use_llama
 # APP_STATE is now managed via system_state.py (get_app_state/set_app_state)
 
@@ -34,11 +35,11 @@ if _LLAMA_MODE:
 class ChatRequest(BaseModel):
     user_id: str
     session_id: str
-    message: str = Field(..., max_length=2000)
+    message: str = Field(..., max_length=config.get('chat.max_message_length', 2000))
     history: List[Dict] = []
-    model_mode: Optional[str] = "gemini"
+    model_mode: Optional[str] = config.get('llm.gemini_model', 'gemini')
     attachments: Optional[List[Dict]] = None  # [{url, type, name}]
-    language: Optional[str] = "vi"
+    language: Optional[str] = config.get('system.default_language', 'vi')
 
 
 class SuggestionItem(BaseModel):
@@ -77,7 +78,7 @@ class EventRequest(BaseModel):
 class SessionCreateRequest(BaseModel):
     user_id: str
     session_id: str
-    title: str = "Cuộc hội thoại mới"
+    title: str = config.get('chat.default_session_title', 'Cuộc hội thoại mới')
     first_message: Optional[str] = None
 
 
@@ -92,7 +93,7 @@ class LocationInsertRequest(BaseModel):
 
 
 class DuplicateCleanupRequest(BaseModel):
-    threshold: float = 0.85
+    threshold: float = config.get('database.duplicate_threshold', 0.85)
     dry_run: bool = True
 
 
@@ -100,8 +101,8 @@ class RecommendationsRequest(BaseModel):
     user_id: str
     topics: Optional[List[str]] = None
     recent_locations: Optional[List[str]] = None
-    limit: int = 5
-    language: Optional[str] = "vi"
+    limit: int = config.get('suggestions.initial_suggestions_limit', 5)
+    language: Optional[str] = config.get('system.default_language', 'vi')
 
 
 class ContextualSuggestionsRequest(BaseModel):
@@ -110,8 +111,8 @@ class ContextualSuggestionsRequest(BaseModel):
     last_question: Optional[str] = None  # User's last question for context
     last_response: Optional[str] = None
     user_messages: Optional[List[Dict | str]] = []  # Recent user messages for style mimicry
-    limit: int = 4
-    language: Optional[str] = "vi"
+    limit: int = config.get('suggestions.contextual_suggestions_limit', 4)
+    language: Optional[str] = config.get('system.default_language', 'vi')
 
 
 from langgraph_agent.utils.security import Admin
@@ -238,7 +239,7 @@ app.add_middleware(
     allow_origins=["http://localhost:3000", "http://localhost:5173", os.environ.get("FRONTEND_URL", "https://chat.vqa.vn")],  # Configure for production
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
 )
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -461,31 +462,31 @@ async def get_initial_suggestions(request: RecommendationsRequest):
         "vi": {
             "welcome_message": "Xin chào! Tôi có thể giúp gì cho chuyến du lịch của bạn?",
             "suggestions": [
-                {"text": "Địa điểm du lịch hot nhất 2026", "category": "trending"},
-                {"text": "Gợi ý du lịch biển đẹp", "category": "discovery"},
-                {"text": "Lịch trình Đà Nẵng 3 ngày", "category": "itinerary"},
-                {"text": "Ẩm thực đường phố Hà Nội", "category": "food"},
-                {"text": "Cẩm nang du lịch trải nghiệm", "category": "tips"}
+                {"text": "Hiện tại có địa điểm du lịch nào đang cực 'hot' không?", "category": "trending"},
+                {"text": "Gợi ý cho mình vài bãi biển đẹp và yên tĩnh nhé?", "category": "discovery"},
+                {"text": "Lịch trình khám phá 3 ngày cho người đi lần đầu nên thế nào?", "category": "itinerary"},
+                {"text": "Ở đây có những món ăn đặc sản nào nhất định phải thử?", "category": "food"},
+                {"text": "Làm sao để du lịch tự túc tiết kiệm mà vẫn an toàn?", "category": "tips"}
             ]
         },
         "en": {
             "welcome_message": "Hello! How can I help with your travel plans?",
             "suggestions": [
-                {"text": "Top trending destinations 2026", "category": "trending"},
-                {"text": "Beautiful beach recommendations", "category": "discovery"},
-                {"text": "3-day Da Nang itinerary", "category": "itinerary"},
-                {"text": "Hanoi street food guide", "category": "food"},
-                {"text": "Adventure travel handbook", "category": "tips"}
+                {"text": "Discover top trending travel destinations", "category": "trending"},
+                {"text": "Hidden gems and quiet beaches for your next trip", "category": "discovery"},
+                {"text": "A perfect 3-day itinerary for first-timers", "category": "itinerary"},
+                {"text": "Must-try local dishes and street food guides", "category": "food"},
+                {"text": "Practical travel tips for a safe adventure", "category": "tips"}
             ]
         },
         "zh": {
             "welcome_message": "您好！我能为您的旅游计划提供什么帮助？",
             "suggestions": [
-                {"text": "2026年热门旅游目的地", "category": "trending"},
-                {"text": "美丽海滩推荐", "category": "discovery"},
-                {"text": "岘港3日游行程", "category": "itinerary"},
-                {"text": "河内街头美食指南", "category": "food"},
-                {"text": "探险旅游手册", "category": "tips"}
+                {"text": "探索今年最热门的旅游目的地", "category": "trending"},
+                {"text": "为您推荐宁静美妙的避世海滩", "category": "discovery"},
+                {"text": "适合初次游客的经典三日游行程", "category": "itinerary"},
+                {"text": "当地必尝的特色美食与小吃指南", "category": "food"},
+                {"text": "实用的自由行省钱与安全攻略", "category": "tips"}
             ]
         }
     }
@@ -496,67 +497,72 @@ async def get_initial_suggestions(request: RecommendationsRequest):
         return default_data
     
     try:
-        from langgraph_agent.utils.gemini_client import gemini_fast
-        from langgraph_agent.utils.llama_client import llama_client
-        from langgraph_agent.utils.system_state import get_use_llama
-        
-        # Build context string from interests
-        interest_str = ", ".join(all_interests[:5])
-        city_str = ", ".join(preferred_cities[:3]) if preferred_cities else ""
-        recent_loc_str = ", ".join(recent_locations[:3]) if recent_locations else ""
-        
         lang_instruction = {
             "vi": "Hãy trả lời bằng tiếng Việt.",
             "en": "Respond in English.",
             "zh": "用中文回答（简体中文）。"
         }.get(request.language, "Hãy trả lời bằng tiếng Việt.")
+
+        from langgraph_agent.utils.gemini_client import gemini_fast
+        from langgraph_agent.utils.llama_client import llama_client
+        from langgraph_agent.utils.system_state import get_use_llama
         
-        fallback_cities = preferred_cities[:3] if preferred_cities else ["Hà Nội", "Hội An", "Phú Quốc"]
-        fallback_str = ", ".join(fallback_cities)
+        # Refine suggestion context: Prioritize recent locations over general interests
+        context_parts = []
+        if recent_locations:
+            context_parts.append(f"Người dùng vừa quan tâm/nhắc tới: {', '.join(recent_locations[:5])}")
+        if topics:
+            context_parts.append(f"Chủ đề quan tâm từ lịch sử: {', '.join(topics[:5])}")
+            
+        context_intro = " ".join(context_parts)
+        
+        fallback_cities_str = config.get('suggestions.default_cities', "Hà Nội, Hội An, Phú Quốc")
+        fallback_cities = [c.strip() for c in fallback_cities_str.split(',')]
+        fallback_str = ", ".join(fallback_cities[:3])
         
         # Use a more forceful prompt for local model
         if get_use_llama():
-            prompt = f"""Bạn là trợ lý du lịch AI chuyên nghiệp. {lang_instruction}
-YÊU CẦU: Tạo một JSON object chứa lời chào mừng và 5 gợi ý tìm kiếm du lịch.
-Các chủ đề ưu tiên: Trải nghiệm tại {fallback_str}.
+            prompt = f"""Bạn là trợ lý du lịch AI thông minh. {lang_instruction}
+Nhiệm vụ: Tạo 5 CÂU HỎI mà người dùng có thể muốn hỏi bạn về du lịch tại {fallback_str}.
 
-CẤU TRÚC JSON BẮT BUỘC:
-{{
-    "welcome_message": "Chào bạn, mình có thể giúp gì cho bạn?",
-    "suggestions": [
-        {{"text": "Thưởng thức phở Hà Nội ngon nhất tại phố cổ", "category": "food"}},
-        {{"text": "Khám phá vẻ đẹp cổ kính của đại nội Huế", "category": "history"}},
-        {{"text": "Trải nghiệm du lịch biển đảo tại Kiên Giang", "category": "discovery"}},
-        {{"text": "Các quán ăn đường phố nổi tiếng ở cố đô Huế", "category": "food"}},
-        {{"text": "Lịch trình du lịch tâm linh tại Hà Nội", "category": "itinerary"}}
-    ]
-}}
+YÊU CẦU QUAN TRỌNG:
+- Nội dung phải là CÂU HỎI (đóng vai người dùng đang chat với bạn).
+- Chủ đề: ẩm thực, địa điểm đẹp, văn hóa, lịch trình, hoặc lưu ý.
+- TUYỆT ĐỐI KHÔNG kèm số thứ tự, KHÔNG kèm ký hiệu lạ, KHÔNG chép ví dụ.
+- Trả lời tự nhiên, thân thiện.
 
-Chỉ trả về JSON:"""
-        else:
-            prompt = f"""Bạn là trợ lý du lịch AI chuyên nghiệp. {lang_instruction}
-Người dùng quan tâm các chủ đề: {interest_str}
-{f"Các địa điểm tìm kiếm gần nhất: {recent_loc_str}" if recent_loc_str else f"Địa điểm yêu thích: {city_str}" if city_str else ""}
-
-Hãy tạo 5 gợi ý tìm kiếm thực tế, khách quan và chuyên nghiệp:
-
-YÊU CẦU BẮT BUỘC:
-1. Tỷ lệ nội dung:
-   - 60% (3 gợi ý) liên quan trực tiếp đến "Các địa điểm tìm kiếm gần nhất" (nếu có). Tập trung vào thông tin khám phá và trải nghiệm thực tế.
-   - 40% (2 gợi ý) liên quan đến "chủ đề" người dùng quan tâm ở các địa điểm nổi tiếng ({fallback_str}).
-2. Phong cách:
-   - Ngôn ngữ chuyên nghiệp, lịch sự.
-   - KHÔNG dùng từ viết tắt, KHÔNG dùng emojis.
-   - KHÔNG dùng "Gợi ý", "Top", "Tìm kiếm", "nhé", "nha", "thử xem".
-   - KHÔNG dùng dấu "?".
-3. Hình thức: Câu khẳng định ngắn gọn (dưới 15 từ).
-
-Trả về JSON nguyên vẹn:
+CẤU TRÚC JSON PHẢI TRẢ VỀ:
 {{
     "welcome_message": "Chào bạn, mình có thể hỗ trợ gì cho kế hoạch du lịch của bạn?",
     "suggestions": [
-        {{"text": "Khám phá vẻ đẹp hoang sơ của đảo ngọc Phú Quốc", "category": "experience"}},
-        {{"text": "Thưởng thức phở Hà Nội tại các quán ăn truyền thống", "category": "food"}},
+        {{"text": "Câu hỏi 1 của người dùng?", "category": "food"}},
+        {{"text": "Câu hỏi 2 của người dùng?", "category": "place"}},
+        {{"text": "Câu hỏi 3 của người dùng?", "category": "experience"}},
+        {{"text": "Câu hỏi 4 của người dùng?", "category": "itinerary"}},
+        {{"text": "Câu hỏi 5 của người dùng?", "category": "tips"}}
+    ]
+}}
+
+LƯU Ý: Tạo gợi ý thực tế dựa trên {fallback_str}. Không chép lại các câu mẫu như 'Câu hỏi 1...'.
+JSON:"""
+        else:
+            prompt = f"""Bạn là trợ lý du lịch AI chuyên nghiệp. {lang_instruction}
+{context_intro if context_intro else f'Địa điểm gợi ý mặc định: {fallback_str}'}
+
+Hãy tạo 5 gợi ý tìm kiếm dưới dạng CÂU HỎI mà người dùng sẽ hỏi bot (Ví dụ: 'Ở {recent_locations[0] if recent_locations else fallback_cities[0]} có quán nào bán Cao Lầu ngon?'):
+
+YÊU CẦU BẮT BUỘC:
+1. Nội dung: Đóng vai người dùng, viết các câu hỏi thực tế, tò mò và tự nhiên.
+2. Tỷ lệ: Gợi ý các câu hỏi liên quan mật thiết đến các địa điểm/chủ đề vừa nhắc ở trên.
+3. Phong cách: Thân thiện, KHÔNG dùng emojis, ngắn gọn (dưới 15 từ).
+4. TUYỆT ĐỐI KHÔNG thêm số (1, 2, 3...) hay ký hiệu lạ vào cuối câu.
+
+Trả về JSON:
+{{
+    "welcome_message": "Chào bạn, mình có thể hỗ trợ gì cho kế hoạch du lịch của bạn?",
+    "suggestions": [
+        {{"text": "Bạn ơi, cho mình hỏi ở (địa điểm) có gì vui?", "category": "experience"}},
+        {{"text": "Đi (địa điểm) tầm này thì nên mặc đồ gì nhỉ?", "category": "tips"}},
         ...
     ]
 }}"""
@@ -724,9 +730,23 @@ Trả về JSON mẫu:
 
 
 @app.get("/langgraph/sessions/{user_id}")
-async def list_sessions(user_id: str):
-    """List all chat sessions for a user"""
-    from langgraph_agent.memory.store import get_chat_sessions
+async def list_sessions(user_id: str, request: Request):
+    """List all chat sessions for a user (FIX #8: requires auth + ownership check)"""
+    from langgraph_agent.memory.store import get_chat_sessions, get_supabase
+    # Verify caller is the owner
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        try:
+            sb = get_supabase()
+            user_res = sb.auth.get_user(auth_header[7:])
+            if not user_res or not user_res.user or user_res.user.id != user_id:
+                raise HTTPException(status_code=403, detail="Forbidden: You can only list your own sessions")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Auth error: {e}")
+    else:
+        raise HTTPException(status_code=401, detail="Authorization header required")
     sessions = await get_chat_sessions(user_id)
     return {"sessions": sessions}
 
@@ -745,9 +765,26 @@ async def create_or_update_session(request: SessionCreateRequest):
 
 
 @app.delete("/langgraph/sessions/{session_id}")
-async def delete_session(session_id: str):
-    """Delete a session and its logs"""
-    from langgraph_agent.memory.store import delete_chat_session
+async def delete_session(session_id: str, request: Request):
+    """Delete a session and its logs (FIX #8: requires auth + ownership check)"""
+    from langgraph_agent.memory.store import delete_chat_session, get_supabase
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        try:
+            sb = get_supabase()
+            user_res = sb.auth.get_user(auth_header[7:])
+            if not user_res or not user_res.user:
+                raise HTTPException(status_code=401, detail="Invalid token")
+            # Verify the session belongs to this user
+            sess_res = sb.table("chat_sessions").select("user_id").eq("id", session_id).execute()
+            if not sess_res.data or sess_res.data[0]["user_id"] != user_res.user.id:
+                raise HTTPException(status_code=403, detail="Forbidden: Session does not belong to you")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Auth error: {e}")
+    else:
+        raise HTTPException(status_code=401, detail="Authorization header required")
     success = await delete_chat_session(session_id)
     return {"status": "ok" if success else "error"}
 
@@ -761,9 +798,26 @@ async def cleanup_empty_session(session_id: str):
 
 
 @app.get("/langgraph/history/{session_id}")
-async def get_history(session_id: str):
-    """Get full message history for a session"""
-    from langgraph_agent.memory.store import get_session_history
+async def get_history(session_id: str, request: Request):
+    """Get full message history for a session (FIX #8: requires auth + ownership check)"""
+    from langgraph_agent.memory.store import get_session_history, get_supabase
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        try:
+            sb = get_supabase()
+            user_res = sb.auth.get_user(auth_header[7:])
+            if not user_res or not user_res.user:
+                raise HTTPException(status_code=401, detail="Invalid token")
+            # Verify the session belongs to this user
+            sess_res = sb.table("chat_sessions").select("user_id").eq("id", session_id).execute()
+            if sess_res.data and sess_res.data[0]["user_id"] != user_res.user.id:
+                raise HTTPException(status_code=403, detail="Forbidden: Session does not belong to you")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Auth error: {e}")
+    else:
+        raise HTTPException(status_code=401, detail="Authorization header required")
     history = await get_session_history(session_id)
     return {"history": history}
 

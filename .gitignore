@@ -75,3 +75,4 @@ Backend/test_admin_apis.py
 Frontend/test-results/
 Frontend/tests/
 CV/
+.env
